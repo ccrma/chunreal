@@ -17,6 +17,9 @@
 */Plugins/*/Binaries/**
 */Plugins/*/Intermediate/**
 
+# Platform config files
+*/Platforms/**
+
 # Autosaved files
 */Saved/**
 
@@ -29,6 +32,7 @@
 */*.sdf
 */*.VC.db
 */*.VC.opendb
+*/*.vsconfig
 
 # Ignore shell scripts
 */*.sh
