@@ -93,7 +93,7 @@ t_CKBOOL init_class_io( Chuck_Env * env, Chuck_Type * type )
 {
     // init as base class
     Chuck_DL_Func * func = NULL;
-    std::string doc = "";
+    std::string doc = "Base class for other IO classes such as FileIO, StdOut and StdErr. Besides IO.newline(), it’s unlikely you need to use this class directly.";
 
     // log
     EM_log( CK_LOG_SEVERE, "class 'IO'" );
@@ -105,140 +105,175 @@ t_CKBOOL init_class_io( Chuck_Env * env, Chuck_Type * type )
         return FALSE;
 
     // add good()
-    func = make_new_mfun( "int", "good", io_dummy );
-    func->doc = "_";
+    func = make_new_mfun( "int", "good", io_dummy_int );
+    func->doc = "Returns whether IO is ready for reading.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add close()
-    func = make_new_mfun( "void", "close", io_dummy );
+    func = make_new_mfun( "void", "close", io_dummy_void );
+    func->doc = "Close the currently open IO.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add flush()
-    func = make_new_mfun( "void", "flush", io_dummy );
+    func = make_new_mfun( "void", "flush", io_dummy_void );
+    func->doc = "Write any buffered output.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add mode(int)
-    func = make_new_mfun( "int", "mode", io_dummy );
+    func = make_new_mfun( "int", "mode", io_dummy_int );
     func->add_arg( "int", "flag" );
+    func->doc = "Set the current IO mode; either IO.MODE_ASYNC or IO.MODE_SYNC.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add mode()
-    func = make_new_mfun( "int", "mode", io_dummy );
+    func = make_new_mfun( "int", "mode", io_dummy_int );
+    func->doc = "Get the current IO mode; either IO.MODE_ASYNC or IO.MODE_SYNC.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // TODO: add this later?
     // add read()
-    // func = make_new_mfun( "string", "read", io_dummy );
+    // func = make_new_mfun( "string", "read", io_dummy_string );
     // func->add_arg( "int", "length" );
     // if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add readLine()
-    func = make_new_mfun( "string", "readLine", io_dummy );
+    func = make_new_mfun( "string", "readLine", io_dummy_string );
+    func->doc = "Read until an end-of-line character.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add readInt()
-    func = make_new_mfun( "int", "readInt", io_dummy );
+    func = make_new_mfun( "int", "readInt", io_dummy_int );
     func->add_arg( "int", "flags" );
+    func->doc = "Read and return the next integer; binary mode: 'flags' denotes the bit-size of int (IO.INT8, IO.INT16, or IO.INT32).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
-
-    /*
-    // add readInt()
-    func = make_new_mfun( "int", "readInt8", io_dummy );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
-
-    // add readInt()
-    func = make_new_mfun( "int", "readInt16", io_dummy );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
-
-    // add readInt()
-    func = make_new_mfun( "int", "readInt32", io_dummy );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
-    */
 
     // add readFloat()
-    // func = make_new_mfun( "float", "readFloat", io_dummy );
-    // if( !type_engine_import_mfun( env, func ) ) goto error;
+    func = make_new_mfun( "float", "readFloat", io_dummy_float );
+    func->add_arg( "int", "flags" );
+    func->doc = "Read and return the next floating point value; binary mode: 'flags' denotes the size of float to read (IO.FLOAT32 or IO.FLOAT64).";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add eof()
-    func = make_new_mfun( "int", "eof", io_dummy );
+    func = make_new_mfun( "int", "eof", io_dummy_int );
+    func->doc = "Return whether end-of-file has been reached; the opposite of .more().";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add more()
-    func = make_new_mfun( "int", "more", io_dummy );
+    func = make_new_mfun( "int", "more", io_dummy_int );
+    func->doc = "Return whether there is more to read; the opposite of .eof().";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add write(string)
-    func = make_new_mfun( "void", "write", io_dummy );
+    func = make_new_mfun( "void", "write", io_dummy_void );
     func->add_arg( "string", "val" );
+    func->doc = "Write string 'val'.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add write(int)
-    func = make_new_mfun( "void", "write", io_dummy );
+    func = make_new_mfun( "void", "write", io_dummy_void );
     func->add_arg( "int", "val" );
+    func->doc = "Write integer 'val'.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add write(float)
-    func = make_new_mfun( "void", "write", io_dummy );
+    func = make_new_mfun( "void", "write", io_dummy_void );
     func->add_arg( "float", "val" );
+    func->doc = "Write floating point number 'val'.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add newline
     func = make_new_sfun( "string", "newline", io_newline );
+    func->doc = "newline character; same as IO.nl().";
     if( !type_engine_import_sfun( env, func ) ) goto error;
+    // add nl
     func = make_new_sfun( "string", "nl", io_newline );
+    func->doc = "newline character; same as IO.newline().";
     if( !type_engine_import_sfun( env, func ) ) goto error;
-    func = make_new_sfun( "string", "newlineEx2VistaHWNDVisualFoxProA", io_newline );
-    if( !type_engine_import_sfun( env, func ) ) goto error;
+    // hmm
+    // func = make_new_sfun( "string", "newlineEx2VistaHWNDVisualFoxProA", io_newline );
+    // func->doc = "_";
+    // if( !type_engine_import_sfun( env, func ) ) goto error;
+    // new line string
     initialize_object( g_newline, env->t_string );
     g_newline->set( "\n" );
 
     // add TYPE_ASCII
     if( !type_engine_import_svar( env, "int", "ASCII",
-                                 TRUE, (t_CKUINT)&Chuck_IO::TYPE_ASCII ) ) goto error;
+                                 TRUE, (t_CKUINT)&Chuck_IO::TYPE_ASCII, "Flag denoting ASCII IO mode." ) ) goto error;
     // add TYPE_BINARY
     if( !type_engine_import_svar( env, "int", "BINARY",
-                                 TRUE, (t_CKUINT)&Chuck_IO::TYPE_BINARY ) ) goto error;
+                                 TRUE, (t_CKUINT)&Chuck_IO::TYPE_BINARY, "Flag denoting binary IO mode." ) ) goto error;
     // add INT8
     if( !type_engine_import_svar( env, "int", "INT8",
-                                 TRUE, (t_CKUINT)&Chuck_IO::INT8 ) ) goto error;
+                                 TRUE, (t_CKUINT)&Chuck_IO::INT8, "Flag denoting 8-bit integer type." ) ) goto error;
     // add INT16
     if( !type_engine_import_svar( env, "int", "INT16",
-                                 TRUE, (t_CKUINT)&Chuck_IO::INT16 ) ) goto error;
+                                 TRUE, (t_CKUINT)&Chuck_IO::INT16, "Flag denoting 16-bit integer type." ) ) goto error;
+    // add INT24 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "INT24",
+                                 TRUE, (t_CKUINT)&Chuck_IO::INT24, "Flag denoting 24-bit integer type." ) ) goto error;
     // add INT32
     if( !type_engine_import_svar( env, "int", "INT32",
-                                 TRUE, (t_CKUINT)&Chuck_IO::INT32 ) ) goto error;
-    // add READ_INT8
-    if( !type_engine_import_svar( env, "int", "READ_INT8",
-                                 TRUE, (t_CKUINT)&Chuck_IO::INT8 ) ) goto error;
-    // add READ_INT16
-    if( !type_engine_import_svar( env, "int", "READ_INT16",
-                                 TRUE, (t_CKUINT)&Chuck_IO::INT16 ) ) goto error;
-    // add READ_INT32
-    if( !type_engine_import_svar( env, "int", "READ_INT32",
-                                 TRUE, (t_CKUINT)&Chuck_IO::INT32 ) ) goto error;
+                                 TRUE, (t_CKUINT)&Chuck_IO::INT32, "Flag denoting 32-bit integer type." ) ) goto error;
+    // add INT64 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "INT64",
+                                 TRUE, (t_CKUINT)&Chuck_IO::INT64, "Flag denoting 64-bit integer type." ) ) goto error;
+    // add SINT8 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "SINT8",
+                                 TRUE, (t_CKUINT)&Chuck_IO::SINT8, "Flag denoting 8-bit signed integer type." ) ) goto error;
+    // add SINT16 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "SINT16",
+                                 TRUE, (t_CKUINT)&Chuck_IO::SINT16, "Flag denoting 16-bit signed integer type." ) ) goto error;
+    // add SINT24 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "SINT24",
+                                 TRUE, (t_CKUINT)&Chuck_IO::SINT24, "Flag denoting 24-bit signed integer type." ) ) goto error;
+    // add SINT32 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "SINT32",
+                                 TRUE, (t_CKUINT)&Chuck_IO::SINT32, "Flag denoting 32-bit signed integer type." ) ) goto error;
+    // add SINT64 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "SINT64",
+                                 TRUE, (t_CKUINT)&Chuck_IO::SINT64, "Flag denoting 64-bit signed integer type." ) ) goto error;
+    // add UINT8 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "UINT8",
+                                 TRUE, (t_CKUINT)&Chuck_IO::UINT8, "Flag denoting 8-bit unsigned integer type." ) ) goto error;
+    // add UINT16 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "UINT16",
+                                 TRUE, (t_CKUINT)&Chuck_IO::UINT16, "Flag denoting 16-bit unsigned integer type." ) ) goto error;
+    // add UINT24 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "UINT24",
+                                 TRUE, (t_CKUINT)&Chuck_IO::UINT24, "Flag denoting 24-bit unsigned integer type." ) ) goto error;
+    // add UINT32 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "UINT32",
+                                 TRUE, (t_CKUINT)&Chuck_IO::UINT32, "Flag denoting 32-bit unsigned integer type." ) ) goto error;
+    // add UINT64 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "UINT64",
+                                 TRUE, (t_CKUINT)&Chuck_IO::UINT64, "Flag denoting 64-bit unsigned integer type." ) ) goto error;
+    // add FLOAT32 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "FLOAT32",
+                                 TRUE, (t_CKUINT)&Chuck_IO::FLOAT32, "Flag denoting 32-bit floating point type." ) ) goto error;
+    // add FLOAT64 | 1.5.0.1 (ge) added
+    if( !type_engine_import_svar( env, "int", "FLOAT64",
+                                 TRUE, (t_CKUINT)&Chuck_IO::FLOAT64, "Flag denoting 64-bit floating point type." ) ) goto error;
     // add MODE_SYNC
     if( !type_engine_import_svar( env, "int", "MODE_SYNC",
-                                 TRUE, (t_CKUINT)&Chuck_IO::MODE_SYNC ) ) goto error;
+                                 TRUE, (t_CKUINT)&Chuck_IO::MODE_SYNC, "Flag denoting synchronous IO." ) ) goto error;
 #ifndef __DISABLE_FILEIO__
     // add MODE_ASYNC
     if( !type_engine_import_svar( env, "int", "MODE_ASYNC",
-                                 TRUE, (t_CKUINT)&Chuck_IO::MODE_ASYNC ) ) goto error;
+                                 TRUE, (t_CKUINT)&Chuck_IO::MODE_ASYNC, "Flag denoting asychronous IO." ) ) goto error;
 #endif
     // add FLAG_READONLY
     if( !type_engine_import_svar( env, "int", "READ",
-                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_READONLY ) ) goto error;
+                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_READONLY, "Flag denoting read mode." ) ) goto error;
     // add FLAG_WRITEONLY
     if( !type_engine_import_svar( env, "int", "WRITE",
-                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_WRITEONLY ) ) goto error;
+                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_WRITEONLY, "Flag denoting write mode." ) ) goto error;
     // add FLAG_APPEND
     if( !type_engine_import_svar( env, "int", "APPEND",
-                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_APPEND ) ) goto error;
+                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_APPEND, "Flag denoting append mode." ) ) goto error;
     // add FLAG_READ_WRITE
     if( !type_engine_import_svar( env, "int", "READ_WRITE",
-                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_READ_WRITE ) ) goto error;
+                                  TRUE, (t_CKUINT)&Chuck_IO::FLAG_READ_WRITE, "Flag denoting read/write mode." ) ) goto error;
 
     // end the class import
     type_engine_import_class_end( env );
@@ -272,60 +307,73 @@ t_CKBOOL init_class_fileio( Chuck_Env * env, Chuck_Type * type )
     // init as base class
     // TODO: ctor/dtor?
     // TODO: replace dummy with pure function
-    if( !type_engine_import_class_begin( env, type, env->global(), fileio_ctor, fileio_dtor ) )
+    if( !type_engine_import_class_begin( env, type, env->global(), fileio_ctor, fileio_dtor,
+        "File input and output utilities for reading, writing, seeking, etc. See examples for usage." ) )
         return FALSE;
 
     // add open(string)
     func = make_new_mfun( "int", "open", fileio_open );
     func->add_arg( "string", "path" );
+    func->doc = "Open a file by name (and by default in ASCII mode).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add open(string, flags)
     func = make_new_mfun( "int", "open", fileio_openflags );
     func->add_arg( "string", "path" );
     func->add_arg( "int", "flags" );
+    func->doc = "Open a file by name with flags (bitwise combinations of IO.READ, IO.WRITE, IO.READ_WRITE, IO_APPEND, IO.ASCII, IO.BINARY).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add good()
     func = make_new_mfun( "int", "good", fileio_good );
+    func->doc = "Returns whether the file is ready for reading.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add close()
     func = make_new_mfun( "void", "close", fileio_close );
+    func->doc = "Close (and flush) the currently open file.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add flush()
     func = make_new_mfun( "void", "flush", fileio_flush );
+    func->doc = "Write any buffered output to file.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add mode()
     func = make_new_mfun( "int", "mode", fileio_getmode );
+    func->doc = "Get file IO mode (IO.MODE_SYNC or IO.MODE_ASYNC).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add mode(int)
     func = make_new_mfun( "int", "mode", fileio_setmode );
     func->add_arg( "int", "flag" );
+    func->doc = "Set file IO mode (IO.MODE_SYNC or IO.MODE_ASYNC).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add size()
     func = make_new_mfun( "int", "size", fileio_size );
+    func->doc = "Return the size of the file in bytes, or -1 if no file is opened or if a directory is opened.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add seek(int)
     func = make_new_mfun( "void", "seek", fileio_seek );
     func->add_arg( "int", "pos" );
+    func->doc = "Seek to a specified byte offset in file.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add tell()
     func = make_new_mfun( "int", "tell", fileio_tell );
+    func->doc = "Return the byte read offset of the file, or -1 if no file is opened.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isDir()
     func = make_new_mfun( "int", "isDir", fileio_isdir );
+    func->doc = "Return if the open file is a directory.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add dirList()
     func = make_new_mfun( "string[]", "dirList", fileio_dirlist );
+    func->doc = "Get an array of file names in an open directory.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add read()
@@ -335,6 +383,7 @@ t_CKBOOL init_class_fileio( Chuck_Env * env, Chuck_Type * type )
 
     // add readLine()
     func = make_new_mfun( "string", "readLine", fileio_readline );
+    func->doc = "Read and return the next line from file.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add readInt()
@@ -344,74 +393,75 @@ t_CKBOOL init_class_fileio( Chuck_Env * env, Chuck_Type * type )
     // add readInt(int)
     func = make_new_mfun( "int", "readInt", fileio_readintflags );
     func->add_arg( "int", "flags" );
+    func->doc = "Read and return an integer; binary mode: 'flags' specifies int size to read (IO.INT8, IO.INT16, IO.INT32 default to unsigned values; for signed integers use IO.SINT8, IO.SINT16, IO.SINT32).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
-
-    /*
-    // add readByte()
-    func = make_new_mfun( "int", "readByte", fileio_readint8 );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
-
-    // add readInt8()
-    func = make_new_mfun( "int", "readInt8", fileio_readint8 );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
-
-    // add readInt16()
-    func = make_new_mfun( "int", "readInt16", fileio_readint16 );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
-
-    // add readInt32()
-    func = make_new_mfun( "int", "readInt32", fileio_readint32 );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
-    */
 
     // add readFloat()
-    // func = make_new_mfun( "float", "readFloat", fileio_readfloat );
-    // if( !type_engine_import_mfun( env, func ) ) goto error;
+    func = make_new_mfun( "float", "readFloat", fileio_readfloat );
+    func->doc = "Read and return the next floating point value.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add readFloat()
+    func = make_new_mfun( "float", "readFloat", fileio_readfloatflags );
+    func->add_arg( "int", "flags" );
+    func->doc = "Read and return the next floating point value; if binary mode: 'flags' denotes the size of float to read (IO.FLOAT32 or IO.FLOAT64).";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add eof()
     func = make_new_mfun( "int", "eof", fileio_eof );
+    func->doc = "Return whether end-of-file has been reached; the opposite of .more().";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add more()
     func = make_new_mfun( "int", "more", fileio_more );
+    func->doc = "Return whether there is more to read; the opposite of .eof().";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add write(string)
     func = make_new_mfun( "void", "write", fileio_writestring );
     func->add_arg( "string", "val" );
+    func->doc = "Write a string to file.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add write(int)
     func = make_new_mfun( "void", "write", fileio_writeint );
     func->add_arg( "int", "val" );
+    func->doc = "Write an integer to file.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add write(int,flags)
     func = make_new_mfun( "void", "write", fileio_writeintflags );
     func->add_arg( "int", "val" );
     func->add_arg( "int", "flags" );
+    func->doc = "Write integer value to file; binary mode: int size specified by 'flags' (IO.INT8, IO.INT16, IO.INT32).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add write(float)
     func = make_new_mfun( "void", "write", fileio_writefloat );
     func->add_arg( "float", "val" );
+    func->doc = "Write floating point value to file.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
+    // add write(float)
+    func = make_new_mfun( "void", "write", fileio_writefloatflags );
+    func->add_arg( "float", "val" );
+    func->add_arg( "int", "flags" );
+    func->doc = "Write floating point value to file; binary mode: flags indicate float size (IO.FLOAT32 or IO.FLOAT64).";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add examples
     if( !type_engine_import_add_ex( env, "io/chout.ck" ) ) goto error;
-    if( !type_engine_import_add_ex( env, "io/read-byte.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/read-float.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/read-int.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/read-line.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/read-str.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/read-tokens.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/seek.ck" ) ) goto error;
-    if( !type_engine_import_add_ex( env, "io/write-byte.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/write.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "io/write2.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "io/read-byte.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "io/write-byte.ck" ) ) goto error;
+
     // end the class import
     type_engine_import_class_end( env );
 
@@ -442,7 +492,7 @@ t_CKBOOL init_class_chout( Chuck_Env * env, Chuck_Type * type )
     EM_log( CK_LOG_SEVERE, "class 'chout'" );
 
     // TODO: ctor/dtor?
-    if( !type_engine_import_class_begin( env, type, env->global(), NULL, NULL ) )
+    if( !type_engine_import_class_begin( env, type, env->global(), NULL, NULL, "Do not instantiate this class directly! Use 'chout' instead." ) )
         return FALSE;
 
     // add good()
@@ -470,10 +520,6 @@ t_CKBOOL init_class_chout( Chuck_Env * env, Chuck_Type * type )
     func = make_new_mfun( "string", "readLine", chout_readline );
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
-    // add readInt()
-    // func = make_new_mfun( "int", "readInt", chout_readint );
-    // if( !type_engine_import_mfun( env, func ) ) goto error;
-
     // add readInt(int)
     func = make_new_mfun( "int", "readInt", chout_readintflags );
     func->add_arg( "int", "flags" );
@@ -481,6 +527,7 @@ t_CKBOOL init_class_chout( Chuck_Env * env, Chuck_Type * type )
 
     // add readFloat()
     // func = make_new_mfun( "float", "readFloat", chout_readfloat );
+    // func->add_arg( "int", "flags" );
     // if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add eof()
@@ -535,7 +582,7 @@ t_CKBOOL init_class_cherr( Chuck_Env * env, Chuck_Type * type )
     EM_log( CK_LOG_SEVERE, "class 'cherr'" );
 
     // TODO: ctor/dtor?
-    if( !type_engine_import_class_begin( env, type, env->global(), NULL, NULL ) )
+    if( !type_engine_import_class_begin( env, type, env->global(), NULL, NULL, "Do not instantiate this class directly! Use 'cherr' instead." ) )
         return FALSE;
 
     // add good()
@@ -563,17 +610,14 @@ t_CKBOOL init_class_cherr( Chuck_Env * env, Chuck_Type * type )
     func = make_new_mfun( "string", "readLine", cherr_readline );
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
-    // add readInt()
-    // func = make_new_mfun( "int", "readInt", cherr_readint );
-    // if( !type_engine_import_mfun( env, func ) ) goto error;
-
     // add readInt(int)
-    func = make_new_mfun( "int", "readInt", cherr_readintflags );
-    func->add_arg( "int", "flags" );
-    if( !type_engine_import_mfun( env, func ) ) goto error;
+    // func = make_new_mfun( "int", "readInt", cherr_readintflags );
+    // func->add_arg( "int", "flags" );
+    // if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add readFloat()
     // func = make_new_mfun( "float", "readFloat", cherr_readfloat );
+    // func->add_arg( "int", "flags" );
     // if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add eof()
@@ -662,6 +706,12 @@ t_CKBOOL init_class_Midi( Chuck_Env * env )
     MidiMsg_offset_when = type_engine_import_mvar( env, "dur", "when", FALSE, doc.c_str() );
     if( MidiMsg_offset_when == CK_INVALID_OFFSET ) goto error;
 
+    // add examples
+    if( !type_engine_import_add_ex( env, "midi/gomidi.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "midi/gomidi2.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "midi/polyfony.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "midi/polyfony2.ck" ) ) goto error;
+
     // end the class import
     type_engine_import_class_end( env );
 
@@ -689,7 +739,7 @@ t_CKBOOL init_class_Midi( Chuck_Env * env )
 
     // add good()
     func = make_new_mfun( "int", "good", MidiIn_good );
-    func->doc = "Return 1 if a device has been opened for this instance and there was no error connecting to it. Return 0 if a device has not been opened or there was an error opening a device.";
+    func->doc = "Return true (1) if a device has been opened for this instance and there was no error connecting to it. Return false (0) if a device has not been opened or there was an error opening a device.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add num()
@@ -716,12 +766,19 @@ t_CKBOOL init_class_Midi( Chuck_Env * env )
 
     // add can_wait()
     func = make_new_mfun( "int", "can_wait", MidiIn_can_wait );
-    func->doc = "Return 1 if the device has no more messages in its queue from the device, 0 if it has more messages.";
+    func->doc = "(internal) used by virtual machine for synthronization.";
+    // func->doc = "Return 1 if the device has no more messages in its queue from the device, 0 if it has more messages.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add member variable
     MidiIn_offset_data = type_engine_import_mvar( env, "int", "@MidiIn_data", FALSE );
     if( MidiIn_offset_data == CK_INVALID_OFFSET ) goto error;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "midi/gomidi.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "midi/gomidi2.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "midi/polyfony.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "midi/polyfony2.ck" ) ) goto error;
 
     // end the class import
     type_engine_import_class_end( env );
@@ -747,7 +804,7 @@ t_CKBOOL init_class_Midi( Chuck_Env * env )
 
     // add good()
     func = make_new_mfun( "int", "good", MidiOut_good );
-    func->doc = "Return 1 if a device has been opened for this instance and there was no error connecting to it. Return 0 if a device has not been opened or there was an error opening a device.";
+    func->doc = "Return true (1) if a device has been opened for this instance and there was no error connecting to it. Return false (0) if a device has not been opened or there was an error opening a device.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add num()
@@ -771,6 +828,9 @@ t_CKBOOL init_class_Midi( Chuck_Env * env )
     func->add_arg( "MidiMsg", "msg" );
     func->doc = "Send out a MidiMsg message.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "midi/midiout.ck" ) ) goto error;
 
     // add member variable
     MidiOut_offset_data = type_engine_import_mvar( env, "int", "@MidiOut_data", FALSE );
@@ -836,7 +896,7 @@ t_CKBOOL init_class_HID( Chuck_Env * env )
     std::string doc;
 
     // doc string
-    doc = "Creates a message for receiving HID information.";
+    doc = "Helper class for receiving HID information; e.g., which key was pressed, joystick position, etc.";
 
     // init base class
     if( !type_engine_import_class_begin( env, "HidMsg", "Object",
@@ -854,11 +914,13 @@ t_CKBOOL init_class_HID( Chuck_Env * env )
     if( HidMsg_offset_device_num == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    HidMsg_offset_type = type_engine_import_mvar( env, "int", "type", FALSE );
+    doc = "A number representing the message type.";
+    HidMsg_offset_type = type_engine_import_mvar( env, "int", "type", FALSE, doc.c_str() );
     if( HidMsg_offset_type == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    HidMsg_offset_which = type_engine_import_mvar( env, "int", "which", FALSE );
+    doc = "Code (platform dependent) associated with a keyboard key.";
+    HidMsg_offset_which = type_engine_import_mvar( env, "int", "which", FALSE, doc.c_str() );
     if( HidMsg_offset_which == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
@@ -932,27 +994,33 @@ t_CKBOOL init_class_HID( Chuck_Env * env )
     if( HidMsg_offset_touchy == CK_INVALID_OFFSET ) goto error;
 
     // add member variable (added 1.3.0.0)
-    HidMsg_offset_touchsize = type_engine_import_mvar( env, "float", "touchSize", FALSE );
+    doc = "Multi-touch size.";
+    HidMsg_offset_touchsize = type_engine_import_mvar( env, "float", "touchSize", FALSE, doc.c_str() );
     if( HidMsg_offset_touchsize == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    HidMsg_offset_axis_position = type_engine_import_mvar( env, "int", "axis_position", FALSE );
+    doc = "Joystick axis position (int).";
+    HidMsg_offset_axis_position = type_engine_import_mvar( env, "int", "axis_position", FALSE, doc.c_str() );
     if( HidMsg_offset_axis_position == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    HidMsg_offset_axis_position2 = type_engine_import_mvar( env, "float", "axisPosition", FALSE );
+    doc = "Joystick axis position (float).";
+    HidMsg_offset_axis_position2 = type_engine_import_mvar( env, "float", "axisPosition", FALSE, doc.c_str() );
     if( HidMsg_offset_axis_position2 == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    HidMsg_offset_hat_position = type_engine_import_mvar( env, "int", "hatPosition", FALSE );
+    doc = "Joystick hat position.";
+    HidMsg_offset_hat_position = type_engine_import_mvar( env, "int", "hatPosition", FALSE, doc.c_str() );
     if( HidMsg_offset_hat_position == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    HidMsg_offset_ascii = type_engine_import_mvar( env, "int", "ascii", FALSE );
+    doc = "ASCII value associated with a keyboard key.";
+    HidMsg_offset_ascii = type_engine_import_mvar( env, "int", "ascii", FALSE, doc.c_str() );
     if( HidMsg_offset_ascii == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    HidMsg_offset_key = type_engine_import_mvar( env, "int", "key", FALSE );
+    doc = "Code (USB) for a keyboard key.";
+    HidMsg_offset_key = type_engine_import_mvar( env, "int", "key", FALSE, doc.c_str() );
     if( HidMsg_offset_key == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
@@ -962,47 +1030,69 @@ t_CKBOOL init_class_HID( Chuck_Env * env )
 
     // add is_axis_motion()
     func = make_new_mfun( "int", "is_axis_motion", HidMsg_is_axis_motion ); // deprecated
+    func->doc = "(Deprecated; use .isAxisMotion() instead).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isAxisMotion()
     func = make_new_mfun( "int", "isAxisMotion", HidMsg_is_axis_motion );
+    func->doc = "Return whether this message is an axis-motion event.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add is_button_down()
     func = make_new_mfun( "int", "is_button_down", HidMsg_is_button_down ); // deprecated
+    func->doc = "(Deprecated; use .isButtonDown() instead).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isButtonDown()
     func = make_new_mfun( "int", "isButtonDown", HidMsg_is_button_down );
+    func->doc = "Return whether this message is a button-down event.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add is_button_up()
     func = make_new_mfun( "int", "is_button_up", HidMsg_is_button_up ); // deprecated
+    func->doc = "(Deprecated; use .isButtonUp() instead).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isButtonUp()
     func = make_new_mfun( "int", "isButtonUp", HidMsg_is_button_up );
+    func->doc = "Return whether this message is a button-up event.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add is_mouse_motion()
     func = make_new_mfun( "int", "is_mouse_motion", HidMsg_is_mouse_motion ); // deprecated
+    func->doc = "(Deprecated; use .isMouseMotion() instead).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isMouseMotion()
     func = make_new_mfun( "int", "isMouseMotion", HidMsg_is_mouse_motion );
+    func->doc = "Return whether this message is a mouse-motion event.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add is_hat_motion()
     func = make_new_mfun( "int", "is_hat_motion", HidMsg_is_hat_motion ); // deprecated
+    func->doc = "(Deprecated; use .isHatMotion() instead).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isHatMotion()
     func = make_new_mfun( "int", "isHatMotion", HidMsg_is_hat_motion );
+    func->doc = "Return whether this message is a hat-motion event.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add isWheelMotion()
     func = make_new_mfun( "int", "isWheelMotion", HidMsg_is_wheel_motion );
+    func->doc = "Return whether this message is a wheel-motion event.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "hid/kb.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/keyboard-organ.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/mouse.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/mouse-abs.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/mouse-fm.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy-fm.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy-noise.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy-shake.ck" ) ) goto error;
 
     // end the class import
     type_engine_import_class_end( env );
@@ -1013,59 +1103,81 @@ t_CKBOOL init_class_HID( Chuck_Env * env )
 
     // init base class Hid (copy of HidIn + constants)
     if( !type_engine_import_class_begin( env, "Hid", "Event",
-                                        env->global(), HidIn_ctor, HidIn_dtor ) )
+                                         env->global(), HidIn_ctor, HidIn_dtor, "Class for interacting with human-interface devices (HIDs) such as keyboards, mice, gamepads, joysticks, etc." ) )
         return FALSE;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "hid/kb.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/keyboard-organ.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/mouse.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/mouse-abs.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/mouse-fm.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy-fm.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy-noise.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/joy-shake.ck" ) ) goto error;
 
     // add open()
     func = make_new_mfun( "int", "open", HidIn_open );
     func->add_arg( "int", "type" );
     func->add_arg( "int", "num" );
+    func->doc = "Open a HID device by device number ('num') and type ('type'). See static member variables for possible types.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add open()
     func = make_new_mfun( "int", "open", HidIn_open_named );
     func->add_arg( "string", "name" );
+    func->doc = "Open a HID device by name.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add openJoystick()
     func = make_new_mfun( "int", "openJoystick", HidIn_open_joystick );
     func->add_arg( "int", "num" );
+    func->doc = "Open a joystick/gamepad by device number.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add openMouse()
     func = make_new_mfun( "int", "openMouse", HidIn_open_mouse );
     func->add_arg( "int", "num" );
+    func->doc = "Open a mouse/trackpad by device number.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add openKeyboard()
     func = make_new_mfun( "int", "openKeyboard", HidIn_open_keyboard );
     func->add_arg( "int", "num" );
+    func->doc = "Open a keyboard by device number.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add openTiltSensor()
     func = make_new_mfun( "int", "openTiltSensor", HidIn_open_tiltsensor );
+    func->doc = "Open a tilt-sensor by device number.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add good()
     func = make_new_mfun( "int", "good", HidIn_good );
+    func->doc = "Get whether a device has been successfully opened on this HID instance.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add num()
     func = make_new_mfun( "int", "num", HidIn_num );
+    func->doc = "Get the number of the currently open device; returns -1 if no device is open on this HID instance.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add name()
     func = make_new_mfun( "string", "name", HidIn_name );
+    func->doc = "Get the name of the currently open device; return empty string (\"\") if no device is open on this HID instance.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add printerr()
     func = make_new_mfun( "void", "printerr", HidIn_printerr );
-    func->add_arg( "int", "print_or_not" );
+    func->add_arg( "int", "toPrintOrNot" );
+    func->doc = "Set whether to print errors (default is YES).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add recv()
     func = make_new_mfun( "int", "recv", HidIn_recv );
     func->add_arg( "HidMsg", "msg" );
+    func->doc = "Receive the next available HidMsg.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add read()
@@ -1073,36 +1185,44 @@ t_CKBOOL init_class_HID( Chuck_Env * env )
     func->add_arg( "int", "type" );
     func->add_arg( "int", "which" );
     func->add_arg( "HidMsg", "msg" );
+    func->doc = "Read the next HidMsg from device of type 'type' with device id 'which'.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add send()
     func = make_new_mfun( "int", "send", HidIn_send );
     func->add_arg( "HidMsg", "msg" );
+    func->doc = "Send a HidMsg to device; return whether the operation was successful.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add can_wait()
     func = make_new_mfun( "int", "can_wait", HidIn_can_wait );
+    func->doc = "(internal) used by virtual machine for synthronization.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add readTiltSensor()
     func = make_new_sfun( "int[]", "readTiltSensor", HidIn_read_tilt_sensor );
+    func->doc = "Read tilt-sensor and return as an int array.";
     if( !type_engine_import_sfun( env, func ) ) goto error;
 
     // add globalTiltPollRate()
     func = make_new_sfun( "dur", "globalTiltPollRate", HidIn_ctrl_tiltPollRate );
     func->add_arg( "dur", "d" );
+    func->doc = "Set tilt-sensor poll rate.";
     if( !type_engine_import_sfun( env, func ) ) goto error;
 
     // add globalTiltPollRate()
     func = make_new_sfun( "dur", "globalTiltPollRate", HidIn_cget_tiltPollRate );
+    func->doc = "Get tilt-sensor poll rate.";
     if( !type_engine_import_sfun( env, func ) ) goto error;
 
     // add startCursorTrack()
     func = make_new_sfun( "int", "startCursorTrack", HidIn_start_cursor_track );
+    func->doc = "Start cursor tracking; return whether the request was successful.";
     if( !type_engine_import_sfun( env, func ) ) goto error;
 
     // add stopCursorTrack()
     func = make_new_sfun( "int", "stopCursorTrack", HidIn_stop_cursor_track );
+    func->doc = "Stop cursor tracking; return whether the request was successful.";
     if( !type_engine_import_sfun( env, func ) ) goto error;
 
     // add member variable
@@ -1379,12 +1499,29 @@ error:
 //-----------------------------------------------------------------------------
 // IO API
 //-----------------------------------------------------------------------------
-CK_DLL_MFUN( io_dummy )
+CK_DLL_MFUN( io_dummy_int )
 {
-    EM_error3( "(IO): internal error! inside an abstract function! help!" );
-    EM_error3( "    note: please hunt down someone (e.g., Ge) to fix this..." );
-    assert( FALSE );
+    // EM_error3( "(IO): internal error! inside an abstract function! help!" );
+    // EM_error3( "    note: please hunt down someone (e.g., Ge) to fix this..." );
+    // assert( FALSE );
     RETURN->v_int = 0;
+}
+
+CK_DLL_MFUN( io_dummy_float )
+{
+    // return 0.0
+    RETURN->v_float = 0;
+}
+
+CK_DLL_MFUN( io_dummy_string )
+{
+    // return NULL
+    RETURN->v_string = NULL;
+}
+
+CK_DLL_MFUN( io_dummy_void )
+{
+    // do nothing
 }
 
 CK_DLL_SFUN( io_newline )
@@ -1553,21 +1690,18 @@ CK_DLL_MFUN( fileio_readintflags )
 
 CK_DLL_MFUN( fileio_readint8 )
 {
-    t_CKINT flags = GET_NEXT_INT(ARGS);
     Chuck_IO_File * f = (Chuck_IO_File *)SELF;
     RETURN->v_int = f->readInt( Chuck_IO::INT8 );
 }
 
 CK_DLL_MFUN( fileio_readint16 )
 {
-    t_CKINT flags = GET_NEXT_INT(ARGS);
     Chuck_IO_File * f = (Chuck_IO_File *)SELF;
     RETURN->v_int = f->readInt( Chuck_IO::INT16 );
 }
 
 CK_DLL_MFUN( fileio_readint32 )
 {
-    t_CKINT flags = GET_NEXT_INT(ARGS);
     Chuck_IO_File * f = (Chuck_IO_File *)SELF;
     RETURN->v_int = f->readInt( Chuck_IO::INT32 );
 }
@@ -1575,8 +1709,14 @@ CK_DLL_MFUN( fileio_readint32 )
 CK_DLL_MFUN( fileio_readfloat )
 {
     Chuck_IO_File * f = (Chuck_IO_File *)SELF;
-    t_CKFLOAT ret = f->readFloat();
-    RETURN->v_float = ret;
+    RETURN->v_float = f->readFloat();
+}
+
+CK_DLL_MFUN( fileio_readfloatflags )
+{
+    Chuck_IO_File * f = (Chuck_IO_File *)SELF;
+    t_CKINT flags = GET_NEXT_INT(ARGS);
+    RETURN->v_float = f->readFloat( flags );
 }
 
 CK_DLL_MFUN( fileio_eof )
@@ -1707,6 +1847,7 @@ CK_DLL_MFUN( fileio_writeintflags )
 CK_DLL_MFUN( fileio_writefloat )
 {
     t_CKFLOAT val = GET_NEXT_FLOAT(ARGS);
+    t_CKINT flagsDefault = Chuck_IO::FLOAT32;
     Chuck_IO_File * f = (Chuck_IO_File *)SELF;
 
 #ifndef __DISABLE_FILEIO__  // 1.5.0.0 (ge) | made more granular (e.g., for WebChucK)
@@ -1717,6 +1858,7 @@ CK_DLL_MFUN( fileio_writefloat )
         args->RETURN = (void *)RETURN;
         args->fileio_obj = f;
         args->floatArg = val;
+        args->intArg = flagsDefault; // 1.5.0.1 (ge) add default
         // set shred to wait for I/O completion
         assert( SHRED != NULL );
         f->m_asyncEvent->wait( SHRED, SHRED->vm_ref );
@@ -1733,10 +1875,48 @@ CK_DLL_MFUN( fileio_writefloat )
             }
         }
     } else {
-        f->write(val);
+        f->write( val, flagsDefault );
     }
 #else
-    f->write(val);
+    f->write( val, flagsDefault );
+#endif //__DISABLE_FILEIO__
+}
+
+CK_DLL_MFUN( fileio_writefloatflags )
+{
+    t_CKFLOAT val = GET_NEXT_FLOAT(ARGS);
+    t_CKINT flags = GET_NEXT_INT(ARGS);
+    Chuck_IO_File * f = (Chuck_IO_File *)SELF;
+
+#ifndef __DISABLE_FILEIO__  // 1.5.0.0 (ge) | made more granular (e.g., for WebChucK)
+    if (f->mode() == Chuck_IO::MODE_ASYNC)
+    {
+        // set up arguments
+        Chuck_IO::async_args *args = new Chuck_IO::async_args;
+        args->RETURN = (void *)RETURN;
+        args->fileio_obj = f;
+        args->floatArg = val;
+        args->intArg = flags; // 1.5.0.1 (ge) added
+        // set shred to wait for I/O completion
+        assert( SHRED != NULL );
+        f->m_asyncEvent->wait( SHRED, SHRED->vm_ref );
+        // start thread
+        bool ret = f->m_thread->start( f->writeFloat_thread, (void *)args );
+        if (!ret) {
+            // for some reason, the XThread object needs to be
+            // deleted and reconstructed every time after call #375
+            delete f->m_thread;
+            f->m_thread = new XThread;
+            ret = f->m_thread->start( f->writeFloat_thread, (void *)args );
+            if (!ret) {
+                EM_error3( "(FileIO): failed to start thread for asynchronous mode I/O" );
+            }
+        }
+    } else {
+        f->write( val,flags );
+    }
+#else
+    f->write( val,flags );
 #endif //__DISABLE_FILEIO__
 }
 
@@ -2396,6 +2576,7 @@ CK_DLL_SFUN( HidIn_read_tilt_sensor )
     static t_CKBOOL hi_good = TRUE;
 
     Chuck_Array4 * array = new Chuck_Array4( FALSE, 3 );
+    initialize_object( array, VM->env()->t_array ); // 1.5.0.0 (ge) added
     array->set( 0, 0 );
     array->set( 1, 0 );
     array->set( 2, 0 );
@@ -2994,7 +3175,7 @@ t_CKINT Chuck_IO_Serial::readInt( t_CKINT flags )
 
     if( m_flags & Chuck_IO::TYPE_BINARY )
     {
-        if( flags & INT8 )
+        if( flags & Chuck_IO::INT8 || flags & Chuck_IO::UINT8 ) // 1.5.0.1 (ge) added UINT
         {
             uint8_t byte = 0;
             if(!fread(&byte, 1, 1, m_cfd))
@@ -3002,7 +3183,7 @@ t_CKINT Chuck_IO_Serial::readInt( t_CKINT flags )
 
             i = byte;
         }
-        else if( flags & INT16 )
+        else if( flags & Chuck_IO::INT16 || flags & Chuck_IO::UINT16 ) // 1.5.0.1 (ge) added UINT
         {
             uint16_t word = 0;
             if(!fread(&word, 2, 1, m_cfd))
@@ -3010,13 +3191,53 @@ t_CKINT Chuck_IO_Serial::readInt( t_CKINT flags )
 
             i = word;
         }
-        else if( flags & INT32 )
+        else if( flags & Chuck_IO::INT32 || flags & Chuck_IO::UINT32 ) // 1.5.0.1 (ge) added UINT
         {
             uint32_t dword = 0;
             if(!fread(&dword, 4, 1, m_cfd))
                 EM_log(CK_LOG_WARNING, "(Serial.readInt): error: read failed");
 
             i = dword;
+        }
+        else if( flags & Chuck_IO::INT64 || flags & Chuck_IO::UINT64 ) // 1.5.0.1 (ge) added UINT and 64-bit
+        {
+            uint64_t val = 0;
+            if(!fread(&val, 8, 1, m_cfd))
+                EM_log(CK_LOG_WARNING, "(Serial.readInt): error: read failed");
+
+            i = val;
+        }
+        else if( flags & Chuck_IO::SINT8 ) // 1.5.0.1 (ge) added SINT
+        {
+            int8_t byte = 0;
+            if(!fread(&byte, 1, 1, m_cfd))
+                EM_log(CK_LOG_WARNING, "(Serial.readInt): error: read failed");
+
+            i = byte;
+        }
+        else if( flags & Chuck_IO::SINT16 ) // 1.5.0.1 (ge) added SINT
+        {
+            int16_t word = 0;
+            if(!fread(&word, 2, 1, m_cfd))
+                EM_log(CK_LOG_WARNING, "(Serial.readInt): error: read failed");
+
+            i = word;
+        }
+        else if( flags & Chuck_IO::SINT32 ) // 1.5.0.1 (ge) added SINT
+        {
+            int32_t dword = 0;
+            if(!fread(&dword, 4, 1, m_cfd))
+                EM_log(CK_LOG_WARNING, "(Serial.readInt): error: read failed");
+
+            i = dword;
+        }
+        else if( flags & Chuck_IO::SINT64 ) // 1.5.0.1 (ge) added SINT and 64-bit
+        {
+            int64_t val = 0;
+            if(!fread(&val, 8, 1, m_cfd))
+                EM_log(CK_LOG_WARNING, "(Serial.readInt): error: read failed");
+
+            i = val;
         }
     }
     else
@@ -3028,7 +3249,13 @@ t_CKINT Chuck_IO_Serial::readInt( t_CKINT flags )
     return i;
 }
 
-t_CKFLOAT Chuck_IO_Serial::readFloat()
+t_CKFLOAT Chuck_IO_Serial::readFloat( )
+{
+    // 1.5.0.1 (ge) redirect
+    return readFloat( Chuck_IO::FLOAT32 );
+}
+
+t_CKFLOAT Chuck_IO_Serial::readFloat( t_CKINT flags )
 {
     if( !good() )
     {
@@ -3046,8 +3273,26 @@ t_CKFLOAT Chuck_IO_Serial::readFloat()
 
     if( m_flags & Chuck_IO::TYPE_BINARY )
     {
-        if(!fread(&f, 4, 1, m_cfd))
-            EM_log(CK_LOG_WARNING, "(Serial.readFloat): error: read failed");
+        // check size
+        if( flags & Chuck_IO::FLOAT32 )
+        {
+            float v = 0.0f;
+            if(!fread(&v, 4, 1, m_cfd))
+                EM_log(CK_LOG_WARNING, "(Serial.readFloat): error: read failed");
+            f = v;
+        }
+        else if( flags & Chuck_IO::FLOAT64 )
+        {
+            double v = 0.0;
+            if( !fread(&v, 8, 1, m_cfd) )
+                EM_log(CK_LOG_WARNING, "(Serial.readFloat): error: read failed");
+            f = v;
+        }
+        else
+        {
+            // error message
+            EM_log(CK_LOG_WARNING, "(Serial.readFloat): invalid or unsupported size flag");
+        }
     }
     else
     {
@@ -3084,7 +3329,7 @@ t_CKBOOL Chuck_IO_Serial::readString( std::string & str )
         return FALSE;
     }
 
-    str = (char *) m_tmp_buf;
+    str = (char *)  m_tmp_buf;
 
     return TRUE;
 }
@@ -3175,11 +3420,11 @@ void Chuck_IO_Serial::write( const std::string & val )
 
 void Chuck_IO_Serial::write( t_CKINT val )
 {
-    write( val, 4 );
+    write( val, Chuck_IO::INT32 );
 }
 
 
-void Chuck_IO_Serial::write( t_CKINT val, t_CKINT size )
+void Chuck_IO_Serial::write( t_CKINT val, t_CKINT flags )
 {
     if( !good() )
     {
@@ -3187,9 +3432,11 @@ void Chuck_IO_Serial::write( t_CKINT val, t_CKINT size )
         return;
     }
 
-    if(!(size == 1 || size == 2 || size == 4 || size == 8))
+    // check flags
+    if( (flags & Chuck_IO::INT8 ) || (flags & Chuck_IO::INT16) ||
+        (flags & Chuck_IO::INT32) || (flags & Chuck_IO::INT64) )
     {
-        EM_log(CK_LOG_WARNING, "(Serial.write): warning: invalid int size %li, ignoring write request", size);
+        EM_log( CK_LOG_WARNING, "(Serial.write): warning: invalid int size flag, ignoring write request" );
         return;
     }
 
@@ -3221,11 +3468,23 @@ void Chuck_IO_Serial::write( t_CKINT val, t_CKINT size )
         }
         else
         {
-            char * buf = (char *)&val;
+            // 1.5.0.1 (ge) check and handle individually
+            uint8_t v8 = (uint8_t)val;
+            uint16_t v16 = (uint16_t)val;
+            uint32_t v32 = (uint32_t)val;
+            uint64_t v64 = (uint64_t)val;
+            char * buf = NULL;
+            t_CKINT size = 0;
 
-            // assume 4-byte int
+            if( flags & Chuck_IO::INT8 ) { buf = (char *)&v8; size = 1; }
+            else if( flags & Chuck_IO::INT16 ) { buf = (char *)&v16; size = 2; }
+            else if( flags & Chuck_IO::INT32 ) { buf = (char *)&v32; size = 4; }
+            else if( flags & Chuck_IO::INT64 ) { buf = (char *)&v64; size = 8; }
+            // other size values should be caught above
+
+            // put into write buffer
             for(int i = 0; i < size; i++)
-                m_writeBuffer.put(buf[i]);
+                m_writeBuffer.put( buf[i] );
 
             Request r;
             r.m_type = TYPE_WRITE;
@@ -3244,14 +3503,38 @@ void Chuck_IO_Serial::write( t_CKINT val, t_CKINT size )
         }
         else
         {
-            // assume 4-byte int
-            char * buf = (char *) &val;
-            fwrite(buf, 1, size, m_cfd);
+            // 1.5.0.1 (ge) check and handle individually
+            if( flags & Chuck_IO::INT8 )
+            {
+                uint8_t v = (uint8_t)val;
+                fwrite( (char*)&v, 1, 1, m_cfd );
+            }
+            else if( flags & Chuck_IO::INT16 )
+            {
+                uint16_t v = (uint16_t)val;
+                fwrite( (char*)&v, 1, 2, m_cfd );
+            }
+            else if( flags & Chuck_IO::INT32 )
+            {
+                uint32_t v = (uint32_t)val;
+                fwrite( (char*)&v, 1, 4, m_cfd );
+            }
+            else if( flags & Chuck_IO::INT64 )
+            {
+                uint64_t v = (uint64_t)val;
+                fwrite( (char*)&v, 1, 8, m_cfd );
+            }
+            // other size values should be caught above
         }
     }
 }
 
 void Chuck_IO_Serial::write( t_CKFLOAT val )
+{
+    this->write( val, Chuck_IO::FLOAT32 );
+}
+
+void Chuck_IO_Serial::write( t_CKFLOAT val, t_CKINT flags )
 {
     if( !good() )
     {
@@ -3287,11 +3570,26 @@ void Chuck_IO_Serial::write( t_CKFLOAT val )
         }
         else
         {
-            char * buf = (char *) &val;
-
-            // assume 4-byte float
-            for(int i = 0; i < 4; i++)
-                m_writeBuffer.put(buf[i]);
+            // 1.5.0.1 (ge) check datatype size flag
+            if( flags & Chuck_IO::FLOAT32 )
+            {
+                float v = (float)val;
+                char * buf = (char *)&v;
+                for(int i = 0; i < sizeof(v); i++)
+                    m_writeBuffer.put(buf[i]);
+            }
+            else if( flags & Chuck_IO::FLOAT64 )
+            {
+                double v = (double)val;
+                char * buf = (char *)&v;
+                for(int i = 0; i < sizeof(v); i++)
+                    m_writeBuffer.put(buf[i]);
+            }
+            else
+            {
+                // error message
+                EM_log(CK_LOG_WARNING, "(Serial.write): invalid or unsupported size flag");
+            }
 
             Request r;
             r.m_type = TYPE_WRITE;
@@ -3308,12 +3606,28 @@ void Chuck_IO_Serial::write( t_CKFLOAT val )
         {
             fprintf( m_cfd, "%f", val );
         }
-        else
+        else // BINARY
         {
-            // assume 4-byte int
-            char * buf = (char *) &val;
-            // 1.5.0.0 (ge) | fixed from size to sizeof
-            fwrite(buf, 1, sizeof(val), m_cfd);
+            // 1.5.0.1 (ge) check datatype size flag
+            if( flags & Chuck_IO::FLOAT32 )
+            {
+                float v = (float)val;
+                char * buf = (char *)&v;
+                for(int i = 0; i < sizeof(v); i++)
+                    m_writeBuffer.put(buf[i]);
+            }
+            else if( flags & Chuck_IO::FLOAT64 )
+            {
+                double v = (double)val;
+                char * buf = (char *)&v;
+                for(int i = 0; i < sizeof(v); i++)
+                    m_writeBuffer.put(buf[i]);
+            }
+            else
+            {
+                // error message
+                EM_log(CK_LOG_WARNING, "(Serial.write): invalid or unsupported size flag");
+            }
         }
     }
 }
@@ -3777,6 +4091,7 @@ t_CKBOOL Chuck_IO_Serial::handle_int_ascii(Chuck_IO_Serial::Request & r)
     t_CKINT val = 0;
     int numRead = 0;
     Chuck_Array4 * array = new Chuck_Array4(FALSE, 0);
+    initialize_object( array, m_vmRef->env()->t_array ); // 1.5.0.0 (ge) added
     for(int i = 0; i < r.m_num; i++)
     {
         t_CKUINT len = 0;
@@ -3849,6 +4164,7 @@ t_CKBOOL Chuck_IO_Serial::handle_byte(Chuck_IO_Serial::Request & r)
     else
     {
         Chuck_Array4 * array = new Chuck_Array4(FALSE, r.m_num);
+        initialize_object( array, m_vmRef->env()->t_array ); // 1.5.0.0 (ge) added
         for(int i = 0; i < r.m_num; i++)
         {
             array->set(i, m_tmp_buf[i]);
@@ -3925,6 +4241,7 @@ t_CKBOOL Chuck_IO_Serial::handle_int_binary(Chuck_IO_Serial::Request & r)
     uint32_t * m_ints = (uint32_t *) m_tmp_buf;
 
     Chuck_Array4 * array = new Chuck_Array4(FALSE, r.m_num);
+    initialize_object( array, m_vmRef->env()->t_array ); // 1.5.0.0 (ge) added
     for(int i = 0; i < r.m_num; i++)
     {
         array->set(i, m_ints[i]);
@@ -4357,7 +4674,7 @@ t_CKBOOL init_class_serialio( Chuck_Env * env )
 
     // add can_wait
     // func = make_new_mfun("int", "can_wait", serialio_canWait);
-    // func->doc = "";
+    // func->doc = "(internal) used by virtual machine for synthronization.";
     // if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add file modes (moved into IO | 1.5.0.0 (ge))

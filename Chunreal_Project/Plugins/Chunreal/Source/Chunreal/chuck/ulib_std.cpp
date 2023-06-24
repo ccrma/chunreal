@@ -333,12 +333,21 @@ DLL_QUERY libstd_query( Chuck_DL_Query * QUERY )
     Chuck_DL_Func * func = NULL;
 
 #ifndef __DISABLE_KBHIT__
-    // KBHit
+    // doc string
+    string doc = "KBHit (terminal only) is a simple mechanism for capturing keyboard input; for a more flexible mechanism, see HID. (On Linux, KBHit does not require granting device permissions; it works out of the box.)";
+
     // begin class (KBHit)
     if( !type_engine_import_class_begin( env, "KBHit", "Event",
                                          env->global(), KBHit_ctor,
-                                         KBHit_dtor ) )
+                                         KBHit_dtor, doc.c_str() ) )
         return FALSE;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "hid/kbhit/kbhit.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/kbhit/kbhit2.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/kbhit/clix.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/kbhit/clix2.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "hid/kbhit/clix3.ck" ) ) goto error;
 
     // add member variable
     KBHit_offset_data = type_engine_import_mvar( env, "int", "@KBHit_data", FALSE );
@@ -346,30 +355,37 @@ DLL_QUERY libstd_query( Chuck_DL_Query * QUERY )
 
     // add on()
     func = make_new_mfun( "void", "on", KBHit_on );
+    func->doc = "Enable the KBHit.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add off()
     func = make_new_mfun( "void", "off", KBHit_off );
+    func->doc = "Disable the KBHit.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add state()
     func = make_new_mfun( "void", "state", KBHit_state );
+    func->doc = "Get whether the KBHit is currently enabled.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add hit()
     func = make_new_mfun( "Event", "hit", KBHit_hit );
+    func->doc = "Return itself as an Event to wait on; this is largely unnecessary as the KBHit instance can be directly => to 'now'.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add more()
     func = make_new_mfun( "int", "more", KBHit_more );
+    func->doc = "Return whether there are unprocessed KBHit events (e.g., if a user presses multiple keys at once).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add getchar()
     func = make_new_mfun( "int", "getchar", KBHit_getchar );
+    func->doc = "Get the ASCII value of the last keyboard press.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add can_wait()
     func = make_new_mfun( "int", "can_wait", KBHit_can_wait );
+    func->doc = "(internal) used by virtual machine for synthronization.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // end class
@@ -386,8 +402,8 @@ DLL_QUERY libstd_query( Chuck_DL_Query * QUERY )
 #ifndef __DISABLE_PROMPTER__
     // begin class (Skot)
     if( !type_engine_import_class_begin( env, "ConsoleInput", "Event",
-                                         env->global(), Skot_ctor,
-                                         Skot_dtor ) )
+                                         env->global(), Skot_ctor, Skot_dtor,
+                                         "(Terminal only) a utility for prompting user input on the command line." ) )
         return FALSE;
 
     // add member variable
@@ -396,24 +412,34 @@ DLL_QUERY libstd_query( Chuck_DL_Query * QUERY )
 
     // add prompt()
     func = make_new_mfun( "Event", "prompt", Skot_prompt );
+    func->doc = "Return an Event to wait on.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add prompt()
     func = make_new_mfun( "Event", "prompt", Skot_prompt2 );
     func->add_arg( "string", "what" );
+    func->doc = "Print a prompt text and return an Event to wait on.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
-    // add ready()
+    // add more()
     func = make_new_mfun( "int", "more", Skot_more );
+    func->doc = "Return whether there is more input to read.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add getString()
     func = make_new_mfun( "string", "getLine", Skot_getLine );
+    func->doc = "Return the next line of input as a string.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add can_wait()
     func = make_new_mfun( "int", "can_wait", Skot_can_wait );
+    func->doc = "(internal) used by virtual machine for synthronization.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "string/readline.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "ai/word2vec/word2vec-prompt.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "ai/word2vec/poem-ungenerate.ck" ) ) goto error;
 
     // end class
     type_engine_import_class_end( env );
@@ -425,8 +451,8 @@ DLL_QUERY libstd_query( Chuck_DL_Query * QUERY )
 
     // begin class (StrTok)
     if( !type_engine_import_class_begin( env, "StringTokenizer", "Object",
-                                         env->global(), StrTok_ctor,
-                                         StrTok_dtor ) )
+                                         env->global(), StrTok_ctor, StrTok_dtor,
+                                         "Break a string into tokens. This uses whitespace as the delimiter." ) )
         return FALSE;
 
     // add member variable
@@ -436,39 +462,54 @@ DLL_QUERY libstd_query( Chuck_DL_Query * QUERY )
     // add set()
     func = make_new_mfun( "void", "set", StrTok_set );
     func->add_arg( "string", "line" );
+    func->doc = "Set the string to be tokenized.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add reset()
     func = make_new_mfun( "void", "reset", StrTok_reset );
+    func->doc = "Reset token iteration back to the beginning of the set string.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add more()
     func = make_new_mfun( "int", "more", StrTok_more );
+    func->doc = "Return true (1) if there are still more tokens, false (0) if no more tokens.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add next()
     func = make_new_mfun( "string", "next", StrTok_next );
+    func->doc = "Return the next token string.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add get()
     func = make_new_mfun( "string", "next", StrTok_next2 );
     func->add_arg( "string", "out" );
+    func->doc = "Return the next token string. Additionally, write the token string to the 'out' string variable.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add get()
     func = make_new_mfun( "string", "get", StrTok_get );
     func->add_arg( "int", "index" );
+    func->doc = "Return the i-th token in the set string.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add get()
     func = make_new_mfun( "string", "get", StrTok_get2 );
     func->add_arg( "int", "index" );
     func->add_arg( "string", "out" );
+    func->doc = "Return the i-th token in the set string. Additionally, write the token string to the `out` string variable.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add size()
     func = make_new_mfun( "int", "size", StrTok_size );
+    func->doc = "Returns the number of token strings that the set string can be broken into.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "string/token.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "string/readline.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "io/read-tokens.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "io/jabberwocky.txt" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "ai/word2vec/word2vec-prompt.ck" ) ) goto error;
 
     // end class
     type_engine_import_class_end( env );

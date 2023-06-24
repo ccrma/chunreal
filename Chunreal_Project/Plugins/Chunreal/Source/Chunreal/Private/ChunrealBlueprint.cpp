@@ -1,0 +1,43 @@
+#include "ChunrealBlueprint.h"
+
+//Read file
+bool UChunrealBlueprint::ReadFile(FString filepath, FString& text)
+{
+	return FFileHelper::LoadFileToString(text, *filepath);
+}
+
+//Get ChucK global int variable
+int UChunrealBlueprint::GetChuckGlobalInt(FString id, FString paramName)
+{
+	return FChunrealModule::GetChuckGlobalInt(id, paramName);
+}
+//Set ChucK global int variable
+bool UChunrealBlueprint::SetChuckGlobalInt(FString id, FString paramName, int val)
+{
+	return FChunrealModule::SetChuckGlobalInt(id, paramName, val);
+}
+//Get ChucK global float variable
+float UChunrealBlueprint::GetChuckGlobalFloat(FString id, FString paramName)
+{
+	return FChunrealModule::GetChuckGlobalFloat(id, paramName);
+}
+//Set ChucK global float variable
+bool UChunrealBlueprint::SetChuckGlobalFloat(FString id, FString paramName, float val)
+{
+	return FChunrealModule::SetChuckGlobalFloat(id, paramName, val);
+}
+//Get ChucK global string variable
+FString UChunrealBlueprint::GetChuckGlobalString(FString id, FString paramName)
+{
+	return FChunrealModule::GetChuckGlobalString(id, paramName);
+}
+//Set ChucK global string variable
+bool UChunrealBlueprint::SetChuckGlobalString(FString id, FString paramName, FString val)
+{
+	return FChunrealModule::SetChuckGlobalString(id, paramName, val);
+}
+//Broadcast ChucK global event
+bool UChunrealBlueprint::BroadcastChuckGlobalEvent(FString id, FString paramName)
+{
+	return FChunrealModule::BroadcastChuckGlobalEvent(id, paramName);
+}

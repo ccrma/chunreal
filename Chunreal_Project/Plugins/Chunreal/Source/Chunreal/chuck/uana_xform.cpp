@@ -184,6 +184,14 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
     FFT_offset_data = type_engine_import_mvar( env, "int", "@FFT_data", FALSE );
     if( FFT_offset_data == CK_INVALID_OFFSET ) goto error;
 
+    // add examples
+    if( !type_engine_import_add_ex( env, "analysis/fft.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "analysis/fft2.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "analysis/fft3.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "analysis/ifft.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "ai/genre-classify/feature-extract.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "ai/genre-classify/genre-classify.ck" ) ) goto error;
+
     // transform
     func = make_new_mfun( "void", "transform", FFT_transform );
     func->add_arg( "float[]", "from" );
@@ -269,6 +277,11 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
     func->doc = "Manually take IFFT (as opposed to using .upchuck() / upchuck operator)";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
+    // add examples
+    if( !type_engine_import_add_ex( env, "analysis/ifft.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "analysis/ifft2.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "analysis/ifft3.ck" ) ) goto error;
+
     // end the class import
     type_engine_import_class_end( env );
 
@@ -298,6 +311,15 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
     QUERY->add_sfun( QUERY, Windowing_blackmanHarris, "float[]", "blackmanHarris" );
     QUERY->add_arg( QUERY, "int", "size" );
 
+    // add examples | 1.5.0.0 (ge)
+    QUERY->add_ex( QUERY, "analysis/win.ck" );
+    QUERY->add_ex( QUERY, "analysis/xsynth.ck" );
+    QUERY->add_ex( QUERY, "analysis/tracking/pitch-track.ck" );
+    QUERY->add_ex( QUERY, "ai/features/rolloff2.ck" );
+    QUERY->add_ex( QUERY, "analysis/win.ck" );
+    QUERY->add_ex( QUERY, "ai/genre-classify/feature-extract.ck" );
+    QUERY->add_ex( QUERY, "ai/genre-classify/genre-classify.ck" );
+
     // done
     QUERY->end_class( QUERY );
 
@@ -315,7 +337,7 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
     // init as base class: Flip
     //---------------------------------------------------------------------
 
-    doc = "turns audio samples into frames in the UAna domain.";
+    doc = "Turn N (size) audio samples into a Unit Analyzer audio analysis frame.";
 
     if( !type_engine_import_uana_begin( env, "Flip", "UAna", env->global(),
                                         Flip_ctor, Flip_dtor,
@@ -327,6 +349,11 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
     // member variable
     Flip_offset_data = type_engine_import_mvar( env, "int", "@Flip_data", FALSE );
     if( Flip_offset_data == CK_INVALID_OFFSET ) goto error;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "analysis/flip.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "analysis/autocorr.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "ai/features/zerox.ck" ) ) goto error;
 
     // transform
     func = make_new_mfun( "void", "transform", Flip_take );
@@ -363,6 +390,8 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
     // end the class import
     type_engine_import_class_end( env );
 
+    // deprecate
+    type_engine_register_deprecate( env, "pilF", "UnFlip" );
 
     //---------------------------------------------------------------------
     // init as base class: pilF
@@ -370,7 +399,7 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
 
     doc = "turns UAna frames into audio samples, via overlap add.";
 
-    if( !type_engine_import_uana_begin( env, "pilF", "UAna", env->global(),
+    if( !type_engine_import_uana_begin( env, "UnFlip", "UAna", env->global(),
                                         UnFlip_ctor, UnFlip_dtor,
                                         UnFlip_tick, UnFlip_tock, UnFlip_pmsg,
                                         CK_NO_VALUE, CK_NO_VALUE, CK_NO_VALUE, CK_NO_VALUE,
@@ -412,6 +441,9 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
     func->doc = "Manually take pilF (as opposed to using .upchuck() / upchuck operator)";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
+    // add example
+    if( !type_engine_import_add_ex( env, "analysis/flip.ck" ) ) goto error;
+
     // end the class import
     type_engine_import_class_end( env );
 
@@ -428,6 +460,9 @@ DLL_QUERY xform_query( Chuck_DL_Query * QUERY )
                                         CK_NO_VALUE, CK_NO_VALUE, CK_NO_VALUE, CK_NO_VALUE,
                                         doc.c_str()) )
         return FALSE;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "analysis/dct.ck" ) ) goto error;
 
     // member variable
     DCT_offset_data = type_engine_import_mvar( env, "int", "@DCT_data", FALSE );

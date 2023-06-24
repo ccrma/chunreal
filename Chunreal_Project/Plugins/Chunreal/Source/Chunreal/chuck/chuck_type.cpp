@@ -51,57 +51,6 @@ using namespace std;
 
 
 //-----------------------------------------------------------------------------
-// default types
-//-----------------------------------------------------------------------------
-// REFACTOR-2017: exile again!
-//Chuck_Type t_void( te_void, "void", NULL, 0 );
-//Chuck_Type t_int( te_int, "int", NULL, sizeof(t_CKINT) );
-//Chuck_Type t_float( te_float, "float", NULL, sizeof(t_CKFLOAT) );
-//Chuck_Type t_time( te_time, "time", NULL, sizeof(t_CKTIME) );
-//Chuck_Type t_dur( te_dur, "dur", NULL, sizeof(t_CKTIME) );
-//Chuck_Type t_complex( te_complex, "complex", NULL, sizeof(t_CKCOMPLEX) );
-//Chuck_Type t_polar( te_polar, "polar", NULL, sizeof(t_CKPOLAR) );
-//Chuck_Type t_vec3( te_vec3, "vec3", NULL, sizeof(t_CKVEC3) ); // 1.3.5.3
-//Chuck_Type t_vec4( te_vec4, "vec4", NULL, sizeof(t_CKVEC4) ); // 1.3.5.3
-//Chuck_Type t_null( te_null, "@null", NULL, sizeof(void *) );
-//Chuck_Type t_function( te_function, "@function", &t_object, sizeof(void *) );
-//Chuck_Type t_object( te_object, "Object", NULL, sizeof(void *) );
-//Chuck_Type t_array( te_array, "@array", &t_object, sizeof(void *) );
-//Chuck_Type t_string( te_string, "string", &t_object, sizeof(void *) );
-//Chuck_Type t_event( te_event, "Event", &t_object, sizeof(void *) );
-//Chuck_Type t_ugen( te_ugen, "UGen", &t_object, sizeof(void *) );
-//Chuck_Type t_uana( te_uana, "UAna", &t_ugen, sizeof(void *) );
-//Chuck_Type t_uanablob( te_uanablob, "UAnaBlob", &t_object, sizeof(void *) );
-//Chuck_Type t_shred( te_shred, "Shred", &t_object, sizeof(void *) );
-//Chuck_Type t_io( te_io, "IO", &t_event, sizeof(void *) );
-//Chuck_Type t_fileio( te_fileio, "FileIO", &t_io, sizeof(void *) );
-//Chuck_Type t_chout( te_chout, "StdOut", &t_io, sizeof(void *) );
-//Chuck_Type t_cherr( te_cherr, "StdErr", &t_io, sizeof(void *) );
-//Chuck_Type t_thread( te_thread, "Thread", &t_object, sizeof(void *) );
-//Chuck_Type t_class( te_class, "Class", &t_object, sizeof(void *) );
-
-// exile
-//struct Chuck_Type t_adc = { te_adc, "adc", &t_ugen, t_ugen.size };
-//struct Chuck_Type t_dac = { te_dac, "dac", &t_ugen, t_ugen.size };
-//struct Chuck_Type t_bunghole = { te_bunghole, "bunghole", &t_ugen, t_ugen.size };
-//struct Chuck_Type t_midiout = { te_midiout, "midiout", &t_object, sizeof(void *) };
-//struct Chuck_Type t_midiin = { te_midiin, "midiin", &t_object, sizeof(void *) };
-//struct Chuck_Type t_stdout = { te_stdout, "@stdout", &t_object, sizeof(void *) };
-//struct Chuck_Type t_stderr ={ te_stdout, "@stderr", &t_object, sizeof(void *) };
-//
-//struct Chuck_Type t_uint = { te_uint, "uint", NULL, sizeof(t_CKUINT) };
-//struct Chuck_Type t_single = { te_single, "single", NULL, sizeof(float) };
-//struct Chuck_Type t_double = { te_double, "double", NULL, sizeof(double) };
-//struct Chuck_Type t_code = { te_code, "code", NULL, sizeof(void *) };
-//struct Chuck_Type t_tuple = { te_tuple, "tuple", NULL, sizeof(void *) };
-//struct Chuck_Type t_pattern = { te_pattern, "pattern", &t_object, sizeof(void *) };
-//struct Chuck_Type t_transport = { te_transport, "transport", &t_object, sizeof(void *) };
-//struct Chuck_Type t_host = { te_host, "host", &t_object, sizeof(void *) };
-
-
-
-
-//-----------------------------------------------------------------------------
 // function prototypes
 //-----------------------------------------------------------------------------
 t_CKBOOL type_engine_check_stmt_list( Chuck_Env * env, a_Stmt_List list );
@@ -167,7 +116,12 @@ Chuck_Env::Chuck_Env( )
     global_nspc = global_context.nspc; SAFE_ADD_REF(global_nspc);
     // deprecated stuff
     deprecated.clear(); deprecate_level = 1;
+    // zero out
     user_nspc = NULL;
+    class_def = NULL;
+    func = NULL;
+    curr = NULL;
+
     // clear
     this->reset();
 
@@ -212,38 +166,11 @@ Chuck_Env::Chuck_Env( )
 //-----------------------------------------------------------------------------
 Chuck_Env::~Chuck_Env()
 {
-    // set static flag to unlock all types
-    t_object->unlock_all();
+    // lock from being deleted
+    global_context.unlock();
 
-    // unlock each internal object type | 1.5.0.0 (ge) added
-    SAFE_UNLOCK_DELETE(t_void);
-    SAFE_UNLOCK_DELETE(t_int);
-    SAFE_UNLOCK_DELETE(t_float);
-    SAFE_UNLOCK_DELETE(t_time);
-    SAFE_UNLOCK_DELETE(t_dur);
-    SAFE_UNLOCK_DELETE(t_complex);
-    SAFE_UNLOCK_DELETE(t_polar);
-    SAFE_UNLOCK_DELETE(t_object);
-    SAFE_UNLOCK_DELETE(t_function);
-    SAFE_UNLOCK_DELETE(t_array);
-    SAFE_UNLOCK_DELETE(t_string);
-    SAFE_UNLOCK_DELETE(t_ugen);
-    SAFE_UNLOCK_DELETE(t_uanablob);
-    SAFE_UNLOCK_DELETE(t_uana);
-    SAFE_UNLOCK_DELETE(t_shred);
-    SAFE_UNLOCK_DELETE(t_event);
-    SAFE_UNLOCK_DELETE(t_io);
-    SAFE_UNLOCK_DELETE(t_fileio);
-    SAFE_UNLOCK_DELETE(t_chout);
-    SAFE_UNLOCK_DELETE(t_cherr);
-    SAFE_UNLOCK_DELETE(t_vec3);
-    SAFE_UNLOCK_DELETE(t_vec4);
-    SAFE_UNLOCK_DELETE(t_dac);
-    SAFE_UNLOCK_DELETE(t_adc);
-    // SAFE_UNLOCK_DELETE(t_thread);
-
-    // this should go last, as all the t_* types are of type t_class
-    SAFE_UNLOCK_DELETE(t_class);
+    // cleanup
+    this->cleanup();
 }
 
 
@@ -285,6 +212,185 @@ t_CKBOOL Chuck_Env::init()
     t_class = new Chuck_Type( this, te_class, "Type", t_object, sizeof(void *) );
 
     return true;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: cleanup()
+// desc: clean up the Env; the opposite of init() | 1.5.0.1 (ge) added
+//-----------------------------------------------------------------------------
+void Chuck_Env::cleanup()
+{
+    // set static flag to unlock all types
+    t_object->unlock_all();
+
+    // TODO: free all types in the Env; taking into account inheritance
+    // dependencies; i.e., parent types should be freed after inherited
+    // types, as the latter has reference to the former
+
+    // unlock each internal object type | 1.5.0.0 (ge) added
+    // 1.5.0.1 (ge) re-ordered: parent dependencies are cleaned up later
+    SAFE_UNLOCK_DELETE(t_void);
+    SAFE_UNLOCK_DELETE(t_int);
+    SAFE_UNLOCK_DELETE(t_float);
+    SAFE_UNLOCK_DELETE(t_time);
+    SAFE_UNLOCK_DELETE(t_dur);
+    SAFE_UNLOCK_DELETE(t_complex);
+    SAFE_UNLOCK_DELETE(t_polar);
+    SAFE_UNLOCK_DELETE(t_vec3);
+    SAFE_UNLOCK_DELETE(t_vec4);
+    SAFE_UNLOCK_DELETE(t_fileio);
+    SAFE_UNLOCK_DELETE(t_chout);
+    SAFE_UNLOCK_DELETE(t_cherr);
+    SAFE_UNLOCK_DELETE(t_io);
+    SAFE_UNLOCK_DELETE(t_dac);
+    SAFE_UNLOCK_DELETE(t_adc);
+    SAFE_UNLOCK_DELETE(t_ugen);
+    SAFE_UNLOCK_DELETE(t_uanablob);
+    SAFE_UNLOCK_DELETE(t_uana);
+    SAFE_UNLOCK_DELETE(t_function);
+    SAFE_UNLOCK_DELETE(t_string);
+    SAFE_UNLOCK_DELETE(t_shred);
+    SAFE_UNLOCK_DELETE(t_event);
+    SAFE_UNLOCK_DELETE(t_array);
+
+    // Type and Object types go last, as every other ChucK_Type are also these
+    // t_class and t_object have mutual dependencies, e.g.,
+    // t_class->parent is t_object, while t_object->type_ref is t_class
+
+    // break the dependency manually | 1.5.0.1 (ge) added
+    // part 1: save the parent reference
+    Chuck_Type * skip = t_object->type_ref != NULL ? t_object->type_ref->parent : NULL;
+    // free the Type type
+    SAFE_UNLOCK_DELETE(t_class);
+    // part 2: break the dependency manually | 1.5.0.1 (ge) added
+    t_object->type_ref = skip;
+    // finally, free the Object type
+    SAFE_UNLOCK_DELETE(t_object);
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: reset()
+// desc: reset the type environment
+//-----------------------------------------------------------------------------
+void Chuck_Env::reset()
+{
+    // TODO: release stack items?
+    nspc_stack.clear();
+    // push global namespace
+    nspc_stack.push_back( this->global() );
+    // push user namespace
+    if( user_nspc != NULL ) nspc_stack.push_back( this->user_nspc );
+    // TODO: release stack items?
+    class_stack.clear(); class_stack.push_back( NULL );
+    // should be at top level
+    assert( context == &global_context );
+
+    // release curr? class_def? func?
+    // 1.5.0.1 (ge) don't think these need ref counts; they are used as temporary variables
+
+    // assign
+    curr = (user_nspc != NULL) ? this->user() : this->global();
+    // clear
+    class_def = NULL; func = NULL;
+
+    // make sure this is 0
+    class_scope = 0;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: load_user_namespace()
+// desc: load the user namespace
+//-----------------------------------------------------------------------------
+void Chuck_Env::load_user_namespace()
+{
+    // user namespace
+    user_nspc = new Chuck_Namespace;
+    user_nspc->name = "[user]";
+    user_nspc->parent = global_nspc;
+    SAFE_ADD_REF(global_nspc);
+    SAFE_ADD_REF(user_nspc);
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: clear_user_namespace()
+// desc: clear the contents of the user namespace
+//-----------------------------------------------------------------------------
+void Chuck_Env::clear_user_namespace()
+{
+    if (user_nspc) SAFE_RELEASE(user_nspc->parent);
+    SAFE_RELEASE(user_nspc);
+    load_user_namespace();
+    this->reset();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: nspc_top()
+// desc: get the namespace at the top of the stack
+//-----------------------------------------------------------------------------
+Chuck_Namespace * Chuck_Env::nspc_top()
+{
+    assert(nspc_stack.size() > 0); return nspc_stack.back();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: nspc_top()
+// desc: get the class at the top of the stack
+//-----------------------------------------------------------------------------
+Chuck_Type * Chuck_Env::class_top()
+{
+    assert( class_stack.size() > 0 ); return class_stack.back();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: global()
+// desc: get global namespace
+//-----------------------------------------------------------------------------
+Chuck_Namespace * Chuck_Env::global() { return global_nspc; }
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: user()
+// desc: get user namespace, if there is one (if not, return global)
+//-----------------------------------------------------------------------------
+Chuck_Namespace * Chuck_Env::user()
+{
+    // check if we have a user namespace here
+    return user_nspc != NULL ? user_nspc : global();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: is_global()
+// desc: check whether the context is the global context
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_Env::is_global()
+{
+    return class_def == NULL && func == NULL && class_scope == 0;
 }
 
 
@@ -414,7 +520,6 @@ Chuck_Env * type_engine_init( Chuck_Carrier * carrier )
     type_engine_init_special( env, env->t_array );
 
     // initialize the remaining internal classes
-    init_class_type(env, env->t_function );
     init_class_string( env, env->t_string );
     init_class_ugen( env, env->t_ugen );
     init_class_blob( env, env->t_uanablob );
@@ -427,6 +532,7 @@ Chuck_Env * type_engine_init( Chuck_Carrier * carrier )
     init_class_cherr( env, env->t_cherr ); // 1.3.0.0
     init_class_vec3( env, env->t_vec3 ); // 1.3.5.3
     init_class_vec4( env, env->t_vec4 ); // 1.3.5.3
+    init_class_function(env, env->t_function ); // 1.5.0.0
 
     // initialize primitive types
     init_primitive_types( env );
@@ -1491,7 +1597,7 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
                                a_Exp_Binary binary )
 {
      t_CKTYPE left = lhs->type, right = rhs->type;
-    assert( left && right );
+     assert( left && right );
 
     // make sure not involve multiple declarations (for now)
     if( !type_engine_ensure_no_multi_decl( lhs, op2str(op) ) ||
@@ -2101,7 +2207,23 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
             // assigment?
             if( rhs->s_meta == ae_meta_var )
             {
-                // TODO: check if rhs is const
+                // check if rhs is const
+                if( rhs->s_type == ae_exp_primary )
+                {
+                    // get the associate value
+                    Chuck_Value * v = rhs->primary.value;
+                    // check if const | 1.5.0.0 (ge) added
+                    if( v && v->is_const )
+                    {
+                        // error
+                        EM_error2( rhs->linepos,
+                            "cannot chuck/assign => to '%s'...",
+                            v->name.c_str() );
+                        EM_error2( lhs->linepos,
+                            " |- reason: '%s' is a constant (and is not assignable)", v->name.c_str() );
+                        return NULL;
+                    }
+                }
 
                 // emit ref - remember for emitter
                 rhs->emit_var = TRUE;
@@ -4780,6 +4902,8 @@ t_CKBOOL isfunc( Chuck_Env * env, Chuck_Type * type )
 {   return isa( type, env->t_function ); }
 t_CKBOOL iskindofint( Chuck_Env * env, Chuck_Type * type ) // added 1.3.1.0
 {   return isa( type, env->t_int ) || isobj( env, type ); }
+t_CKBOOL isvoid( Chuck_Env * env, Chuck_Type * type ) // added 1.5.0.0
+{   return isa( type, env->t_void ); }
 t_CKUINT getkindof( Chuck_Env * env, Chuck_Type * type ) // added 1.3.1.0
 {
     // the kind (1.3.1.0)
@@ -5006,6 +5130,29 @@ Chuck_Type * type_engine_find_type( Chuck_Env * env, a_Id_List thePath )
     }
 
     return type;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: type_engine_names2types()
+// desc: convert a vector of type names to a vector of Types
+//-----------------------------------------------------------------------------
+void type_engine_names2types( Chuck_Env * env,
+                              const std::vector<std::string> & typeNames,
+                              std::vector<Chuck_Type *> & types )
+{
+    // clear result vector
+    types.clear();
+    // resize
+    types.resize( typeNames.size() );
+    // iterate
+    for( t_CKINT i = 0; i < typeNames.size(); i++ )
+    {
+        // lookup
+        types[i] = type_engine_find_type( env, typeNames[i] );
+    }
 }
 
 
@@ -6518,6 +6665,23 @@ t_CKBOOL type_engine_add_dll2( Chuck_Env * env, Chuck_DLL * dll,
 t_CKBOOL type_engine_add_class_from_dl( Chuck_Env * env, Chuck_DL_Class * c )
 {
     Chuck_DL_Func * ctor = NULL, * dtor = c->dtor;
+
+    // check for duplicates | 1.5.0.0 (ge) added
+    if( type_engine_find_type( env, c->name ) )
+    {
+        EM_log( CK_LOG_SYSTEM,
+                "** error importing class '%s'...",
+                c->name.c_str() );
+        EM_pushlog();
+        EM_log( CK_LOG_SYSTEM,
+                "type with the same name already exists" );
+        EM_poplog();
+
+        // before ugen begin, can just return
+        return FALSE;
+    }
+
+    // check constructor(s)
     if(c->ctors.size() > 0)
         ctor = c->ctors[0]; // TODO: uh, is more than one possible?
 
@@ -6823,6 +6987,7 @@ t_CKBOOL same_arg_lists( a_Arg_List lhs, a_Arg_List rhs )
 
 
 
+
 //-----------------------------------------------------------------------------
 // name: arglist2string()
 // desc: generate a string from an argument list (types only)
@@ -7104,20 +7269,6 @@ static bool comp_value( Chuck_Value * a, Chuck_Value * b )
     if( lowerA != lowerB ) return lowerA < lowerB;
     // if same, favor lower-case
     else return a->name > b->name;
-}
-
-//-----------------------------------------------------------------------------
-// capitalize first character
-//-----------------------------------------------------------------------------
-static string capitalize( const string & s )
-{
-    // copy
-    string retval = s;
-    // if not empty and first character is a lower-case letter
-    if( retval.length() > 0 && retval[0] >= 'a' && retval[0] <= 'z' )
-        retval[0] -= 32;
-    // done
-    return retval;
 }
 
 
@@ -7526,4 +7677,56 @@ void Chuck_Type::dump( Chuck_Object * obj )
 //-----------------------------------------------------------------------------
 void Chuck_Type::dump( Chuck_Object * obj, std::string & output )
 {
+    // TODO
 }
+
+
+
+
+//-----------------------------------------------------------------------------
+// default types
+//-----------------------------------------------------------------------------
+// REFACTOR-2017: exile again!
+//Chuck_Type t_void( te_void, "void", NULL, 0 );
+//Chuck_Type t_int( te_int, "int", NULL, sizeof(t_CKINT) );
+//Chuck_Type t_float( te_float, "float", NULL, sizeof(t_CKFLOAT) );
+//Chuck_Type t_time( te_time, "time", NULL, sizeof(t_CKTIME) );
+//Chuck_Type t_dur( te_dur, "dur", NULL, sizeof(t_CKTIME) );
+//Chuck_Type t_complex( te_complex, "complex", NULL, sizeof(t_CKCOMPLEX) );
+//Chuck_Type t_polar( te_polar, "polar", NULL, sizeof(t_CKPOLAR) );
+//Chuck_Type t_vec3( te_vec3, "vec3", NULL, sizeof(t_CKVEC3) ); // 1.3.5.3
+//Chuck_Type t_vec4( te_vec4, "vec4", NULL, sizeof(t_CKVEC4) ); // 1.3.5.3
+//Chuck_Type t_null( te_null, "@null", NULL, sizeof(void *) );
+//Chuck_Type t_function( te_function, "@function", &t_object, sizeof(void *) );
+//Chuck_Type t_object( te_object, "Object", NULL, sizeof(void *) );
+//Chuck_Type t_array( te_array, "@array", &t_object, sizeof(void *) );
+//Chuck_Type t_string( te_string, "string", &t_object, sizeof(void *) );
+//Chuck_Type t_event( te_event, "Event", &t_object, sizeof(void *) );
+//Chuck_Type t_ugen( te_ugen, "UGen", &t_object, sizeof(void *) );
+//Chuck_Type t_uana( te_uana, "UAna", &t_ugen, sizeof(void *) );
+//Chuck_Type t_uanablob( te_uanablob, "UAnaBlob", &t_object, sizeof(void *) );
+//Chuck_Type t_shred( te_shred, "Shred", &t_object, sizeof(void *) );
+//Chuck_Type t_io( te_io, "IO", &t_event, sizeof(void *) );
+//Chuck_Type t_fileio( te_fileio, "FileIO", &t_io, sizeof(void *) );
+//Chuck_Type t_chout( te_chout, "StdOut", &t_io, sizeof(void *) );
+//Chuck_Type t_cherr( te_cherr, "StdErr", &t_io, sizeof(void *) );
+//Chuck_Type t_thread( te_thread, "Thread", &t_object, sizeof(void *) );
+//Chuck_Type t_class( te_class, "Class", &t_object, sizeof(void *) );
+
+// exile
+//struct Chuck_Type t_adc = { te_adc, "adc", &t_ugen, t_ugen.size };
+//struct Chuck_Type t_dac = { te_dac, "dac", &t_ugen, t_ugen.size };
+//struct Chuck_Type t_bunghole = { te_bunghole, "bunghole", &t_ugen, t_ugen.size };
+//struct Chuck_Type t_midiout = { te_midiout, "midiout", &t_object, sizeof(void *) };
+//struct Chuck_Type t_midiin = { te_midiin, "midiin", &t_object, sizeof(void *) };
+//struct Chuck_Type t_stdout = { te_stdout, "@stdout", &t_object, sizeof(void *) };
+//struct Chuck_Type t_stderr ={ te_stdout, "@stderr", &t_object, sizeof(void *) };
+//
+//struct Chuck_Type t_uint = { te_uint, "uint", NULL, sizeof(t_CKUINT) };
+//struct Chuck_Type t_single = { te_single, "single", NULL, sizeof(float) };
+//struct Chuck_Type t_double = { te_double, "double", NULL, sizeof(double) };
+//struct Chuck_Type t_code = { te_code, "code", NULL, sizeof(void *) };
+//struct Chuck_Type t_tuple = { te_tuple, "tuple", NULL, sizeof(void *) };
+//struct Chuck_Type t_pattern = { te_pattern, "pattern", &t_object, sizeof(void *) };
+//struct Chuck_Type t_transport = { te_transport, "transport", &t_object, sizeof(void *) };
+//struct Chuck_Type t_host = { te_host, "host", &t_object, sizeof(void *) };

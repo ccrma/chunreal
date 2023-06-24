@@ -154,8 +154,9 @@ public:
   typedef unsigned long STK_FORMAT;
   static const STK_FORMAT STK_SINT8;  /*!< -128 to +127 */
   static const STK_FORMAT STK_SINT16; /*!< -32768 to +32767 */
-  // static const STK_FORMAT STK_SINT24; /*!< -8388608 to +8388607  MAYBE?? | added 1.4.1.0 */
+  static const STK_FORMAT STK_SINT24; /*!< -8388608 to +8388607 | added 1.5.0.1 */
   static const STK_FORMAT STK_SINT32; /*!< -2147483648 to +2147483647. */
+  static const STK_FORMAT STK_SINT64; /*!< -9,223,372,036,854,775,808 to +9,223,372,036,854,775,807. */
   static const STK_FORMAT MY_FLOAT32; /*!< Normalized between plus/minus 1.0. */
   static const STK_FORMAT MY_FLOAT64; /*!< Normalized between plus/minus 1.0. */
 
@@ -208,9 +209,65 @@ public: // SWAP formerly protected
 
 };
 
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct SINT24 | 1.5.0.1 (ge) added
+// desc: custom 24-bit integer type; based on RtAudio's S24 by Gary Scavone
+//-----------------------------------------------------------------------------
+#pragma pack(push, 1)
+struct SINT24
+{
+protected:
+    // the data in three unsigned bytes
+    unsigned char c3[3];
+
+public:
+    // default constructor
+    SINT24() { }
+
+    // copy from int
+    SINT24 & operator =( const int & i )
+    {
+        c3[0] = (unsigned char)(i & 0x000000ff);
+        c3[1] = (unsigned char)((i & 0x0000ff00) >> 8);
+        c3[2] = (unsigned char)((i & 0x00ff0000) >> 16);
+        return *this;
+    }
+
+    // constructors
+    SINT24( const double & d ) { *this = (int)d; }
+    SINT24( const float & f ) { *this = (int)f; }
+    SINT24( const signed short & s ) { *this = (int)s; }
+    SINT24( const char & c ) { *this = (int)c; }
+
+    // byte swap
+    void byteswap()
+    {
+        // swap the outer bytes
+        unsigned char temp = c3[0];
+        c3[0] = c3[2];
+        c3[2] = temp;
+    }
+
+    // reconstruct as a signed int
+    int asInt()
+    {
+        int i = c3[0] | (c3[1] << 8) | (c3[2] << 16);
+        if (i & 0x800000) i |= ~0xffffff;
+        return i;
+    }
+};
+#pragma pack(pop)
+
+
+
+
 // Here are a few other useful typedefs.
 typedef signed short SINT16;
 typedef signed int SINT32;
+// SINT24 -- see above
 typedef float FLOAT32;
 typedef double FLOAT64;
 
@@ -1130,7 +1187,7 @@ public:
     An StkError will be thrown if the file is not found, its format is
     unknown, or a read error occurs.
   */
-  WvIn( const char *fileName, bool raw = FALSE, bool doNormalize = TRUE, bool generate=true );
+  WvIn( const char *fileName, bool raw = FALSE, bool doNormalize = TRUE, bool generate = TRUE );
 
   //! Class destructor.
   virtual ~WvIn();
@@ -1140,7 +1197,7 @@ public:
     An StkError will be thrown if the file is not found, its format is
     unknown, or a read error occurs.
   */
-  virtual void openFile( const char *fileName, bool raw = FALSE, bool doNormalize = TRUE, bool generate = true );
+  virtual void openFile( const char *fileName, bool raw = FALSE, bool doNormalize = TRUE, bool generate = TRUE );
 
   //! If a file is open, close it.
   void closeFile(void);
@@ -1256,7 +1313,10 @@ public: // SWAP formerly protected
 
   char msg[STK_MSG_BUF_LENGTH];
   // char m_filename[STK_MSG_BUF_LENGTH]; // chuck data
-  Chuck_String str_filename; // chuck data
+  // Chuck_String str_filename; // chuck data
+  // NOTE: all Chuck_Objects needs heap allocation using 'new'
+  // since reference counting automatically calls 'delete'
+  std::string str_filename;
   FILE *fd;
   MY_FLOAT *data;
   MY_FLOAT *lastOutput;
@@ -1274,6 +1334,7 @@ public: // SWAP formerly protected
   MY_FLOAT gain;
   MY_FLOAT time;
   MY_FLOAT rate;
+  MY_FLOAT scaleToOne;
 public:
   bool m_loaded;
 };
@@ -5724,10 +5785,14 @@ class WvOut : public Stk
   unsigned long counter;
   unsigned long totalCount;
   // char m_filename[1024];
-  Chuck_String str_filename;
-  t_CKUINT start;
+  // Chuck_String str_filename;
+  // NOTE: all Chuck_Objects needs heap allocation using 'new'
+  // since reference counting automatically calls 'delete'
+  std::string str_filename;
   // char autoPrefix[1024];
-  Chuck_String autoPrefix;
+  // Chuck_String autoPrefix;
+  std::string autoPrefix;
+  t_CKUINT start;
   t_CKUINT flush;
   t_CKFLOAT fileGain;
 
@@ -5976,7 +6041,10 @@ public: // SWAP formerly protected
   FormSwep  *filters[4];
   OnePole  *onepole;
   OneZero  *onezero;
-  Chuck_String str_phoneme; // chuck data
+  // Chuck_String str_phoneme; // chuck data
+  // NOTE: all Chuck_Objects needs heap allocation using 'new'
+  // since reference counting automatically calls 'delete'
+  std::string str_phoneme;
 };
 
 #endif

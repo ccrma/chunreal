@@ -158,6 +158,7 @@ Chuck_VM::Chuck_VM()
     m_event_buffer = NULL;
     m_shred_id = 0;
     m_halt = TRUE;
+    m_is_running = FALSE;
 
     m_dac = NULL;
     m_adc = NULL;
@@ -277,11 +278,6 @@ t_CKBOOL Chuck_VM::initialize_synthesis( )
     }
 
     // log
-    EM_log( CK_LOG_SYSTEM, "initializing synthesis engine..." );
-    // push indent
-    EM_pushlog();
-
-    // log
     EM_log( CK_LOG_SEVERE, "initializing 'dac'..." );
     // allocate dac and adc (REFACTOR-2017: g_t_dac changed to env()->t_dac)
     env()->t_dac->ugen_info->num_outs =
@@ -322,9 +318,6 @@ t_CKBOOL Chuck_VM::initialize_synthesis( )
     m_shreduler->m_bunghole = m_bunghole;
     m_shreduler->m_num_dac_channels = m_num_dac_channels;
     m_shreduler->m_num_adc_channels = m_num_adc_channels;
-
-    // pop indent
-    EM_poplog();
 
     return TRUE;
 }
@@ -434,7 +427,7 @@ t_CKBOOL Chuck_VM::shutdown()
 t_CKBOOL Chuck_VM::start()
 {
     // already running?
-    if( m_is_running) return FALSE;
+    if( m_is_running ) return FALSE;
     // set state
     m_is_running = TRUE;
     // done
@@ -1412,9 +1405,20 @@ Chuck_VM_Shred::Chuck_VM_Shred()
     vm_ref = NULL;
     event = NULL;
     xid = 0;
-    #ifndef __DISABLE_SERIAL__
+
+    // initialize
+    is_abort = FALSE;
+    is_done = FALSE;
+    is_dumped = FALSE;
+    is_running = FALSE;
+    pc = next_pc = 0;
+    now = 0;
+    start = 0;
+    wake_time = 0;
+
+#ifndef __DISABLE_SERIAL__
     m_serials = NULL;
-    #endif
+#endif
 
     // set
     CK_TRACK( stat = NULL );
