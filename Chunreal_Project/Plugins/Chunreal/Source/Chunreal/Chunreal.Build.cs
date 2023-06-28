@@ -4,6 +4,9 @@ public class Chunreal : ModuleRules
 {
     public Chunreal(ReadOnlyTargetRules Target) : base(Target)
     {
+        //Allow C++ try catch
+        bEnableExceptions = true;
+
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
         PublicDefinitions.Add("__WINDOWS_MODERN__");

@@ -23,8 +23,8 @@
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
-// name: util_math.c
-// desc: ...
+// name: util_math.cpp
+// desc: a mini-compatibility library for math functions
 //
 // author: Ge Wang (gewang@cs.princeton.edu)
 //         Perry R. Cook (prc@cs.princeton.edu)
@@ -33,51 +33,72 @@
 //-----------------------------------------------------------------------------
 #include "util_math.h"
 #include <math.h>
+#include <random>
+
+
+
+
+//-----------------------------------------------------------------------------
+#ifndef __OLDSCHOOL_RANDOM__ // not using old school, pre-c++11 compatibility
+//-----------------------------------------------------------------------------
+// name: ck_random() and ck_srandom()
+// desc: chuck wrappers for random number generators
+// 1.5.0.1 (ge) using mt19937 (requires c++11)
+//-----------------------------------------------------------------------------
+// mersenne twister RNG, based on the Mersenne prime (2^19937-1)
+static std::mt19937 g_ck_global_rng;
+// ck_random() returns a signed int no greater than CK_RANDOM_MAX
+// to maintain parity between 64-bit and 32-bit systems, CK_RANDOM_MAX is set
+// to 0x7fffffff (or 2,147,483,647--the largest 32-bit signed number) rather
+// than mt19937's actual max of 0xffffffff (or 4,294,967,295, 2^32-1); this
+// is ensured using modulo; the slight skewing of the resulting RNG distribution
+// is considered acceptable
+t_CKINT ck_random() { return g_ck_global_rng() % CK_RANDOM_MAX; }
+// seed the random number generator
+void ck_srandom( unsigned s ) { g_ck_global_rng.seed(s); }
+//-----------------------------------------------------------------------------
+#else // using old school random (pre-c++11)
+//-----------------------------------------------------------------------------
+// name: ck_random() and ck_srandom()
+// desc: chuck wrappers for random number generators | 1.4.2.0 (ge)
+//-----------------------------------------------------------------------------
+#ifndef __PLATFORM_WIN32__
+  t_CKINT ck_random() { return random(); }
+  void ck_srandom( unsigned s ) { srandom( s ); }
+#else // __WINDOWS_DS__
+  t_CKINT ck_random() { return rand(); }
+  void ck_srandom( unsigned s ) { srand( s ); }
+#endif
+//-----------------------------------------------------------------------------
+#endif // __OLDSCHOOL_RANDOM__
+
+
 
 
 // windows / visual c++
 #ifdef __PLATFORM_WIN32__
-
-
-
 #ifdef __CK_MATH_DEFINE_ROUND_TRUNC__
 //-----------------------------------------------------------------------------
 // name: round()
 // desc: ...
 //-----------------------------------------------------------------------------
-double round( double a )
-{
-    if( a >= 0 ) return (double)(t_CKINT)( a + .5 );
-    else return (double)(t_CKINT)( a - .5 );
-}
+  double round(double a)
+  {
+      if (a >= 0) return (double)(t_CKINT)(a + .5);
+      else return (double)(t_CKINT)(a - .5);
+  }
 
 
-//-----------------------------------------------------------------------------
-// name: trunc()
-// desc: ...
-//-----------------------------------------------------------------------------
-double trunc( double a )
-{
-    return (double)(long)a;
-}
-#endif // #ifdef __CK_MATH_DEFINE_ROUND_TRUNC
-
-
-
-#endif
-
-
-//-----------------------------------------------------------------------------
-// name: ck_random() and ck_srandom()
-// desc: chuck wrappers for random number generators | 1.4.2.0 (ge)
-//-----------------------------------------------------------------------------
-#ifndef __WINDOWS_DS__
-long ck_random() { return random(); }
-void ck_srandom( unsigned s ) { srandom( s ); }
-#else // __WINDOWS_DS__
-long ck_random() { return rand(); }
-void ck_srandom( unsigned s ) { srand( s ); }
-#endif
+  //-----------------------------------------------------------------------------
+  // name: trunc()
+  // desc: ...
+  //-----------------------------------------------------------------------------
+  double trunc(double a)
+  {
+      return (double)(long)a;
+  }
+#endif // __CK_MATH_DEFINE_ROUND_TRUNC
+#endif // __PLATFORM_WIN32__
 
 
 
@@ -98,12 +119,14 @@ double ck_remainder( double a, double b )
 
 
 
-// the following 6 functions are
-// lifted from  PD source
+
+// the following 6 functions are lifted from PD source
 // specifically x_acoustics.c
 // http://puredata.info/downloads
 #define LOGTWO 0.69314718055994528623
 #define LOGTEN 2.302585092994
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -120,6 +143,8 @@ double mtof( double f )
 }
 
 
+
+
 //-----------------------------------------------------------------------------
 // name: ftom()
 // desc: freq to midi
@@ -130,6 +155,8 @@ double ftom( double f )
     // TODO: optimize
     return (f > 0 ? (log(f/440.0) / LOGTWO) * 12.0 + 69 : -1500);
 }
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -147,6 +174,8 @@ double powtodb( double f )
 }
 
 
+
+
 //-----------------------------------------------------------------------------
 // name: rmstodb()
 // desc: ...
@@ -160,6 +189,8 @@ double rmstodb( double f )
         return (val < 0 ? 0 : val);
     }
 }
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -176,6 +207,8 @@ double dbtopow( double f )
         return (exp((LOGTEN * 0.1) * (f-100.)));
     }
 }
+
+
 
 
 //-----------------------------------------------------------------------------

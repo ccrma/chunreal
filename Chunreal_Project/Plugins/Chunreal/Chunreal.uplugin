@@ -3,22 +3,26 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "Chunreal",
-	"Description": "Chunreal",
+	"Description": "ChucK in Unreal Engine",
 	"Category": "Audio",
-	"CreatedBy": "EM",
+	"CreatedBy": "Eito Murakami & Ge Wang (Stanford Univeristy | CCRMA)",
 	"CreatedByURL": "",
 	"DocsURL": "",
 	"MarketplaceURL": "",
 	"SupportURL": "",
+	"EnabledByDefault": true,
 	"CanContainContent": true,
-	"IsBetaVersion": true,
+	"IsBetaVersion": false,
 	"IsExperimentalVersion": false,
 	"Installed": false,
 	"Modules": [
 		{
 			"Name": "Chunreal",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "Default",
+			"PlatformAllowList": [
+				"Win64"
+			]
 		}
 	],
 	"Plugins": [
