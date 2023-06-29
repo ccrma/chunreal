@@ -47,9 +47,9 @@ namespace Metasound
 
         //Set log
         #if PRINT_CHUCK_LOG
-        //theChuck->setStdoutCallback(FChunrealModule::printThisFromChuck);
-        //theChuck->setStderrCallback(FChunrealModule::printThisFromChuck);
-        //theChuck->setLogLevel(CK_LOG_INFO);
+        theChuck->setStdoutCallback(FChunrealModule::printThisFromChuck);
+        theChuck->setStderrCallback(FChunrealModule::printThisFromChuck);
+        theChuck->setLogLevel(CK_LOG_INFO);
         #endif
 
         //Start Chuck

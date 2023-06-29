@@ -1,3 +1,13 @@
+//-----------------------------------------------------------------------------
+// file: ChunrealBlueprint.cpp
+// desc: Chunreal blueprint utility functions definition.
+//
+// Template plugin code provided by Epic Games.
+// 
+// authors: Eito Murakami (https://ccrma.stanford.edu/~eitom/) and Ge Wang (https://ccrma.stanford.edu/~ge/)
+// date: Spring 2023
+//-----------------------------------------------------------------------------
+
 #include "ChunrealBlueprint.h"
 
 //Read file

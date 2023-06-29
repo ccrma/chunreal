@@ -3,7 +3,7 @@
 	"Version": 1,
 	"VersionName": "1.0",
 	"FriendlyName": "Chunreal",
-	"Description": "ChucK in Unreal Engine",
+	"Description": "ChucK - Strongly-timed Music Programming Language - in Unreal Engine",
 	"Category": "Audio",
 	"CreatedBy": "Eito Murakami & Ge Wang (Stanford Univeristy | CCRMA)",
 	"CreatedByURL": "",
