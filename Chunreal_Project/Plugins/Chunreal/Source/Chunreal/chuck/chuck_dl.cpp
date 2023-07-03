@@ -48,11 +48,11 @@ using namespace std;
 
 
 #if defined(__MACOSX_CORE__)
-char g_default_chugin_path[] = "/usr/local/lib/chuck:/Library/Application Support/ChucK/ChuGins:~/Library/Application Support/ChucK/ChuGins";
+char g_default_chugin_path[] = "/usr/local/lib/chuck:/Library/Application Support/ChucK/chugins:~/Library/Application Support/ChucK/chugins:~/.chuck/lib";
 #elif defined(__PLATFORM_WIN32__)
-char g_default_chugin_path[] = "C:\\WINDOWS\\system32\\ChucK;C:\\Program Files\\ChucK\\chugins;C:\\Program Files (x86)\\ChucK\\chugins";
+char g_default_chugin_path[] = "C:\\Windows\\system32\\ChucK;C:\\Program Files\\ChucK\\chugins;C:\\Program Files (x86)\\ChucK\\chugins;C:\\Users\\%USERNAME%\\Documents\\ChucK\\chugins";
 #else // Linux/Cygwin
-char g_default_chugin_path[] = "/usr/local/lib/chuck";
+char g_default_chugin_path[] = "/usr/local/lib/chuck:~/.chuck/lib";
 #endif
 
 char g_chugin_path_envvar[] = "CHUCK_CHUGIN_PATH";
@@ -540,13 +540,17 @@ t_CKBOOL CK_DLL_CALL ck_end_class( Chuck_DL_Query * query )
     {
         if( !type_engine_add_class_from_dl( query->env(), query->curr_class ) )
         {
-            EM_log(CK_LOG_SEVERE, "error importing class '%s' into type engine",
-                   query->curr_class->name.c_str());
+            // should already be message
+            //EM_log(CK_LOG_SEVERE, "error importing class '%s' into type engine",
+            // query->curr_class->name.c_str());
 
             // pop
             assert( query->stack.size() );
             query->curr_class = query->stack.back();
             query->stack.pop_back();
+
+            // flag the query with error
+            query->errorEncountered = TRUE;
 
             return FALSE;
         }
@@ -719,7 +723,7 @@ t_CKBOOL Chuck_DLL::good() const
 // name: query()
 // desc: ...
 //-----------------------------------------------------------------------------
-const Chuck_DL_Query * Chuck_DLL::query( )
+const Chuck_DL_Query * Chuck_DLL::query()
 {
     if( !m_handle && !m_query_func )
     {
@@ -738,38 +742,31 @@ const Chuck_DL_Query * Chuck_DLL::query( )
         m_version_func = (f_ck_declversion)this->get_addr( (string("_")+CK_DECLVERSION_FUNC).c_str() );
     if( !m_version_func )
     {
-        m_last_error = string("no version function found in dll '")
-        + m_filename + string("'");
+        m_last_error = string("no version function found in dll '") + m_filename + string("'");
         return NULL;
     }
 
     // check version
     t_CKUINT dll_version = m_version_func();
+    // get major and minor version numbers
+    m_versionMajor = CK_DLL_VERSION_GETMAJOR(dll_version);
+    m_versionMinor = CK_DLL_VERSION_GETMINOR(dll_version);
+    // is version ok
     t_CKBOOL version_ok = FALSE;
-    // major version must be same
-    // minor version must less than or equal
-    if(CK_DLL_VERSION_GETMAJOR(dll_version) == CK_DLL_VERSION_MAJOR &&
-       CK_DLL_VERSION_GETMINOR(dll_version) <= CK_DLL_VERSION_MINOR)
+    // major version must be same; minor version must less than or equal
+    if( m_versionMajor == CK_DLL_VERSION_MAJOR && m_versionMinor <= CK_DLL_VERSION_MINOR)
         version_ok = TRUE;
 
-    if(!version_ok)
-        // SPENCERTODO: do they need to be equal, or can dll_version be < ?
+    // if version not okay
+    if( !version_ok )
     {
+        // construct error string
         ostringstream oss;
-        oss << "chugin version mismatch:" << endl
-        << "filename: "
-        << m_filename << "'" << endl
-        << "versions: chugin: "
-        << CK_DLL_VERSION_GETMAJOR(dll_version)
-        << "."
-        << CK_DLL_VERSION_GETMINOR(dll_version)
-        << " vs. chuck host: "
-        << CK_DLL_VERSION_MAJOR
-        << "."
-        << CK_DLL_VERSION_MINOR;
-
+        oss << "chugin version incompatible..." << endl
+            << "chugin path: '" << m_filename << "'" << endl
+            << "chugin version: " << m_versionMajor << "." << m_versionMinor
+            << " VS host version: " << CK_DLL_VERSION_MAJOR << "." << CK_DLL_VERSION_MINOR;
         m_last_error = oss.str();
-
         return NULL;
     }
 
@@ -780,8 +777,7 @@ const Chuck_DL_Query * Chuck_DLL::query( )
         m_query_func = (f_ck_query)this->get_addr( (string("_")+m_func).c_str() );
     if( !m_query_func )
     {
-        m_last_error = string("no query function found in dll '")
-                       + m_filename + string("'");
+        m_last_error = string("no query function found in dll '") + m_filename + string("'");
         return NULL;
     }
 
@@ -799,7 +795,7 @@ const Chuck_DL_Query * Chuck_DLL::query( )
 
     // do the query
     m_query.clear();
-    if( !m_query_func( &m_query ) )
+    if( !m_query_func( &m_query ) || m_query.errorEncountered )
     {
         m_last_error = string("unsuccessful query in dll '") + m_filename
                        + string("'");
@@ -856,6 +852,41 @@ const Chuck_DL_Query * Chuck_DLL::query( )
     // if( m_attach_func ) m_attach_func( 0, NULL );
 
     return &m_query;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: probe()
+// desc: probe the dll without fully loading its content
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_DLL::probe()
+{
+    if( !m_handle && !m_query_func )
+    {
+        m_last_error = "dynamic link library not loaded for query...";
+        return FALSE;
+    }
+
+    // get the address of the DL version function from the DLL
+    if( !m_version_func )
+        m_version_func = (f_ck_declversion)this->get_addr( CK_DECLVERSION_FUNC );
+    if( !m_version_func )
+        m_version_func = (f_ck_declversion)this->get_addr( (string("_")+CK_DECLVERSION_FUNC).c_str() );
+    if( !m_version_func )
+    {
+        m_last_error = string("no version function found in dll '") + m_filename + string("'");
+        return FALSE;
+    }
+
+    // check version
+    t_CKUINT dll_version = m_version_func();
+    // get major and minor version numbers
+    m_versionMajor = CK_DLL_VERSION_GETMAJOR(dll_version);
+    m_versionMinor = CK_DLL_VERSION_GETMINOR(dll_version);
+
+    return TRUE;
 }
 
 
@@ -921,7 +952,7 @@ const char * Chuck_DLL::last_error() const
 
 //-----------------------------------------------------------------------------
 // name: name()
-// desc: ...
+// desc: return name given to dll
 //-----------------------------------------------------------------------------
 const char * Chuck_DLL::name() const
 {
@@ -929,7 +960,71 @@ const char * Chuck_DLL::name() const
 }
 
 
-//const t_CKUINT Chuck_DL_Query::RESERVED_SIZE;
+
+
+//-----------------------------------------------------------------------------
+// name: filepath()
+// desc: return the file path
+//-----------------------------------------------------------------------------
+const char * Chuck_DLL::filepath() const
+{
+    return m_filename.c_str();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: versionMajor()
+// desc: get version major
+//-----------------------------------------------------------------------------
+t_CKUINT Chuck_DLL::versionMajor()
+{
+    // probe dll
+    if( !this->probe() ) return 0;
+    // return
+    return m_versionMajor;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: versionMinor()
+// desc: get version minor
+//-----------------------------------------------------------------------------
+t_CKUINT Chuck_DLL::versionMinor()
+{
+    // probe dll
+    if( !this->probe() ) return 0;
+    // return
+    return m_versionMinor;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: compatible()
+// desc: if version compatible between chugin and host
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_DLL::compatible()
+{
+    // probe dll
+    if( !this->probe() ) return FALSE;
+    // major version must be same between chugin and host
+    // chugin minor version must less than or equal host minor version
+    if( m_versionMajor == CK_DLL_VERSION_MAJOR && m_versionMinor <= CK_DLL_VERSION_MINOR )
+    { return TRUE; }
+    else {
+        m_last_error = string("version incompatible with host ") +
+                       itoa(CK_DLL_VERSION_MAJOR) + "." + itoa(CK_DLL_VERSION_MINOR);
+        return FALSE;
+    }
+}
+
+
+
 
 //-----------------------------------------------------------------------------
 // name: Chuck_DL_Query
@@ -959,16 +1054,27 @@ Chuck_DL_Query::Chuck_DL_Query( Chuck_Carrier * carrier )
     create_main_thread_hook = ck_create_main_thread_hook;
     m_carrier = carrier;
 
-    // memset(reserved2, NULL, sizeof(void*)*RESERVED_SIZE);
-
     dll_name = "[noname]";
     reserved = NULL;
     curr_class = NULL;
     curr_func = NULL;
+    // memset(reserved2, NULL, sizeof(void*)*RESERVED_SIZE);
 
-    srate = carrier->vm->srate();
+    // 1.5.0.4 (ge) allow carrier to be NULL (for query purposes)
+    if( m_carrier != NULL )
+    {
+        // get the actual runtime sample rate
+        srate = m_carrier->vm->srate();
+    }
+    else
+    {
+        // set to something invalid...
+        // (instead of default sample rate, which could be harder to notice / debug)
+        srate = 0;
+    }
 
     linepos = 0;
+    errorEncountered = FALSE;
 }
 
 

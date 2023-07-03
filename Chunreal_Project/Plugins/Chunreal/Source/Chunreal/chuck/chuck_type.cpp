@@ -786,12 +786,12 @@ t_CKBOOL type_engine_check_context( Chuck_Env * env,
     a_Program prog = NULL;
 
     // log
-    EM_log( CK_LOG_FINER, "(pass 3) type-checking context '%s'...",
-        context->filename.c_str() );
+    EM_log( CK_LOG_FINER, "(pass 3) type-checking context..." );
+                          // context->filename.c_str() );
     // push indent
     EM_pushlog();
     // how much
-    EM_log( CK_LOG_FINER, "target: %s", howmuch2str( how_much ) );
+    EM_log( CK_LOG_FINEST, "target: %s", howmuch2str( how_much ) );
 
     // make sure there is a context
     if( !env->context )
@@ -1826,7 +1826,7 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
                 "cannot assign '%s' on types '%s' %s '%s'...",
                 op2str( op ), left->c_name(), op2str( op ), right->c_name() );
             EM_error2( lhs->linepos,
-                "...(reason: --- right-side operand is not mutable)" );
+                " |- reason: right-side operand is not mutable)" );
             return NULL;
         }
 
@@ -2236,7 +2236,7 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
                 "cannot chuck/assign '=>' on types '%s' => '%s'...",
                 left->c_name(), right->c_name() );
             EM_error2( lhs->linepos,
-                "...(reason: right-side operand is not mutable)" );
+                " |- reason: right-side operand is not mutable" );
             return NULL;
         }
         // aggregate types
@@ -2348,14 +2348,35 @@ t_CKTYPE type_engine_check_op_at_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs )
             "cannot assign '@=>' on types '%s' @=> '%s'...",
             left->c_name(), right->c_name() );
         EM_error2( lhs->linepos,
-            "...(reason: --- right-side operand is not mutable)" );
+            " |- reason: right-side operand is not mutable" );
         return NULL;
     }
 
     // if the right is a decl, then make sure ref
     if( rhs->s_type == ae_exp_decl )
     {
+        // get var_decl; first one should do
+        a_Var_Decl var_decl = rhs->decl.var_decl_list->var_decl;
+        // is array reference e.g., declared with empty dimensions
+        t_CKBOOL is_array_ref = var_decl->array && (var_decl->array->exp_list == NULL);
+        // check if full array declaration, e.g., int foo[2] or Object bar[2][2]
+        if( rhs->type->array_depth > 0 && !is_array_ref )
+        {
+            // this cases like [1,2] @=> int foo[2];
+            // (basically if the rhs is an array decl with non-empty dimensions)
+            EM_error2( lhs->linepos, "cannot assign '@=>' to full array declaration..." );
+            EM_error2( lhs->linepos, " |- hint: declare right-hand-side as empty array" );
+            t_CKBOOL is_ref = isobj(env, rhs->type->array_type) && rhs->decl.type->ref;
+            string varName = S_name(rhs->decl.var_decl_list->var_decl->xid);
+            string brackets;
+            for( t_CKINT i = 0; i < rhs->type->array_depth; i++ ) brackets += "[]";
+            EM_error2( lhs->linepos, " |- e.g., %s %s%s%s", rhs->type->name.c_str(), is_ref ? "@ " : "", varName.c_str(), brackets.c_str() );
+            return NULL;
+        }
+
+        // otherwise set ref
         rhs->decl.type->ref = TRUE;
+        var_decl->ref = TRUE;
     }
 
     // implicit cast
@@ -2368,7 +2389,7 @@ t_CKTYPE type_engine_check_op_at_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs )
             "cannot assign '@=>' on types '%s' @=> '%s'...",
             left->c_name(), right->c_name() );
         EM_error2( lhs->linepos,
-            "...(reason: --- incompatible types for assignment)" );
+            " |- reason: incompatible types for assignment" );
         return NULL;
     }
 
@@ -3937,8 +3958,8 @@ t_CKTYPE type_engine_check_exp_dot_member( Chuck_Env * env, a_Exp_Dot_Member mem
     {
         // can't find member
         EM_error2( member->base->linepos,
-            "class '%s' has no member '%s'",
-            the_base->c_name(), S_name(member->xid) );
+                   "class '%s' has no member '%s'",
+                   the_base->c_name(), S_name(member->xid) );
         return NULL;
     }
 
@@ -4336,7 +4357,7 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                             env->class_def->c_name(), S_name(f->name),
                             v->owner_class->c_name(), S_name(f->name) );
                         EM_error2( f->linepos,
-                            "...(reason: '%s.%s' is declared as 'static')",
+                            " |- reason: '%s.%s' is declared as 'static'",
                             v->owner_class->c_name(), S_name(f->name) );
                         goto error;
                     }
@@ -4349,7 +4370,7 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                             env->class_def->c_name(), S_name(f->name),
                             v->owner_class->c_name(), S_name(f->name) );
                         EM_error2( f->linepos,
-                            "...(reason: '%s.%s' is declared as 'static')",
+                            " |- reason: '%s.%s' is declared as 'static'",
                             env->class_def->c_name(), S_name(f->name) );
                         goto error;
                     }
@@ -4362,7 +4383,7 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                             env->class_def->c_name(), S_name(f->name),
                             v->owner_class->c_name(), S_name(f->name) );
                         EM_error2( f->linepos,
-                            "...(reason: '%s.%s' is declared as 'pure')",
+                            " |- reason: '%s.%s' is declared as 'pure'",
                             env->class_def->c_name(), S_name(f->name) );
                         goto error;
                     }
@@ -6645,7 +6666,7 @@ t_CKBOOL type_engine_add_dll2( Chuck_Env * env, Chuck_DLL * dll,
         if( !type_engine_add_class_from_dl(env, query->classes[i]) )
         {
             EM_log(CK_LOG_SEVERE,
-                   "error importing class '%s' from dynamic library (%s)",
+                   TC::orange("error importing class '%s' from chugin (%s)",true).c_str(),
                    query->classes[i]->name.c_str(), dll->name());
 
             return FALSE;
@@ -6670,11 +6691,11 @@ t_CKBOOL type_engine_add_class_from_dl( Chuck_Env * env, Chuck_DL_Class * c )
     if( type_engine_find_type( env, c->name ) )
     {
         EM_log( CK_LOG_SYSTEM,
-                "** error importing class '%s'...",
+                TC::orange("error importing class '%s' from chugin...",true).c_str(),
                 c->name.c_str() );
         EM_pushlog();
         EM_log( CK_LOG_SYSTEM,
-                "type with the same name already exists" );
+                TC::orange("type with the same name already exists",true).c_str() );
         EM_poplog();
 
         // before ugen begin, can just return
