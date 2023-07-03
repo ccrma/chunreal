@@ -18,21 +18,24 @@ namespace Metasound
     //------------------------------------------------------------------------------------
     // FChuckMainOperator
     //------------------------------------------------------------------------------------
-    FChuckMainOperator::FChuckMainOperator(const FOperatorSettings& InSettings, const FTriggerReadRef& InTrigger, const FStringReadRef& InCode, const FStringReadRef& InID, const FAudioBufferReadRef& InAudioInput, const FFloatReadRef& InAmplitude)
+    FChuckMainOperator::FChuckMainOperator(const FOperatorSettings& InSettings, const FTriggerReadRef& InTrigger, const FStringReadRef& InCode, const FStringReadRef& InID, const FAudioBufferReadRef& InAudioInputLeft, const FAudioBufferReadRef& InAudioInputRight, const FFloatReadRef& InAmplitude)
         : Trigger(InTrigger)
         , Code(InCode)
         , ID(InID)
-        , AudioInput(InAudioInput)
-        , AudioOutput(FAudioBufferWriteRef::CreateNew(InSettings))
+        , AudioInputLeft(InAudioInputLeft)
+        , AudioInputRight(InAudioInputRight)
         , Amplitude(InAmplitude)
+        , AudioOutputLeft(FAudioBufferWriteRef::CreateNew(InSettings))
+        , AudioOutputRight(FAudioBufferWriteRef::CreateNew(InSettings))
+        
     { 
         //Create Chuck
         theChuck = new ChucK();
 
         //Initialize Chuck params
         theChuck->setParam(CHUCK_PARAM_SAMPLE_RATE, 44100);
-        theChuck->setParam(CHUCK_PARAM_INPUT_CHANNELS, 1);
-        theChuck->setParam(CHUCK_PARAM_OUTPUT_CHANNELS, 1);
+        theChuck->setParam(CHUCK_PARAM_INPUT_CHANNELS, 2);
+        theChuck->setParam(CHUCK_PARAM_OUTPUT_CHANNELS, 2);
         theChuck->setParam(CHUCK_PARAM_VM_ADAPTIVE, 0);
         theChuck->setParam(CHUCK_PARAM_VM_HALT, (t_CKINT)(false));
         //theChuck->setParam(CHUCK_PARAM_OTF_PORT, g_otf_port);
@@ -71,6 +74,10 @@ namespace Metasound
             FChunrealModule::RemoveChuckRef(**ID);
         }
 
+        //Delete allocated memory
+        delete inBufferInterleaved;
+        delete outBufferInterleaved;
+
         //Delete ChucK
         delete theChuck;
         theChuck = nullptr;
@@ -89,7 +96,8 @@ namespace Metasound
         InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(InParamNameTrigger), Trigger);
         InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(InParamNameCode), Code);
         InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(InParamNameID), ID);
-        InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(InParamNameAudioInput), AudioInput);
+        InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(InParamNameAudioInputLeft), AudioInputLeft);
+        InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(InParamNameAudioInputRight), AudioInputRight);
         InputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(InParamNameAmplitude), Amplitude);
 
         return InputDataReferences;
@@ -105,7 +113,8 @@ namespace Metasound
 
         FDataReferenceCollection OutputDataReferences;
 
-        OutputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(OutParamNameAudio), AudioOutput);
+        OutputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(OutParamNameAudioOutputLeft), AudioOutputLeft);
+        OutputDataReferences.AddDataReadReference(METASOUND_GET_PARAM_NAME(OutParamNameAudioOutputRight), AudioOutputRight);
 
         return OutputDataReferences;
     }
@@ -116,9 +125,11 @@ namespace Metasound
     void FChuckMainOperator::Execute()
     {
         const FTrigger& trigger = *Trigger;
-        const float* inBuffer = AudioInput->GetData();
-        float* outBuffer      = AudioOutput->GetData();
-        const int32 numSamples = AudioInput->Num();
+        const float* inBufferLeft = AudioInputLeft->GetData();
+        const float* inBufferRight = AudioInputRight->GetData();
+        float* outBufferLeft = AudioOutputLeft->GetData();
+        float* outBufferRight = AudioOutputRight->GetData();
+        const int32 numSamples = AudioInputLeft->Num();
 
         //Check Trigger & Run Chuck Code
         if (trigger.IsTriggered())
@@ -137,15 +148,28 @@ namespace Metasound
             theChuck->compileCode(TCHAR_TO_UTF8(**Code), "", 1);
         }
        
-        //Process
-        theChuck->run((float*)inBuffer, outBuffer, numSamples);
-
-        //Apply volume multiplier
-        int count = 0;
-        while (count < numSamples)
+        //Make interleaved buffers
+        if (!bufferInitialized)
         {
-            *(outBuffer + count) = *(outBuffer + count) * (*Amplitude);
-            count++;
+            inBufferInterleaved = new float[numSamples * 2];
+            outBufferInterleaved = new float[numSamples * 2];
+
+            bufferInitialized = true;
+        }
+        for (int i = 0; i < numSamples; i++)
+        {
+            *(inBufferInterleaved + i * 2) = *(inBufferLeft + i);
+            *(inBufferInterleaved + i * 2 + 1) = *(inBufferRight + i);
+        }
+
+        //Process samples by ChucK
+        theChuck->run((float*)inBufferInterleaved, outBufferInterleaved, numSamples);
+
+        //Retrive each output channel and apply volume multiplier
+        for (int i = 0; i < numSamples; i++)
+        {
+            *(outBufferLeft + i) = *(outBufferInterleaved + i * 2) * (*Amplitude);
+            *(outBufferRight + i) = *(outBufferInterleaved + i * 2 + 1) * (*Amplitude);
         }
     }
 
@@ -162,12 +186,14 @@ namespace Metasound
                 TInputDataVertex<FTrigger>(METASOUND_GET_PARAM_NAME_AND_METADATA(InParamNameTrigger)),
                 TInputDataVertex<FString>(METASOUND_GET_PARAM_NAME_AND_METADATA(InParamNameCode), FString("")),
                 TInputDataVertex<FString>(METASOUND_GET_PARAM_NAME_AND_METADATA(InParamNameID), FString("")),
-                TInputDataVertex<FAudioBuffer>(METASOUND_GET_PARAM_NAME_AND_METADATA(InParamNameAudioInput)),
+                TInputDataVertex<FAudioBuffer>(METASOUND_GET_PARAM_NAME_AND_METADATA(InParamNameAudioInputLeft)),
+                TInputDataVertex<FAudioBuffer>(METASOUND_GET_PARAM_NAME_AND_METADATA(InParamNameAudioInputRight)),
                 TInputDataVertex<float>(METASOUND_GET_PARAM_NAME_AND_METADATA(InParamNameAmplitude), 1.0f)
             ),
 
             FOutputVertexInterface(
-                TOutputDataVertex<FAudioBuffer>(METASOUND_GET_PARAM_NAME_AND_METADATA(OutParamNameAudio))
+                TOutputDataVertex<FAudioBuffer>(METASOUND_GET_PARAM_NAME_AND_METADATA(OutParamNameAudioOutputLeft)),
+                TOutputDataVertex<FAudioBuffer>(METASOUND_GET_PARAM_NAME_AND_METADATA(OutParamNameAudioOutputRight))
             )
         );
 
@@ -218,10 +244,11 @@ namespace Metasound
         FTriggerReadRef InTrigger = InputCollection.GetDataReadReferenceOrConstruct<FTrigger>(METASOUND_GET_PARAM_NAME(InParamNameTrigger), InParams.OperatorSettings);
         FStringReadRef InCode = InputCollection.GetDataReadReferenceOrConstructWithVertexDefault<FString>(InputInterface, METASOUND_GET_PARAM_NAME(InParamNameCode), InParams.OperatorSettings);
         FStringReadRef InID = InputCollection.GetDataReadReferenceOrConstructWithVertexDefault<FString>(InputInterface, METASOUND_GET_PARAM_NAME(InParamNameID), InParams.OperatorSettings);
-        FAudioBufferReadRef AudioIn = InputCollection.GetDataReadReferenceOrConstruct<FAudioBuffer>(METASOUND_GET_PARAM_NAME(InParamNameAudioInput), InParams.OperatorSettings);
+        FAudioBufferReadRef InAudioInputLeft = InputCollection.GetDataReadReferenceOrConstruct<FAudioBuffer>(METASOUND_GET_PARAM_NAME(InParamNameAudioInputLeft), InParams.OperatorSettings);
+        FAudioBufferReadRef InAudioInputRight = InputCollection.GetDataReadReferenceOrConstruct<FAudioBuffer>(METASOUND_GET_PARAM_NAME(InParamNameAudioInputRight), InParams.OperatorSettings);
         FFloatReadRef InAmplitude   = InputCollection.GetDataReadReferenceOrConstructWithVertexDefault<float>(InputInterface, METASOUND_GET_PARAM_NAME(InParamNameAmplitude), InParams.OperatorSettings);
 
-        return MakeUnique<FChuckMainOperator>(InParams.OperatorSettings, InTrigger, InCode, InID, AudioIn, InAmplitude);
+        return MakeUnique<FChuckMainOperator>(InParams.OperatorSettings, InTrigger, InCode, InID, InAudioInputLeft, InAudioInputRight, InAmplitude);
     }
 
 

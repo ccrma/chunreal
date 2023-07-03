@@ -21,12 +21,14 @@ namespace Metasound
 
     namespace ChuckMainNode
     {
-        METASOUND_PARAM(InParamNameTrigger, "RunCode", "Trigger to run Chuck code.")
-        METASOUND_PARAM(InParamNameCode, "Code", "Chuck code to run.")
-        METASOUND_PARAM(InParamNameID, "ID", "Unique ID assigned to ChucK")
-        METASOUND_PARAM(InParamNameAudioInput, "AudioInput",        "Audio input.")
-        METASOUND_PARAM(InParamNameAmplitude,  "VolumeMultiplier", "Volume multiplier.")
-        METASOUND_PARAM(OutParamNameAudio,     "Out",       "Audio output.")
+        METASOUND_PARAM(InParamNameTrigger, "Run Code", "Trigger to run Chuck code.")
+            METASOUND_PARAM(InParamNameCode, "Code", "Chuck code to run.")
+            METASOUND_PARAM(InParamNameID, "ID", "Unique ID assigned to ChucK")
+            METASOUND_PARAM(InParamNameAudioInputLeft, "Audio Input Left", "Audio input left.")
+            METASOUND_PARAM(InParamNameAudioInputRight, "Audio Input Right", "Audio input right.")
+            METASOUND_PARAM(InParamNameAmplitude, "Volume Multiplier", "Volume multiplier.")
+            METASOUND_PARAM(OutParamNameAudioOutputLeft, "Audio Output Left", "Audio output left.")
+            METASOUND_PARAM(OutParamNameAudioOutputRight, "Audio Output Right", "Audio output right.")
     }
 
 #undef LOCTEXT_NAMESPACE
@@ -42,7 +44,7 @@ namespace Metasound
         static const FVertexInterface& GetVertexInterface();
         static TUniquePtr<IOperator> CreateOperator(const FCreateOperatorParams& InParams, FBuildErrorArray& OutErrors);
 
-        FChuckMainOperator(const FOperatorSettings& InSettings, const FTriggerReadRef& InTrigger, const FStringReadRef& InCode, const FStringReadRef& InID, const FAudioBufferReadRef& InAudioInput, const FFloatReadRef& InAmplitude);
+        FChuckMainOperator(const FOperatorSettings& InSettings, const FTriggerReadRef& InTrigger, const FStringReadRef& InCode, const FStringReadRef& InID, const FAudioBufferReadRef& InAudioInputLeft, const FAudioBufferReadRef& InAudioInputRight, const FFloatReadRef& InAmplitude);
         ~FChuckMainOperator();
 
         virtual FDataReferenceCollection GetInputs()  const override;
@@ -51,8 +53,13 @@ namespace Metasound
         void Execute();
 
     private:
-        FAudioBufferReadRef  AudioInput;
-        FAudioBufferWriteRef AudioOutput;
+        FAudioBufferReadRef  AudioInputLeft;
+        FAudioBufferReadRef  AudioInputRight;
+        FAudioBufferWriteRef AudioOutputLeft;
+        FAudioBufferWriteRef AudioOutputRight;
+
+        float* inBufferInterleaved;
+        float* outBufferInterleaved;
 
         FTriggerReadRef Trigger;
         FStringReadRef Code;
@@ -62,6 +69,7 @@ namespace Metasound
         //reference to chuck
         ChucK* theChuck = nullptr;
 
+        bool bufferInitialized = false;
         bool hasSporkedOnce = false;
     };
 
