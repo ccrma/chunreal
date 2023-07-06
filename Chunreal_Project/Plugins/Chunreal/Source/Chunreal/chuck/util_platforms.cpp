@@ -34,7 +34,11 @@
 #include "util_string.h"
 #include "chuck_errmsg.h"
 
+#include <stdio.h>
+#include <sys/stat.h>
+
 #ifdef __PLATFORM_WIN32__
+
   #ifndef __CHUNREAL_ENGINE__
     #include <windows.h> // for win32_tmpfile()
   #else
@@ -42,13 +46,14 @@
     // unreal engine on windows disallows including windows.h
     #include "Windows/MinWindows.h"
   #endif // #ifndef __CHUNREAL_ENGINE__
+  #include <io.h> // for _isatty()
+
 #else // not windows
+
   #include <unistd.h>
+  #include <sys/ioctl.h>
+
 #endif // #ifdef __PLATFORM_WIN32__
-
-#include <stdio.h>
-#include <sys/stat.h>
-
 
 
 
@@ -173,17 +178,71 @@ t_CKBOOL ck_isatty( int fd )
 #ifndef __PLATFORM_WIN32__
     return isatty( fd ) != 0;
 #else
-    // windows, until we can figure this out
-    return TRUE;
+    return _isatty( fd ) != 0;
 #endif
 }
 //-----------------------------------------------------------------------------
-// get a general sense if current outputting to tty
+// get a general sense if currently outputting to TTY
 //-----------------------------------------------------------------------------
 t_CKBOOL ck_isatty()
 {
-    // use 2 for stderr
-    return ck_isatty( 2 );
+    // let's test stderr, since much of chuck operates over it
+#ifndef __PLATFORM_WIN32__
+    return ck_isatty( fileno(stderr) );
+#else
+    return ck_isatty( _fileno(stderr) );
+#endif
+}
+
+
+
+
+// current dfeault
+static t_CKUINT g_ttywidth_default = 80;
+//-----------------------------------------------------------------------------
+// name: ck_ttywidth() | 1.5.0.5 (ge) added
+// desc: get TTY terminal width, or CK_DEFAULT_TTY_WIDTH if not TTY
+//-----------------------------------------------------------------------------
+t_CKUINT ck_ttywidth()
+{
+    // return default if not TTY
+    if( !ck_isatty() ) return g_ttywidth_default;
+
+#ifndef __PLATFORM_WIN32__
+    struct winsize w;
+    if( ioctl( fileno(stderr), TIOCGWINSZ, &w ) != 0 ) { goto error; }
+    return w.ws_col;
+#else
+    // get windows handle to stderr
+    HANDLE hStderr = GetStdHandle( STD_ERROR_HANDLE );
+    // console buffer info
+    CONSOLE_SCREEN_BUFFER_INFO info;
+    // get screen buffer info
+    if( !GetConsoleScreenBufferInfo( hStderr, &info ) ) { goto error; }
+    // return width
+    return info.dwSize.X;
+#endif
+
+error:
+    return g_ttywidth_default;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// set default TTY width
+//-----------------------------------------------------------------------------
+void ck_ttywidth_setdefault( t_CKUINT width )
+{
+    g_ttywidth_default = width;
+}
+//-----------------------------------------------------------------------------
+// get default TTY width
+//-----------------------------------------------------------------------------
+t_CKUINT ck_ttywidth_default()
+{
+    return g_ttywidth_default;
 }
 
 
@@ -328,6 +387,196 @@ size_t ck_getline( char ** lineptr, size_t * n, FILE * stream )
     return win32_getline( lineptr, n, stream );
 #endif
 }
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ck_usleep()
+// desc: usleep in microseconds
+//-----------------------------------------------------------------------------
+void ck_usleep( t_CKUINT microseconds )
+{
+#if defined(__PLATFORM_WIN32__) && !defined(usleep)
+    #ifndef __CHUNREAL_ENGINE__
+        #define usleep(x) Sleep((x / 1000 <= 0 ? 1 : x / 1000) )
+    #else
+        // 1.5.0.0 (ge) | #chunreal
+        #define usleep(x) FPlatformProcess::Sleep( x/1000000.0f <= 0 ? .001 : x/1000000.0f );
+    #endif // #ifndef __UNREAL_ENGINE__
+#else
+    // call system usleep
+    usleep( (useconds_t)microseconds );
+#endif
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+#if defined(__PLATFORM_MACOSX__) && !defined(__CHIP_MODE__)
+//-----------------------------------------------------------------------------
+#include <sys/types.h>
+#include <sys/sysctl.h>
+#include <mach/mach.h>
+#include <mach/mach_time.h> // for mach_absolute_time | 1.5.0.5
+
+
+//-----------------------------------------------------------------------------
+// name: ck_darwin_version()
+// desc: get darwin release version (also see ck_macOS_version())
+// https://stackoverflow.com/questions/11072804/how-do-i-determine-the-os-version-at-runtime-in-os-x-or-ios-without-using-gesta
+//-----------------------------------------------------------------------------
+ck_OSVersion ck_darwin_version()
+{
+    // version
+    ck_OSVersion ver;
+
+    // get darwin release number
+    char str[256];
+    size_t size = sizeof(str);
+    // get darwin kernel release version
+    // note: sysctl() is supported on macOS; no longer in linux kernels
+    int ret = sysctlbyname( "kern.osrelease", str, &size, NULL, 0 );
+
+    // error
+    if( ret ) return ver;
+
+    // read it in
+    sscanf( str, "%hd.%hd.%hd", &ver.major, &ver.minor, &ver.patch );
+
+    // return version
+    return ver;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: ck_macOS_version()
+// desc: get macOS release version
+// note: alternative for Gestalt() which is deprecated
+// https://stackoverflow.com/questions/11072804/how-do-i-determine-the-os-version-at-runtime-in-os-x-or-ios-without-using-gesta
+// https://en.wikipedia.org/wiki/Darwin_(operating_system)
+// Darwin operating system version to macOS release version
+// 22.x.x. macOS 13.x.x Ventura
+// 21.x.x. macOS 12.x.x Monterey
+// 20.x.x. macOS 11.x.x Big Sur
+// 19.x.x. macOS 10.15.x Catalina
+// 18.x.x. macOS 10.14.x Mojave
+// 17.x.x. macOS 10.13.x High Sierra
+// 16.x.x  macOS 10.12.x Sierra
+// 15.x.x  OS X  10.11.x El Capitan
+// 14.x.x  OS X  10.10.x Yosemite
+// 13.x.x  OS X  10.9.x  Mavericks
+// 12.x.x  OS X  10.8.x  Mountain Lion
+// 11.x.x  OS X  10.7.x  Lion
+// 10.x.x  OS X  10.6.x  Snow Leopard
+//  9.x.x  OS X  10.5.x  Leopard
+//  8.x.x  OS X  10.4.x  Tiger
+//  7.x.x  OS X  10.3.x  Panther
+//  6.x.x  OS X  10.2.x  Jaguar
+//  5.x    OS X  10.1.x  Puma
+//  4.x    OS X  10.0.x  Cheetah
+//-----------------------------------------------------------------------------
+ck_OSVersion ck_macOS_version()
+{
+    // version
+    ck_OSVersion ver;
+
+    // first try to get macOS release number directly
+    // FYI this may not work in older versions, circa before 2018
+    char str[256];
+    size_t size = sizeof(str);
+    // get darwin kernel release version
+    // note: sysctl() is supported on macOS; no longer in linux kernels
+    int ret = sysctlbyname( "kern.osproductversion", str, &size, NULL, 0 );
+
+    // success
+    if( ret == 0 )
+    {
+        // read it in
+        sscanf( str, "%hd.%hd.%hd", &ver.major, &ver.minor, &ver.patch );
+        // done
+        return ver;
+    }
+
+    // fall back -- get darwin version and our own conversion
+    // FYI darwin minor version could be off by 1 due to security patches
+    ver = ck_darwin_version();
+
+    // test
+    if( ver.major < 4 ) // before 10.1.x Puma
+    {
+        // reset to 0
+        ver.reset();
+        // return 0 version
+        return ver;
+    }
+
+    // convert to macOS release number
+    if( ver.major <= 19 )
+    {
+        // still in OS X era
+        ver.minor = ver.major - 4;
+        ver.major = 10;
+    }
+    else
+    {
+        // hopefully this is future proof; depends on Apple release versioning
+        ver.major = ver.major - 9;
+    }
+
+    // return version
+    return ver;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: str()
+// desc: get version as string
+//-----------------------------------------------------------------------------
+std::string ck_OSVersion::str()
+{
+    return itoa(major) + "." + itoa(minor) + "." + itoa(patch);
+}
+
+
+//-----------------------------------------------------------------------------
+// name: ck_macOS_uptime() | 1.5.0.5 (ge) added
+// desc: return macOS uptime
+// note: replacement for UpTime(), which is deprecated
+// https://stackoverflow.com/questions/47168914/absolutetonanoseconds-uptime-deprecated
+// https://opensource.apple.com/source/Libc/Libc-1158.1.2/gen/clock_gettime.c.auto.html
+// clock_gettime_nsec_np(CLOCK_UPTIME_RAW) doesn't seem be the same as UpTime
+// at least on apple silicon macOS 13 (Ventura)
+//-----------------------------------------------------------------------------
+AbsoluteTime ck_macOS_uptime()
+{
+    uint64_t mt = mach_absolute_time();
+    AbsoluteTime at;
+    at.hi = (uint32_t)(mt << 32);
+    at.lo = (uint32_t)(mt & 0xffffffff);
+    return at;
+}
+
+
+/*
+static void testUpTime()
+{
+    uint64_t mt = mach_absolute_time();
+    AbsoluteTime at = UpTime();
+    uint64_t t = ((uint64_t)at.hi << 32) + at.lo;
+
+    AbsoluteTime at2;
+    at2.hi = mt >> 32;
+    at2.lo = mt & 0xffffffff;
+    uint64_t t2 = ((uint64_t)at2.hi << 32) + at2.lo;
+
+    cerr << "TIME:" << clock_gettime_nsec_np(CLOCK_UPTIME_RAW) / 1000000 << " mach: " << mt << " UpTime: " << t2 << endl;
+}
+*/
+
+
+#endif // #if defined(__PLATFORM_MACOSX__) && !defined(__CHIP_MODE__)
 
 
 

@@ -31,11 +31,14 @@
 //-----------------------------------------------------------------------------
 #include "ulib_std.h"
 #include "util_buffers.h"
+#include "util_math.h"
+#include "util_string.h"
+#include "util_platforms.h"
+
 #ifndef __DISABLE_PROMPTER__
 #include "util_console.h"
 #endif
-#include "util_math.h"
-#include "util_string.h"
+
 #ifndef __DISABLE_THREADS__
 #include "util_thread.h"
 #endif
@@ -937,7 +940,7 @@ static unsigned int __stdcall kb_loop( void * )
         }
 
         // wait
-        usleep( 5000 );
+        ck_usleep( 5000 );
     }
 
     return 0;
@@ -955,7 +958,7 @@ t_CKBOOL KBHitManager::init()
     if( !the_buf->initialize( BUFFER_SIZE, sizeof(t_CKINT) ) )
     {
         EM_log( CK_LOG_SEVERE, "KBHitManager: couldn't allocate central KB buffer..." );
-        SAFE_DELETE( the_buf );
+        CK_SAFE_DELETE( the_buf );
         return FALSE;
     }
 
@@ -975,7 +978,7 @@ t_CKBOOL KBHitManager::init()
 void KBHitManager::shutdown()
 {
     EM_log( CK_LOG_INFO, "shutting down KBHitManager..." );
-    SAFE_DELETE( the_buf );
+    CK_SAFE_DELETE( the_buf );
     kb_endwin();
 
     the_onoff = 0;
@@ -1245,7 +1248,7 @@ void * le_cb( void * p )
     {
         // wait
         while( g_le_wait )
-            usleep( 10000 );
+            ck_usleep( 10000 );
 
         // REFACTOR-2017: TODO Ge:
         // I removed the check here for if there are no more vms running
@@ -1434,7 +1437,7 @@ StrTok::StrTok()
 
 StrTok::~StrTok()
 {
-    SAFE_DELETE( m_ss );
+    CK_SAFE_DELETE( m_ss );
 }
 
 void StrTok::set( const string & line )
@@ -1442,7 +1445,7 @@ void StrTok::set( const string & line )
     string s;
 
     // delete
-    SAFE_DELETE( m_ss );
+    CK_SAFE_DELETE( m_ss );
     // alloc
     m_ss = new istringstream( line );
     // read

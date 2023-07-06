@@ -96,7 +96,13 @@ const t_CKINT Chuck_IO::MODE_ASYNC = 0;
 // desc: constructor
 //-----------------------------------------------------------------------------
 Chuck_VM_Object::Chuck_VM_Object()
-{ this->init_ref(); }
+{
+    // initialize reference
+    this->init_ref();
+
+    // track this only in CK_VM_DEBUG_ENABLED mode | 1.5.0.5 (ge)
+    CK_VM_DEBUGGER( construct( this ) );
+}
 
 
 
@@ -125,8 +131,6 @@ void Chuck_VM_Object::init_ref()
     m_locked = FALSE;
     // set v ref
     m_v_ref = NULL;
-    // add to vm allocator
-    // Chuck_VM_Alloc::instance()->add_object( this );
 }
 
 
@@ -141,17 +145,10 @@ void Chuck_VM_Object::add_ref()
     // increment reference count
     m_ref_count++;
 
-//    // if going from 0 to 1
-//    if( m_ref_count == 1 )
-//    {
-//        // add to vm allocator
-//        Chuck_VM_Alloc::instance()->add_object( this );
-//    }
-
     // added 1.3.0.0
-    CK_MEMMGMT_TRACK(CK_FPRINTF_STDERR( "Chuck_VM_Object::add_ref() : 0x%08x, %s, %lu\n", this, typeid(*this).name(), m_ref_count));
-    // string n = typeid(*this).name();
-    // cerr << "ADDREF: " << dec << n << " " << m_ref_count << " 0x" << hex << (int)this << endl;
+    // CK_VM_DEBUG( CK_FPRINTF_STDERR( "Chuck_VM_Object::add_ref() : 0x%08x, %s, %lu\n", this, mini_type(typeid(*this).name()), m_ref_count) );
+    // updated 1.5.0.5 to use Chuck_VM_Debug
+    CK_VM_DEBUGGER( add_ref( this ) );
 }
 
 
@@ -167,7 +164,7 @@ void Chuck_VM_Object::release()
     if( m_ref_count <= 0 )
     {
         // print error
-        EM_error3( "[chuck]: internal error: Object.release() refcount == %d", m_ref_count );
+        EM_error3( "[chuck]: (internal error) Object.release() refcount == %d", m_ref_count );
         // make sure there is at least one reference
         assert( m_ref_count > 0 );
     }
@@ -175,9 +172,9 @@ void Chuck_VM_Object::release()
     m_ref_count--;
 
     // added 1.3.0.0
-    CK_MEMMGMT_TRACK(CK_FPRINTF_STDERR( "Chuck_VM_Object::release() : 0x%08x, %s, %ulu\n", this, typeid(*this).name(), m_ref_count));
-    // string n = typeid(*this).name();
-    // cerr << "RELEASE: " << dec << n << " " << m_ref_count << " 0x" << hex << (int)this << endl;
+    // CK_VM_DEBUG(CK_FPRINTF_STDERR( "Chuck_VM_Object::release() : 0x%08x, %s, %ulu\n", this, mini_type(typeid(*this).name()), m_ref_count));
+    // updated 1.5.0.5 to use Chuck_VM_Debug
+    CK_VM_DEBUGGER( release( this ) );
 
     // if no more references
     if( m_ref_count == 0 )
@@ -185,7 +182,7 @@ void Chuck_VM_Object::release()
         // this is not good | TODO: our_locks_in_effect assumes single VM
         if( our_locks_in_effect && m_locked )
         {
-            EM_error2( 0, "internal error: releasing locked VM object!" );
+            EM_error2( 0, "(internal error) releasing locked VM object!" );
             // fail
             assert( FALSE );
             // in case assert is disabled
@@ -200,8 +197,9 @@ void Chuck_VM_Object::release()
         EM_log( CK_LOG_FINEST, "reclaiming object: 0x%08x", this );
     #endif // #ifndef __CHUNREAL_ENGINE__
 
-        // tell the object manager to set this free
-        // Chuck_VM_Alloc::instance()->free_object( this );
+        // track | 1.5.0.5 (ge)
+        CK_VM_DEBUGGER( destruct( this ) );
+
         // REFACTOR-2017: doing this for now
         delete this;
     }
@@ -264,90 +262,14 @@ void Chuck_VM_Object::unlock_all()
 
 
 
-// static member
-// Chuck_VM_Alloc * Chuck_VM_Alloc::our_instance = NULL;
-
-
 //-----------------------------------------------------------------------------
-// name: instance()
-// desc: return static instance
+// name: refcount()
+// desc: get reference count
 //-----------------------------------------------------------------------------
-//Chuck_VM_Alloc * Chuck_VM_Alloc::instance()
-//{
-//    if( !our_instance )
-//    {
-//        our_instance = new Chuck_VM_Alloc;
-//        assert( our_instance != NULL );
-//    }
-//
-//    return our_instance;
-//}
-
-
-
-
-//-----------------------------------------------------------------------------
-// name: add_object()
-// desc: add newly allocated vm object
-//-----------------------------------------------------------------------------
-//void Chuck_VM_Alloc::add_object( Chuck_VM_Object * obj )
-//{
-//    // do log
-//    if( DO_LOG( CK_LOG_ALL ) )
-//    {
-//        // log it
-//        EM_log( CK_LOG_ALL, "adding '%s' (0x%lx)...",
-//            mini_type( typeid(*obj).name() ), obj );
-//    }
-//
-//    // add it to map
-//}
-
-
-
-
-//-----------------------------------------------------------------------------
-// name: free_object()
-// desc: free vm object - reference count should be 0
-//-----------------------------------------------------------------------------
-//void Chuck_VM_Alloc::free_object( Chuck_VM_Object * obj )
-//{
-//    // make sure the ref count is 0
-//    assert( obj && obj->m_ref_count == 0 );
-//
-//    // do log
-//    if( DO_LOG( CK_LOG_FINEST ) )
-//    {
-//        // log it
-//        EM_log( CK_LOG_FINEST, "freeing '%s' (0x%lx)...",
-//            mini_type( typeid(*obj).name() ), obj );
-//    }
-//
-//    // remove it from map
-//
-//    // delete it
-//    delete obj;
-//}
-
-
-
-
-//-----------------------------------------------------------------------------
-// name: Chuck_VM_Alloc()
-// desc: constructor
-////-----------------------------------------------------------------------------
-//Chuck_VM_Alloc::Chuck_VM_Alloc()
-//{ }
-
-
-
-
-//-----------------------------------------------------------------------------
-// name: ~Chuck_VM_Alloc()
-// desc: destructor
-//-----------------------------------------------------------------------------
-//Chuck_VM_Alloc::~Chuck_VM_Alloc()
-//{ }
+t_CKUINT Chuck_VM_Object::refcount() const
+{
+    return m_ref_count;
+}
 
 
 
@@ -366,9 +288,6 @@ Chuck_Object::Chuck_Object()
     data = NULL;
     // zero size
     data_size = 0;
-
-    // add to vm allocator
-    // Chuck_VM_Alloc::instance()->add_object( this );
 }
 
 
@@ -399,9 +318,9 @@ Chuck_Object::~Chuck_Object()
     }
 
     // free
-    SAFE_DELETE( vtable );
-    SAFE_RELEASE( type_ref );
-    SAFE_DELETE_ARRAY( data );
+    CK_SAFE_DELETE( vtable );
+    CK_SAFE_RELEASE( type_ref );
+    CK_SAFE_DELETE_ARRAY( data );
     // if( vtable ) { delete vtable; vtable = NULL; }
     // if( type_ref ) { type_ref->release(); type_ref = NULL; }
     // if( data ) { delete [] data; size = 0; data = NULL; }
@@ -420,7 +339,7 @@ void Chuck_Object::dump() // 1.4.1.1 (ge)
     Chuck_Type * type = this->type_ref;
 
     // output state with type info
-    type->dump( this );
+    type->dump_obj( this );
 }
 
 
@@ -449,7 +368,7 @@ void Chuck_Object::help() // 1.4.1.0 (ge)
 Chuck_Array::~Chuck_Array()
 {
     // decrement reference count; added (ge): 1.4.1.0
-    SAFE_RELEASE( m_array_type );
+    CK_SAFE_RELEASE( m_array_type );
 }
 
 
@@ -2418,7 +2337,7 @@ void Chuck_Event::signal_local()
         #endif
         // REFACTOR-2017: BUG-FIX
         // release the extra ref we added when we started waiting for this event
-        SAFE_RELEASE( shred->event );
+        CK_SAFE_RELEASE( shred->event );
         // get shreduler
         Chuck_VM_Shreduler * shreduler = shred->vm_ref->shreduler();
         // remove the blocked shred from the list
@@ -2465,7 +2384,7 @@ t_CKBOOL Chuck_Event::remove( Chuck_VM_Shred * shred )
         else
         {
             // TARPIT: this might seem like the right place for
-            // SAFE_RELEASE(shred->event), however this might cause
+            // CK_SAFE_RELEASE(shred->event), however this might cause
             // the deletion of the object while we are still using it.
             // so, put it in the caller: Chuck_VM_Shreduler::remove_blocked()
 
@@ -2914,7 +2833,7 @@ void Chuck_Event::wait( Chuck_VM_Shred * shred, Chuck_VM * vm )
         // vm instruction Chuck_Instr_Release_Object2, in order to tell the event
         // to forget the shred. So, add another reference so it won't be freed
         // until the shred is done with it.  REFACTOR-2017
-        SAFE_ADD_REF( shred->event );
+        CK_SAFE_ADD_REF( shred->event );
 
         // add shred to shreduler
         vm->shreduler()->add_blocked( shred );
@@ -3936,7 +3855,7 @@ void Chuck_IO_File::write( t_CKINT val, t_CKINT flags )
         else if( flags & Chuck_IO::INT32 || flags & Chuck_IO::UINT32 )
         {
             // unsigned 32-bit
-            uint32_t v = val;
+            uint32_t v = (uint32_t)val;
             m_io.write( (char *)&v, 4 );
         }
         else if( flags & Chuck_IO::INT64 || flags & Chuck_IO::UINT64 )
@@ -3960,7 +3879,7 @@ void Chuck_IO_File::write( t_CKINT val, t_CKINT flags )
         else if( flags & Chuck_IO::SINT32 )
         {
             // signed 32-bit
-            int32_t v = val;
+            int32_t v = (uint32_t)val;
             m_io.write( (char *)&v, 4 );
         }
         else if( flags & Chuck_IO::SINT64 )

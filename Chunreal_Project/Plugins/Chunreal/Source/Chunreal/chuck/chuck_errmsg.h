@@ -44,7 +44,7 @@
 #define CK_LOG_FINEST           9
 #define CK_LOG_FINER            8
 #define CK_LOG_FINE             7
-#define CK_LOG_CONFIG           6
+#define CK_LOG_DEBUG            6  // 1.5.0.5 was: CK_LOG_CONFIG
 #define CK_LOG_INFO             5
 #define CK_LOG_WARNING          4
 #define CK_LOG_SEVERE           3
@@ -61,18 +61,21 @@ extern "C" {
 //-----------------------------------------------------------------------------
 // the many ways to report errors; tools for an error prone world
 //-----------------------------------------------------------------------------
+// log macros -- generally more efficient than calling EM_log() directly...
+// since this macro conditionally computes args based on log level
+#define CK_LOG( level, ... ) do{ if(level <= g_loglevel) \
+                                 { EM_log( level, __VA_ARGS__ ); } }while(0)
+
 // output log message
 void EM_log( t_CKINT, c_constr, ... );
 // set log level [CK_LOG_NONE, CK_LOG_ALL]
-void EM_setlog( t_CKINT );
+void EM_setlog( t_CKINT level );
 // push the log indentation
 void EM_pushlog();
 // pop log indentation
 void EM_poplog();
 // actual level
 extern t_CKINT g_loglevel;
-// macro to compare
-#define DO_LOG(x) ( x <= g_loglevel )
 
 // [%s]:line(%d).char(%d):
 void EM_error( t_CKINT, c_constr, ... );
@@ -92,7 +95,6 @@ void EM_print2blue( c_constr, ... );
 // orange edition
 void EM_print2orange( c_constr, ... );
 
-
 // clear last error message
 void EM_reset_msg();
 // prepare for new file before a file
@@ -101,19 +103,18 @@ void EM_start_filename( c_constr filename );
 void EM_reset_filename();
 // get last erorr
 const char * EM_lasterror();
-// whether to highligh code on compiler error
-void EM_highlight_on_error( t_CKBOOL yesOrNo );
 
 // get filename portion of path; e.g., mini("foo/bar.ck") -> "bar.ck"
 const char * mini( const char * path );
 const char * mini_type( const char * str );
 
 
+
+
 //-----------------------------------------------------------------------------
 // things connected with lexer and parser
 //-----------------------------------------------------------------------------
 // variables
-extern t_CKBOOL EM_anyErrors;
 extern t_CKINT EM_tokPos;
 extern t_CKINT EM_lineNum;
 
@@ -122,7 +123,7 @@ extern t_CKINT EM_lineNum;
 extern t_CKINT EM_extLineNum;
 
 // advance state when new line is encountered
-void EM_newline( );
+void EM_newline( t_CKINT pos );
 
 
 //-----------------------------------------------------------------------------
@@ -162,6 +163,15 @@ void ck_set_stderr_callback( void (*callback)(const char *) );
 extern "C++"
 {
 #include <sstream>
+
+// forward reference | 1.5.0.5 (ge) added
+class ChucK;
+
+// set current ChucK; used to query params | 1.5.0.5
+void EM_set_current_chuck( ChucK * ck );
+
+
+
 
 //-----------------------------------------------------------------------------
 // c++: custom stream-like thing | REFACTOR-2017 (jack)

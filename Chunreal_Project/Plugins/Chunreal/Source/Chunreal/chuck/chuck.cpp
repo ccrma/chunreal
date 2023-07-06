@@ -48,6 +48,7 @@
 #include "util_network.h"
 #endif
 
+#include "util_platforms.h"
 #include "util_string.h"
 #include "ugen_stk.h"
 
@@ -88,7 +89,8 @@
 #define CHUCK_PARAM_USER_CHUGINS_DEFAULT        std::list<std::string>()
 #define CHUCK_PARAM_USER_CHUGIN_DIRECTORIES_DEFAULT std::list<std::string>()
 #define CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR_DEFAULT "1"
-#define CHUCK_PARAM_COLOR_TERMINAL_OUTPUT_DEFAULT  "0"
+#define CHUCK_PARAM_TTY_COLOR_DEFAULT              "0"
+#define CHUCK_PARAM_TTY_WIDTH_HINT_DEFAULT         "80"
 
 
 
@@ -165,7 +167,7 @@ ChucK::~ChucK()
     // decrement the numChucKs
     o_numVMs--;
     // clean up the carrier
-    SAFE_DELETE( m_carrier );
+    CK_SAFE_DELETE( m_carrier );
 }
 
 
@@ -216,7 +218,8 @@ void ChucK::initDefaultParams()
     m_listParams[CHUCK_PARAM_USER_CHUGIN_DIRECTORIES] = CHUCK_PARAM_USER_CHUGIN_DIRECTORIES_DEFAULT;
     m_params[CHUCK_PARAM_HINT_IS_REALTIME_AUDIO] = CHUCK_PARAM_HINT_IS_REALTIME_AUDIO_DEFAULT;
     m_params[CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR] = CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR_DEFAULT;
-    m_params[CHUCK_PARAM_COLOR_TERMINAL_OUTPUT] = CHUCK_PARAM_COLOR_TERMINAL_OUTPUT_DEFAULT;
+    m_params[CHUCK_PARAM_TTY_COLOR] = CHUCK_PARAM_TTY_COLOR_DEFAULT;
+    m_params[CHUCK_PARAM_TTY_WIDTH_HINT] = CHUCK_PARAM_TTY_WIDTH_HINT_DEFAULT;
 
     ck_param_types[CHUCK_PARAM_SAMPLE_RATE]              = ck_param_int;
     ck_param_types[CHUCK_PARAM_INPUT_CHANNELS]           = ck_param_int;
@@ -235,7 +238,8 @@ void ChucK::initDefaultParams()
     ck_param_types[CHUCK_PARAM_USER_CHUGIN_DIRECTORIES]  = ck_param_string_list;
     ck_param_types[CHUCK_PARAM_HINT_IS_REALTIME_AUDIO]   = ck_param_int;
     ck_param_types[CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR] = ck_param_int;
-    ck_param_types[CHUCK_PARAM_COLOR_TERMINAL_OUTPUT]    = ck_param_int;
+    ck_param_types[CHUCK_PARAM_TTY_COLOR]                = ck_param_int;
+    ck_param_types[CHUCK_PARAM_TTY_WIDTH_HINT]           = ck_param_int;
 }
 
 
@@ -250,10 +254,15 @@ t_CKBOOL ChucK::setParam( const std::string & name, t_CKINT value )
     if( m_params.count( name ) > 0 && ck_param_types[name] == ck_param_int )
     {
         // check and set
-        if( name == CHUCK_PARAM_COLOR_TERMINAL_OUTPUT )
+        if( name == CHUCK_PARAM_TTY_COLOR )
         {
             // set the global override switch
             TC::globalDisableOverride( !value );
+        }
+        else if( name == CHUCK_PARAM_TTY_WIDTH_HINT )
+        {
+            // set default
+            ck_ttywidth_setdefault( value );
         }
 
         // insert into map
@@ -548,7 +557,7 @@ t_CKBOOL ChucK::initCompiler()
         // make c++ string
         cwd = std::string(cstr_cwd);
         // reclaim memory from getcwd
-        SAFE_FREE(cstr_cwd);
+        CK_SAFE_FREE(cstr_cwd);
         // add trailing "/"
         cwd += '/';
         // deferring this step until later, and only for Windows
@@ -877,7 +886,7 @@ t_CKBOOL ChucK::shutdown()
         // wait for it to stop...
         while( m_carrier->vm->running() )
         {
-            usleep(1000);
+            ck_usleep(1000);
         }
     }
 
@@ -921,8 +930,8 @@ t_CKBOOL ChucK::shutdown()
     // ensure we have a carrier
     if( m_carrier != NULL )
     {
-        SAFE_RELEASE( m_carrier->chout );
-        SAFE_RELEASE( m_carrier->cherr );
+        CK_SAFE_RELEASE( m_carrier->chout );
+        CK_SAFE_RELEASE( m_carrier->cherr );
     }
     // relock
     Chuck_VM_Object::lock_all();
@@ -931,8 +940,8 @@ t_CKBOOL ChucK::shutdown()
     if( m_carrier != NULL )
     {
         // clean up vm, compiler
-        SAFE_DELETE( m_carrier->vm );
-        SAFE_DELETE( m_carrier->compiler );
+        CK_SAFE_DELETE( m_carrier->vm );
+        CK_SAFE_DELETE( m_carrier->compiler );
         m_carrier->env = NULL;
     }
 
@@ -965,7 +974,7 @@ t_CKBOOL ChucK::compileFile( const std::string & path,
     if( !m_carrier->compiler )
     {
         // error
-        EM_error2( 0, "compileFile() invoked before initialization ..." );
+        EM_error2( 0, "compileFile() invoked before initialization..." );
         return false;
     }
 
@@ -1080,13 +1089,13 @@ error: // 1.5.0.0 (ge) added
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::compileCode( const std::string & code,
                              const std::string & argsTogether,
-                             t_CKINT count )
+                             t_CKINT count, t_CKBOOL immediate )
 {
     // sanity check
     if( !m_carrier->compiler )
     {
         // error
-        EM_error2( 0, "compileCode() invoked before initialization ..." );
+        EM_error2( 0, "compileCode() invoked before initialization..." );
         return false;
     }
 
@@ -1144,8 +1153,9 @@ t_CKBOOL ChucK::compileCode( const std::string & code,
     while( count-- )
     {
 #ifndef __EMSCRIPTEN__
-        // spork (for now, spork_immediate arg is always false)
-        shred = m_carrier->vm->spork( vm_code, NULL, FALSE );
+        // spork | 1.5.0.5 (ge) added immediate arg defaulting to TRUE
+        // previously the immediate flag was always FALSE
+        shred = m_carrier->vm->spork( vm_code, NULL, immediate );
 #else
         // spork (in emscripten, need to spork immediately so can get shred id)
         shred = m_carrier->vm->spork( vm_code, NULL, TRUE );
@@ -1429,5 +1439,5 @@ Chuck_DL_MainThreadHook * ChucK::getMainThreadHook()
 //-----------------------------------------------------------------------------
 void ChucK::toggleGlobalColorTextoutput( t_CKBOOL onOff )
 {
-    this->setParam( CHUCK_PARAM_COLOR_TERMINAL_OUTPUT, onOff );
+    this->setParam( CHUCK_PARAM_TTY_COLOR, onOff );
 }

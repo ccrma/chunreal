@@ -275,7 +275,7 @@ private:
 
 public:
     CKDocHTMLOutput( Chuck_VM * vm )
-        : m_vm_ref(vm), m_func(NULL)
+      : m_func(NULL), m_vm_ref(vm)
     {
         // get the env
         m_env_ref = vm != NULL ? vm->env() : NULL;
@@ -514,20 +514,20 @@ public:
     {
         // return type
         m_outputStr += "<div class=\"member\">\n<p class=\"member_declaration\"><span class=\""
-                     + css_class_for_type(m_env_ref, func->def->ret_type) + "\">"
-                    + func->def->ret_type->name;
+                     + css_class_for_type(m_env_ref, func->def()->ret_type) + "\">"
+                    + func->def()->ret_type->name;
         // check array
-        if( func->def->ret_type->array_depth )
+        if( func->def()->ret_type->array_depth )
         {
             m_outputStr += "</span>";
             m_outputStr += "<span class=\"typename\">";
-            for(int i = 0; i < func->def->ret_type->array_depth; i++)
+            for(int i = 0; i < func->def()->ret_type->array_depth; i++)
                 m_outputStr += "[]";
         }
         m_outputStr += "</span> ";
 
         // function name
-        m_outputStr += "<span class=\"membername\">" + string(S_name(func->def->name)) + "</span>(";
+        m_outputStr += "<span class=\"membername\">" + string(S_name(func->def()->name)) + "</span>(";
 
         m_func = func;
     }
@@ -550,20 +550,20 @@ public:
     {
         // return type
         m_outputStr += "<div class=\"member\">\n<p class=\"member_declaration\"><span class=\""
-                     + css_class_for_type(m_env_ref, func->def->ret_type)
-                     + "\">" + func->def->ret_type->name.c_str();
+                     + css_class_for_type(m_env_ref, func->def()->ret_type)
+                     + "\">" + func->def()->ret_type->name.c_str();
         // check array
-        if( func->def->ret_type->array_depth )
+        if( func->def()->ret_type->array_depth )
         {
             m_outputStr += "</span>";
             m_outputStr += "<span class=\"typename\">";
-            for(int i = 0; i < func->def->ret_type->array_depth; i++)
+            for(int i = 0; i < func->def()->ret_type->array_depth; i++)
                 m_outputStr += "[]";
         }
         m_outputStr += "</span> ";
 
         // function name
-        m_outputStr += "<span class=\"membername\">" + string(S_name(func->def->name)) + "</span>(";
+        m_outputStr += "<span class=\"membername\">" + string(S_name(func->def()->name)) + "</span>(";
 
         m_func = func;
     }
@@ -759,10 +759,10 @@ void CKDoc::clearGroups()
         for( t_CKINT j = 0; j < m_groups[i]->types.size(); j++ )
         {
             // release ref count
-            SAFE_RELEASE( m_groups[i]->types[j] );
+            CK_SAFE_RELEASE( m_groups[i]->types[j] );
         }
         // deallocate the group struct
-        SAFE_DELETE( m_groups[i] );
+        CK_SAFE_DELETE( m_groups[i] );
     }
 
     // clear the arrar
@@ -781,7 +781,7 @@ void CKDoc::clearOutput()
     // reste
     m_format = FORMAT_NONE;
     // deallocate
-    SAFE_DELETE( m_output );
+    CK_SAFE_DELETE( m_output );
 }
 
 
@@ -831,7 +831,7 @@ t_CKBOOL CKDoc::addGroup( const vector<Chuck_Type *> & types, const string & nam
         if( types[i] == NULL ) continue;
 
         // ref count
-        SAFE_ADD_REF( types[i] );
+        CK_SAFE_ADD_REF( types[i] );
         // append
         group->types.push_back( types[i] );
     }
@@ -1193,7 +1193,7 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
             // first one
             func_names[func->name] = 1;
             // static or instance?
-            if(func->def->static_decl == ae_key_static) sfuncs.push_back(func);
+            if(func->def()->static_decl == ae_key_static) sfuncs.push_back(func);
             else mfuncs.push_back(func);
         }
 
@@ -1240,7 +1240,7 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
                 // begin output
                 output->begin_static_member_func(func);
                 // argument list
-                a_Arg_List args = func->def->arg_list;
+                a_Arg_List args = func->def()->arg_list;
                 while(args != NULL)
                 {
                     // output argument
@@ -1267,7 +1267,7 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
                 // begin the func
                 output->begin_member_func(func);
                 // argument list
-                a_Arg_List args = func->def->arg_list;
+                a_Arg_List args = func->def()->arg_list;
                 while(args != NULL)
                 {
                     // output argument
@@ -1370,7 +1370,7 @@ CK_DLL_CTOR( CKDoc_ctor )
 CK_DLL_DTOR( CKDoc_dtor )
 {
     CKDoc * ckdoc = (CKDoc *)OBJ_MEMBER_UINT( SELF, CKDoc_offset_data );
-    SAFE_DELETE( ckdoc );
+    CK_SAFE_DELETE( ckdoc );
     OBJ_MEMBER_UINT( SELF, CKDoc_offset_data ) = 0;
 }
 

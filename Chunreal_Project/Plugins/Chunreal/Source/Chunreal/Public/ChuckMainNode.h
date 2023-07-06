@@ -53,18 +53,24 @@ namespace Metasound
         void Execute();
 
     private:
+        //local variables
+        FTriggerReadRef Trigger;
+        FStringReadRef Code;
+        FStringReadRef ID;
+
+        //audio input
         FAudioBufferReadRef  AudioInputLeft;
         FAudioBufferReadRef  AudioInputRight;
+
+        //amplitude
+        FFloatReadRef Amplitude;
+
+        //audio output
         FAudioBufferWriteRef AudioOutputLeft;
         FAudioBufferWriteRef AudioOutputRight;
 
         float* inBufferInterleaved;
         float* outBufferInterleaved;
-
-        FTriggerReadRef Trigger;
-        FStringReadRef Code;
-        FStringReadRef ID;
-        FFloatReadRef Amplitude;
 
         //reference to chuck
         ChucK* theChuck = nullptr;

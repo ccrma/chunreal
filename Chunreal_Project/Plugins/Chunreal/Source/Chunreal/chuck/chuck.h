@@ -69,7 +69,7 @@
 
 // ChucK version string -- retrieve using ChucK::version()
 // 1.5.0.0 (ge) | moved here for at-a-glance visibility (e.g., for chugins)
-#define CHUCK_VERSION_STRING                "1.5.0.5-dev (chai)"
+#define CHUCK_VERSION_STRING                "1.5.0.5 (chai)"
 
 // ChucK param names -- used in setParam(...) and getParam*(...)
 #define CHUCK_PARAM_SAMPLE_RATE                 "SAMPLE_RATE"
@@ -89,7 +89,8 @@
 #define CHUCK_PARAM_USER_CHUGIN_DIRECTORIES     "USER_CHUGIN_DIRECTORIES"
 #define CHUCK_PARAM_HINT_IS_REALTIME_AUDIO      "HINT_IS_REALTIME_AUDIO"
 #define CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR "COMPILER_HIGHLIGHT_ON_ERROR"
-#define CHUCK_PARAM_COLOR_TERMINAL_OUTPUT       "COLOR_TERMINAL_OUTPUT"
+#define CHUCK_PARAM_TTY_COLOR                   "TTY_COLOR"
+#define CHUCK_PARAM_TTY_WIDTH_HINT              "TTY_WIDTH_HINT"
 
 
 
@@ -123,7 +124,7 @@ public:
     // compile a file (can be called anytime)
     t_CKBOOL compileFile( const std::string & path, const std::string & argsTogether, t_CKINT count = 1 );
     // compile code directly
-    t_CKBOOL compileCode( const std::string & code, const std::string & argsTogether, t_CKINT count = 1 );
+    t_CKBOOL compileCode( const std::string & code, const std::string & argsTogether, t_CKINT count = 1, t_CKBOOL immediate = TRUE );
 
 public:
     // initialize ChucK (using params)

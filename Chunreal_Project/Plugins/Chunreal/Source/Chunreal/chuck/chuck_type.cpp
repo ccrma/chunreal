@@ -31,17 +31,17 @@
 //       Autumn 2005 - rewrite
 //-----------------------------------------------------------------------------
 #include "chuck_type.h"
-#include "chuck_parse.h"
-#include "chuck_scan.h"
 #include "chuck_compile.h"
-#include "chuck_instr.h"
-#include "chuck_vm.h"
 #include "chuck_errmsg.h"
+#include "chuck_instr.h"
 #include "chuck_io.h"
 #include "chuck_lang.h"
+#include "chuck_parse.h"
+#include "chuck_scan.h"
 #include "chuck_symbol.h"
-#include "util_string.h"
+#include "chuck_vm.h"
 #include "ugen_xxx.h"
+#include "util_string.h"
 
 #include <sstream>
 #include <algorithm>
@@ -96,6 +96,9 @@ t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def );
 // helpers
 a_Func_Def make_dll_as_fun( Chuck_DL_Func * dl_fun, t_CKBOOL is_static,
                             t_CKBOOL is_base_primtive );
+// make a partial deep copy, to separate type systems from AST
+a_Func_Def partial_deep_copy_fn( a_Func_Def f );
+a_Arg_List partial_deep_copy_args( a_Arg_List args );
 
 
 
@@ -109,11 +112,11 @@ Chuck_Env::Chuck_Env( )
     // lock from being deleted
     global_context.lock();
     // make reference
-    context = &global_context; SAFE_ADD_REF(context);
+    context = &global_context; CK_SAFE_ADD_REF(context);
     // make name
     context->filename = "@[global]";
     // remember
-    global_nspc = global_context.nspc; SAFE_ADD_REF(global_nspc);
+    global_nspc = global_context.nspc; CK_SAFE_ADD_REF(global_nspc);
     // deprecated stuff
     deprecated.clear(); deprecate_level = 1;
     // zero out
@@ -232,29 +235,29 @@ void Chuck_Env::cleanup()
 
     // unlock each internal object type | 1.5.0.0 (ge) added
     // 1.5.0.1 (ge) re-ordered: parent dependencies are cleaned up later
-    SAFE_UNLOCK_DELETE(t_void);
-    SAFE_UNLOCK_DELETE(t_int);
-    SAFE_UNLOCK_DELETE(t_float);
-    SAFE_UNLOCK_DELETE(t_time);
-    SAFE_UNLOCK_DELETE(t_dur);
-    SAFE_UNLOCK_DELETE(t_complex);
-    SAFE_UNLOCK_DELETE(t_polar);
-    SAFE_UNLOCK_DELETE(t_vec3);
-    SAFE_UNLOCK_DELETE(t_vec4);
-    SAFE_UNLOCK_DELETE(t_fileio);
-    SAFE_UNLOCK_DELETE(t_chout);
-    SAFE_UNLOCK_DELETE(t_cherr);
-    SAFE_UNLOCK_DELETE(t_io);
-    SAFE_UNLOCK_DELETE(t_dac);
-    SAFE_UNLOCK_DELETE(t_adc);
-    SAFE_UNLOCK_DELETE(t_ugen);
-    SAFE_UNLOCK_DELETE(t_uanablob);
-    SAFE_UNLOCK_DELETE(t_uana);
-    SAFE_UNLOCK_DELETE(t_function);
-    SAFE_UNLOCK_DELETE(t_string);
-    SAFE_UNLOCK_DELETE(t_shred);
-    SAFE_UNLOCK_DELETE(t_event);
-    SAFE_UNLOCK_DELETE(t_array);
+    CK_SAFE_UNLOCK_DELETE(t_void);
+    CK_SAFE_UNLOCK_DELETE(t_int);
+    CK_SAFE_UNLOCK_DELETE(t_float);
+    CK_SAFE_UNLOCK_DELETE(t_time);
+    CK_SAFE_UNLOCK_DELETE(t_dur);
+    CK_SAFE_UNLOCK_DELETE(t_complex);
+    CK_SAFE_UNLOCK_DELETE(t_polar);
+    CK_SAFE_UNLOCK_DELETE(t_vec3);
+    CK_SAFE_UNLOCK_DELETE(t_vec4);
+    CK_SAFE_UNLOCK_DELETE(t_fileio);
+    CK_SAFE_UNLOCK_DELETE(t_chout);
+    CK_SAFE_UNLOCK_DELETE(t_cherr);
+    CK_SAFE_UNLOCK_DELETE(t_io);
+    CK_SAFE_UNLOCK_DELETE(t_dac);
+    CK_SAFE_UNLOCK_DELETE(t_adc);
+    CK_SAFE_UNLOCK_DELETE(t_ugen);
+    CK_SAFE_UNLOCK_DELETE(t_uanablob);
+    CK_SAFE_UNLOCK_DELETE(t_uana);
+    CK_SAFE_UNLOCK_DELETE(t_function);
+    CK_SAFE_UNLOCK_DELETE(t_string);
+    CK_SAFE_UNLOCK_DELETE(t_shred);
+    CK_SAFE_UNLOCK_DELETE(t_event);
+    CK_SAFE_UNLOCK_DELETE(t_array);
 
     // Type and Object types go last, as every other ChucK_Type are also these
     // t_class and t_object have mutual dependencies, e.g.,
@@ -264,11 +267,11 @@ void Chuck_Env::cleanup()
     // part 1: save the parent reference
     Chuck_Type * skip = t_object->type_ref != NULL ? t_object->type_ref->parent : NULL;
     // free the Type type
-    SAFE_UNLOCK_DELETE(t_class);
+    CK_SAFE_UNLOCK_DELETE(t_class);
     // part 2: break the dependency manually | 1.5.0.1 (ge) added
     t_object->type_ref = skip;
     // finally, free the Object type
-    SAFE_UNLOCK_DELETE(t_object);
+    CK_SAFE_UNLOCK_DELETE(t_object);
 }
 
 
@@ -316,8 +319,8 @@ void Chuck_Env::load_user_namespace()
     user_nspc = new Chuck_Namespace;
     user_nspc->name = "[user]";
     user_nspc->parent = global_nspc;
-    SAFE_ADD_REF(global_nspc);
-    SAFE_ADD_REF(user_nspc);
+    CK_SAFE_ADD_REF(global_nspc);
+    CK_SAFE_ADD_REF(user_nspc);
 }
 
 
@@ -329,8 +332,8 @@ void Chuck_Env::load_user_namespace()
 //-----------------------------------------------------------------------------
 void Chuck_Env::clear_user_namespace()
 {
-    if (user_nspc) SAFE_RELEASE(user_nspc->parent);
-    SAFE_RELEASE(user_nspc);
+    if (user_nspc) CK_SAFE_RELEASE(user_nspc->parent);
+    CK_SAFE_RELEASE(user_nspc);
     load_user_namespace();
     this->reset();
 }
@@ -409,7 +412,7 @@ t_CKBOOL type_engine_init_special( Chuck_Env * env, Chuck_Type * objT )
     // ensure namespace allocation
     if( objT->info == NULL )
     {
-        EM_error3( "[chuck]: internal error initializing base class '%s'...", objT->name.c_str() );
+        EM_error3( "[chuck]: internal error initializing base class '%s'", objT->name.c_str() );
         return FALSE;
     }
 
@@ -560,7 +563,7 @@ Chuck_Env * type_engine_init( Chuck_Carrier * carrier )
     env->global()->value.add( "true", new Chuck_Value( env->t_int, "true", new t_CKINT(1), TRUE ) );
     env->global()->value.add( "false", new Chuck_Value( env->t_int, "false", new t_CKINT(0), TRUE ) );
     env->global()->value.add( "maybe", new Chuck_Value( env->t_int, "maybe", new t_CKFLOAT(.5), FALSE ) );
-    env->global()->value.add( "pi", new Chuck_Value( env->t_float, "pi", new t_CKFLOAT(ONE_PI), TRUE ) );
+    env->global()->value.add( "pi", new Chuck_Value( env->t_float, "pi", new t_CKFLOAT(CK_ONE_PI), TRUE ) );
     env->global()->value.add( "global", new Chuck_Value( env->t_class, "global", env->global(), TRUE ) );
     env->global()->value.add( "chout", new Chuck_Value( env->t_io, "chout", new Chuck_IO_Chout( carrier ), TRUE ) );
     env->global()->value.add( "cherr", new Chuck_Value( env->t_io, "cherr", new Chuck_IO_Cherr( carrier ), TRUE ) );
@@ -671,7 +674,7 @@ void type_engine_shutdown( Chuck_Env * env )
     EM_log( CK_LOG_SEVERE, "shutting down type checker..." );
 
     // shut it down
-    SAFE_DELETE( env );
+    CK_SAFE_DELETE( env );
 
     // log
     EM_log( CK_LOG_SEVERE, "type checker shutdown complete." );
@@ -797,7 +800,7 @@ t_CKBOOL type_engine_check_context( Chuck_Env * env,
     if( !env->context )
     {
         // error
-        EM_error2( 0, "internal error: env->context NULL!" );
+        EM_error2( 0, "(internal error) env->context NULL!" );
         ret = FALSE; goto done;
     }
 
@@ -806,7 +809,7 @@ t_CKBOOL type_engine_check_context( Chuck_Env * env,
     if( !prog )
     {
         // error
-        EM_error2( 0, "internal error: context->parse_tree NULL!" );
+        EM_error2( 0, "(internal error) context->parse_tree NULL!" );
         ret = FALSE; goto done;
     }
 
@@ -837,8 +840,8 @@ t_CKBOOL type_engine_check_context( Chuck_Env * env,
             break;
 
         default:
-            EM_error2( prog->linepos,
-                "internal error: unrecognized program section in type checker..." );
+            EM_error2( prog->where,
+                "(internal error) unrecognized program section in type checker..." );
             ret = FALSE;
             break;
         }
@@ -916,14 +919,27 @@ t_CKBOOL type_engine_unload_context( Chuck_Env * env )
     // make sure
     assert( env->context != NULL );
     assert( env->contexts.size() != 0 );
+
     // log
-    EM_log( CK_LOG_FINER, "unloading context '%s'...",
-        env->context->filename.c_str() );
+    EM_log( CK_LOG_FINER, "unloading context '%s'...", env->context->filename.c_str() );
+
     // push indent
     EM_pushlog();
-    EM_log( CK_LOG_FINER, "restoring context '%s'...",
-        env->contexts.back()->filename.c_str() );
-    // assert( env->context->has_error == FALSE );
+
+    // log
+    EM_log( CK_LOG_FINER, "decoupling namespace from AST..." );
+    // decouple from AST, so we don't have references to deleted nodes
+    // after AST cleanup | 1.5.0.5 (ge) added
+    env->context->decouple_ast();
+    // removing reference to AST tree, which is cleaned up elsewhere
+    // see cleanup_AST() in the parser | 1.5.0.5 (ge) added
+    env->context->parse_tree = NULL;
+    // removing reference to public_class_def
+    // this should only be used during compilation | 1.5.0.5 (ge) added
+    env->context->public_class_def = NULL;
+
+    // log
+    EM_log( CK_LOG_FINER, "restoring context '%s'...", env->contexts.back()->filename.c_str() );
     // pop the context scope
     env->context->nspc->value.pop();
     // restore the current namespace
@@ -1065,7 +1081,7 @@ t_CKBOOL type_engine_check_stmt( Chuck_Env * env, a_Stmt stmt )
             break;
 
         default:
-            EM_error2( stmt->linepos,
+            EM_error2( stmt->where,
                 "internal compiler error - no stmt type '%i'!", stmt->s_type );
             ret = FALSE;
             break;
@@ -1101,7 +1117,7 @@ t_CKBOOL type_engine_check_if( Chuck_Env * env, a_Stmt_If stmt )
         if( isa( stmt->cond->type, env->t_io ) ) break;
 
         // error
-        EM_error2( stmt->cond->linepos,
+        EM_error2( stmt->cond->where,
             "invalid type '%s' in if condition", stmt->cond->type->name.c_str() );
         return FALSE;
     }
@@ -1139,11 +1155,11 @@ t_CKBOOL type_engine_check_for( Chuck_Env * env, a_Stmt_For stmt )
     if( stmt->c2 == NULL )
     {
         // error
-        EM_error2( stmt->linepos,
+        EM_error2( stmt->where,
                   "empty for loop condition..." );
-        EM_error2( stmt->linepos,
+        EM_error2( 0,
                   "...(note: explicitly use 'true' if it's the intent)" );
-        EM_error2( stmt->linepos,
+        EM_error2( 0,
                   "...(e.g., 'for( ; true; ){ /*...*/ }')" );
         return FALSE;
     }
@@ -1162,7 +1178,7 @@ t_CKBOOL type_engine_check_for( Chuck_Env * env, a_Stmt_For stmt )
         if( isa( stmt->c2->stmt_exp->type, env->t_io ) ) break;
 
         // error
-        EM_error2( stmt->c2->stmt_exp->linepos,
+        EM_error2( stmt->c2->stmt_exp->where,
             "invalid type '%s' in for condition", stmt->c2->stmt_exp->type->name.c_str() );
         return FALSE;
     }
@@ -1213,7 +1229,7 @@ t_CKBOOL type_engine_check_while( Chuck_Env * env, a_Stmt_While stmt )
         if( isa( stmt->cond->type, env->t_io ) ) break;
 
         // error
-        EM_error2( stmt->cond->linepos,
+        EM_error2( stmt->cond->where,
             "invalid type '%s' in while condition", stmt->cond->type->name.c_str() );
         return FALSE;
     }
@@ -1259,7 +1275,7 @@ t_CKBOOL type_engine_check_until( Chuck_Env * env, a_Stmt_Until stmt )
         if( isa( stmt->cond->type, env->t_io ) ) break;
 
         // error
-        EM_error2( stmt->cond->linepos,
+        EM_error2( stmt->cond->where,
             "invalid type '%s' in until condition", stmt->cond->type->name.c_str() );
         return FALSE;
     }
@@ -1299,8 +1315,8 @@ t_CKBOOL type_engine_check_loop( Chuck_Env * env, a_Stmt_Loop stmt )
     }
     else if( !isa( type, env->t_int ) ) // must be int
     {
-        EM_error2( stmt->linepos,
-            "loop * conditional must be of type 'int'..." );
+        EM_error2( stmt->where,
+            "loop * conditional must be of type 'int'" );
         return FALSE;
     }
 
@@ -1328,7 +1344,7 @@ t_CKBOOL type_engine_check_loop( Chuck_Env * env, a_Stmt_Loop stmt )
 t_CKBOOL type_engine_check_switch( Chuck_Env * env, a_Stmt_Switch stmt )
 {
     // TODO: implement this
-    EM_error2( stmt->linepos, "switch not implemented..." );
+    EM_error2( stmt->where, "switch not implemented" );
 
     return FALSE;
 }
@@ -1345,8 +1361,8 @@ t_CKBOOL type_engine_check_break( Chuck_Env * env, a_Stmt_Break br )
     // check to see if inside valid stmt
     if( env->breaks.size() <= 0 )
     {
-        EM_error2( br->linepos,
-            "'break' found outside of for/while/until/switch..." );
+        EM_error2( br->where,
+            "'break' found outside of for/while/until/switch" );
         return FALSE;
     }
 
@@ -1365,8 +1381,8 @@ t_CKBOOL type_engine_check_continue( Chuck_Env * env, a_Stmt_Continue cont )
     // check to see if inside valid loop
     if( env->breaks.size() <= 0 )
     {
-        EM_error2( cont->linepos,
-            "'continue' found outside of for/while/until..." );
+        EM_error2( cont->where,
+            "'continue' found outside of for/while/until" );
         return FALSE;
     }
 
@@ -1387,7 +1403,7 @@ t_CKBOOL type_engine_check_return( Chuck_Env * env, a_Stmt_Return stmt )
     // check to see if within function definition
     if( !env->func )
     {
-        EM_error2( stmt->linepos,
+        EM_error2( stmt->where,
             "'return' statement found outside function definition" );
         return FALSE;
     }
@@ -1399,11 +1415,11 @@ t_CKBOOL type_engine_check_return( Chuck_Env * env, a_Stmt_Return stmt )
         ret_type = env->t_void;
 
     // check to see that return type matches the prototype
-    if( ret_type && !isa( ret_type, env->func->def->ret_type ) )
+    if( ret_type && !isa( ret_type, env->func->def()->ret_type ) )
     {
-        EM_error2( stmt->linepos,
+        EM_error2( stmt->where,
             "function '%s' was defined with return type '%s' -- but returning type '%s'",
-            env->func->name.c_str(), env->func->def->ret_type->c_name(),
+            env->func->name.c_str(), env->func->def()->ret_type->c_name(),
             ret_type->c_name() );
         return FALSE;
     }
@@ -1494,6 +1510,8 @@ t_CKTYPE type_engine_check_exp( Chuck_Env * env, a_Exp exp )
             curr->type = type_engine_check_exp_func_call( env, &curr->func_call );
             // set the return type
             curr->func_call.ret_type = curr->type;
+            // add reference | 1.5.0.5
+            CK_SAFE_ADD_REF( curr->func_call.ret_type );
         break;
 
         case ae_exp_dot_member:
@@ -1509,8 +1527,8 @@ t_CKTYPE type_engine_check_exp( Chuck_Env * env, a_Exp exp )
         break;
 
         default:
-            EM_error2( curr->linepos,
-                "internal compiler error - no expression type '%i'...",
+            EM_error2( curr->where,
+                "internal compiler error - no expression type '%i'",
                 curr->s_type );
             return NULL;
         }
@@ -1574,7 +1592,7 @@ t_CKBOOL type_engine_ensure_no_multi_decl( a_Exp exp, const char * op_str )
     if( exp->s_type == ae_exp_decl && exp->decl.num_var_decls > 1 )
     {
         // multiple declarations on left side
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "cannot '%s' from/to a multi-variable declaration", op_str );
         return FALSE;
     }
@@ -1608,8 +1626,8 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
     if( (lhs->next && op != ae_op_chuck /*&& !isa( right, env->t_function)*/ ) || rhs->next )
     {
         // TODO: implement this
-        EM_error2( lhs->linepos,
-            "multi-value (%s) operation not supported/implemented...",
+        EM_error2( lhs->where,
+            "multi-value (%s) operation not supported/implemented",
             op2str(op));
         return NULL;
     }
@@ -1625,7 +1643,7 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
             if( op == ae_op_arrow_right && lhs->s_meta != ae_meta_var )
             {
                 // error
-                EM_error2( rhs->linepos,
+                EM_error2( rhs->where,
                     "cannot perform I/O assignment via '->' to non-mutable value" );
                 return NULL;
             }
@@ -1792,12 +1810,12 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
     case ae_op_divide_chuck:
     case ae_op_percent_chuck:
         if( isa( left, env->t_object ) ) {
-            EM_error2( lhs->linepos, "cannot perform '%s' on object references...",
+            EM_error2( binary->where, "cannot perform '%s' on object references",
                 op2str(op) );
             return NULL;
         }
         if( isa( right, env->t_object ) ) {
-            EM_error2( lhs->linepos, "cannot perform '%s' on object references...",
+            EM_error2( binary->where, "cannot perform '%s' on object references",
                 op2str(op) );
             return NULL;
         }
@@ -1822,10 +1840,10 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
         // make sure mutable
         if( rhs->s_meta != ae_meta_var )
         {
-            EM_error2( lhs->linepos,
+            EM_error2( lhs->where,
                 "cannot assign '%s' on types '%s' %s '%s'...",
                 op2str( op ), left->c_name(), op2str( op ), right->c_name() );
-            EM_error2( lhs->linepos,
+            EM_error2( lhs->where,
                 " |- reason: right-side operand is not mutable)" );
             return NULL;
         }
@@ -1966,7 +1984,7 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
             else if( isa( right, env->t_string ) ) return left;
             else // error
             {
-                EM_error2( lhs->linepos, "on suitable IO action for '%s' <= '%s'...",
+                EM_error2( lhs->where, "on suitable IO action for '%s' <= '%s'",
                     left->c_name(), right->c_name() );
                 return NULL;
             }
@@ -2034,7 +2052,7 @@ t_CKTYPE type_engine_check_op( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp
     }
 
     // no match
-    EM_error2( lhs->linepos,
+    EM_error2( lhs->where,
         "cannot resolve operator '%s' on types '%s' and '%s'",
         op2str( op ), left->c_name(), right->c_name() );
     return NULL;
@@ -2056,14 +2074,14 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
     if( isa( right, env->t_function ) )
     {
         // treat this function call
-        return type_engine_check_exp_func_call( env, rhs, lhs, binary->ck_func, binary->linepos );
+        return type_engine_check_exp_func_call( env, rhs, lhs, binary->ck_func, binary->where );
     }
 
     // multi-value not supported beyond this for now
     if( lhs->next || rhs->next )
     {
-        EM_error2( lhs->linepos,
-            "multi-value (=>) operation not supported/implemented..." );
+        EM_error2( lhs->where,
+            "multi-value (=>) operation not supported/implemented" );
         return NULL;
     }
 
@@ -2081,14 +2099,14 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
 
             if( left->array_depth > 1 )
             {
-                EM_error2( lhs->linepos, "array ugen type has more than one dimension - can only => one-dimensional array of mono ugens" );
+                EM_error2( lhs->where, "array ugen type has more than one dimension - can only => one-dimensional array of mono ugens" );
                 return NULL;
             }
 
             if( left_ugen_type->ugen_info->num_outs > 1 )
             {
                 // error
-                EM_error2( lhs->linepos,
+                EM_error2( lhs->where,
                            "array ugen type '%s' has more than one output channel - can only => one-dimensional array of mono ugens",
                            left_ugen_type->c_name() );
                 return NULL;
@@ -2105,7 +2123,7 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
 
             if( right->array_depth > 1 )
             {
-                EM_error2( rhs->linepos,
+                EM_error2( rhs->where,
                            "array ugen type has more than one dimension - can only => one-dimensional array of mono ugens" );
                 return NULL;
             }
@@ -2113,7 +2131,7 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
             if( right_ugen_type->ugen_info->num_ins > 1 )
             {
                 // error
-                EM_error2( rhs->linepos,
+                EM_error2( rhs->where,
                            "array ugen type '%s' has more than one input channel - can only => array of mono ugens",
                            right_ugen_type->c_name() );
                 return NULL;
@@ -2128,16 +2146,16 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
         if( left_ugen_type->ugen_info->num_outs == 0 )
         {
             // error
-            EM_error2( lhs->linepos,
-                "ugen's of type '%s' have no output - cannot => to another ugen...",
+            EM_error2( lhs->where,
+                "ugen's of type '%s' have no output - cannot => to another ugen",
                 left_ugen_type->c_name() );
             return NULL;
         }
         else if( right_ugen_type->ugen_info->num_ins == 0 )
         {
             // error
-            EM_error2( rhs->linepos,
-                "ugen's of type '%s' have no input - cannot => from another ugen...",
+            EM_error2( rhs->where,
+                "ugen's of type '%s' have no input - cannot => from another ugen",
                 right_ugen_type->c_name() );
             return NULL;
         }
@@ -2166,7 +2184,7 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
         if( rhs->s_meta != ae_meta_var )
         {
             // error
-            EM_error2( rhs->linepos,
+            EM_error2( rhs->where,
                 "cannot perform I/O assignment via '=>' to non-mutable value" );
             return NULL;
         }
@@ -2216,10 +2234,10 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
                     if( v && v->is_const )
                     {
                         // error
-                        EM_error2( rhs->linepos,
+                        EM_error2( rhs->where,
                             "cannot chuck/assign => to '%s'...",
                             v->name.c_str() );
-                        EM_error2( lhs->linepos,
+                        EM_error2( lhs->where,
                             " |- reason: '%s' is a constant (and is not assignable)", v->name.c_str() );
                         return NULL;
                     }
@@ -2232,10 +2250,10 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
             }
 
             // error
-            EM_error2( lhs->linepos,
+            EM_error2( lhs->where,
                 "cannot chuck/assign '=>' on types '%s' => '%s'...",
                 left->c_name(), right->c_name() );
-            EM_error2( lhs->linepos,
+            EM_error2( lhs->where,
                 " |- reason: right-side operand is not mutable" );
             return NULL;
         }
@@ -2245,10 +2263,10 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
             // TODO: check overloading of =>
 
             // no match
-            EM_error2( lhs->linepos,
+            EM_error2( lhs->where,
                 "cannot resolve operator '=>' on types '%s' and '%s'...",
                 left->c_name(), right->c_name() );
-            EM_error2( lhs->linepos,
+            EM_error2( lhs->where,
                 "...(note: use '@=>' for object reference assignment)" );
             return NULL;
         }
@@ -2257,8 +2275,8 @@ t_CKTYPE type_engine_check_op_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs,
     // TODO: check overloading of =>
 
     // no match
-    EM_error2( lhs->linepos,
-        "cannot resolve operator '=>' on types '%s' and '%s'...",
+    EM_error2( lhs->where,
+        "cannot resolve operator '=>' on types '%s' and '%s'",
         left->c_name(), right->c_name() );
 
     return NULL;
@@ -2281,10 +2299,8 @@ t_CKTYPE type_engine_check_op_unchuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs )
     // TODO: check overloading of =<
 
     // no match
-    EM_error2( lhs->linepos,
-        "no suitable resolution for binary operator '=<'..." );
-    EM_error2( lhs->linepos,
-        "...on types '%s' and '%s'",
+    EM_error2( lhs->where,
+        "cannot resolve operator '=<' on types '%s' and '%s'",
         left->c_name(), right->c_name() );
 
     return NULL;
@@ -2307,10 +2323,8 @@ t_CKTYPE type_engine_check_op_upchuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs )
     // TODO: check overloading of =^
 
     // no match
-    EM_error2( lhs->linepos,
-        "no suitable resolution for binary operator '=^'..." );
-    EM_error2( lhs->linepos,
-        "...on types '%s' and '%s'",
+    EM_error2( lhs->where,
+        "cannot resolve operator '=^' on types '%s' and '%s'",
         left->c_name(), right->c_name() );
 
     return NULL;
@@ -2330,24 +2344,24 @@ t_CKTYPE type_engine_check_op_at_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs )
     // static
     //if( isa( left, env->t_class ) )
     //{
-    //    EM_error2( lhs->linepos,
-    //        "cannot assign '@=>' using static class as left operand..." );
+    //    EM_error2( lhs->where,
+    //        "cannot assign '@=>' using static class as left operand" );
     //    return NULL;
     //}
     //else if( isa( right, env->t_class ) )
     //{
-    //    EM_error2( rhs->linepos,
-    //        "cannot assign '@=>' using static class as right operand..." );
+    //    EM_error2( rhs->where,
+    //        "cannot assign '@=>' using static class as right operand" );
     //    return NULL;
     //}
 
     // make sure mutable
     if( rhs->s_meta != ae_meta_var )
     {
-        EM_error2( lhs->linepos,
+        EM_error2( lhs->where,
             "cannot assign '@=>' on types '%s' @=> '%s'...",
             left->c_name(), right->c_name() );
-        EM_error2( lhs->linepos,
+        EM_error2( lhs->where,
             " |- reason: right-side operand is not mutable" );
         return NULL;
     }
@@ -2364,13 +2378,13 @@ t_CKTYPE type_engine_check_op_at_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs )
         {
             // this cases like [1,2] @=> int foo[2];
             // (basically if the rhs is an array decl with non-empty dimensions)
-            EM_error2( lhs->linepos, "cannot assign '@=>' to full array declaration..." );
-            EM_error2( lhs->linepos, " |- hint: declare right-hand-side as empty array" );
+            EM_error2( lhs->where, "cannot assign '@=>' to full array declaration..." );
+            EM_error2( lhs->where, " |- hint: declare right-hand-side as empty array" );
             t_CKBOOL is_ref = isobj(env, rhs->type->array_type) && rhs->decl.type->ref;
             string varName = S_name(rhs->decl.var_decl_list->var_decl->xid);
             string brackets;
             for( t_CKINT i = 0; i < rhs->type->array_depth; i++ ) brackets += "[]";
-            EM_error2( lhs->linepos, " |- e.g., %s %s%s%s", rhs->type->name.c_str(), is_ref ? "@ " : "", varName.c_str(), brackets.c_str() );
+            EM_error2( lhs->where, " |- e.g., %s %s%s%s", rhs->type->name.c_str(), is_ref ? "@ " : "", varName.c_str(), brackets.c_str() );
             return NULL;
         }
 
@@ -2385,10 +2399,10 @@ t_CKTYPE type_engine_check_op_at_chuck( Chuck_Env * env, a_Exp lhs, a_Exp rhs )
     // primitive
     if( !isa( left, right ) )
     {
-        EM_error2( lhs->linepos,
+        EM_error2( lhs->where,
             "cannot assign '@=>' on types '%s' @=> '%s'...",
             left->c_name(), right->c_name() );
-        EM_error2( lhs->linepos,
+        EM_error2( lhs->where,
             " |- reason: incompatible types for assignment" );
         return NULL;
     }
@@ -2433,9 +2447,9 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
             // assignable?
             if( unary->exp->s_meta != ae_meta_var )
             {
-                EM_error2( unary->linepos,
+                EM_error2( unary->where,
                     "prefix unary operator '%s' cannot "
-                    "be used on non-mutable data-types...", op2str( unary->op ) );
+                    "be used on non-mutable data-types", op2str( unary->op ) );
                 return NULL;
             }
 
@@ -2466,8 +2480,8 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
             // got a problem
             else
             {
-                 EM_error2( unary->linepos,
-                     "only function calls can be sporked..." );
+                 EM_error2( unary->exp ? unary->exp->where : unary->where,
+                     "only function calls can be sporked" );
                  return NULL;
             }
         break;
@@ -2478,8 +2492,7 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
             t = type_engine_find_type( env, unary->type->xid );
             if( !t )
             {
-                EM_error2( unary->linepos,
-                    "... in 'new' expression ..." );
+                // EM_error2( 0, "...in 'new' expression " );
                 return NULL;
             }
 
@@ -2493,7 +2506,7 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
                 // if empty
                 if( !unary->array->exp_list )
                 {
-                    EM_error2( unary->linepos, "cannot use empty [] with 'new'..." );
+                    EM_error2( unary->where, "cannot use empty [] with 'new'" );
                     return NULL;
                 }
 
@@ -2520,19 +2533,18 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
             if( isa( t, env->t_int ) || isa( t, env->t_float ) || isa( t, env->t_dur )
                 || isa( t, env->t_time ) )
             {
-                EM_error2( unary->linepos,
-                    "cannot instantiate/(new) primitive type '%s'...",
+                EM_error2( unary->type->where,
+                    "cannot use 'new' on primitive type '%s'...",
                     t->c_name() );
-                EM_error2( unary->linepos,
-                    "...(primitive types: 'int', 'float', 'time', 'dur')" );
+                EM_error2( 0, "(primitive types: 'int', 'float', 'time', 'dur', etc.)" );
                 return NULL;
             }
 
             // make sure the type is not a reference
             if( unary->type->ref && !unary->array )
             {
-                EM_error2( unary->linepos,
-                    "cannot instantiate/(new) single object references (@)..." );
+                EM_error2( unary->where,
+                    "cannot use 'new' on an individual object reference (@)" );
                 return NULL;
             }
 
@@ -2544,8 +2556,8 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
     }
 
     // no match
-    EM_error2( unary->linepos,
-        "no suitable resolution for prefix unary operator '%s' on type '%s...",
+    EM_error2( unary->where,
+        "cannot resolve prefix operator '%s' on type '%s",
         op2str( unary->op ), t->c_name() );
     return NULL;
 }
@@ -2576,16 +2588,16 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
                 // in class def
                 if( !env->class_def )
                 {
-                    EM_error2( exp->linepos,
-                        "keyword 'this' can be used only inside class definition..." );
+                    EM_error2( exp->where,
+                        "keyword 'this' cannot used outside class definition" );
                     return NULL;
                 }
 
                 // in member func
                 if( env->func && !env->func->is_member )
                 {
-                    EM_error2( exp->linepos,
-                        "keyword 'this' cannot be used inside static functions..." );
+                    EM_error2( exp->where,
+                        "keyword 'this' cannot be used inside static functions" );
                     return NULL;
                 }
 
@@ -2655,7 +2667,7 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
                     {
                         // look globally
                         // v = env->curr->lookup_value( exp->var, TRUE );
-                        v = type_engine_find_value( env, S_name(exp->var), TRUE, exp->linepos );
+                        v = type_engine_find_value( env, S_name(exp->var), TRUE, exp->where );
                     }
 
                     // check
@@ -2670,8 +2682,8 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
                                 // if func static, v not
                                 if( env->func->is_static && v->is_member && !v->is_static )
                                 {
-                                    EM_error2( exp->linepos,
-                                        "non-static member '%s' used from static function...", S_name(exp->var) );
+                                    EM_error2( exp->where,
+                                        "non-static member '%s' used from static function", S_name(exp->var) );
                                     return NULL;
                                 }
                             }
@@ -2683,14 +2695,14 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
                         // checking for class scope incorrect (thanks Robin Davies)
                         if( !env->class_def /* || env->class_scope > 0 */ )
                         {
-                            EM_error2( exp->linepos,
-                                "undefined variable '%s'...", S_name(exp->var) );
+                            EM_error2( exp->where,
+                                "undefined variable '%s'", S_name(exp->var) );
                             return NULL;
                         }
                         else
                         {
-                            EM_error2( exp->linepos,
-                                "undefined variable/member '%s' in class/namespace '%s'...",
+                            EM_error2( exp->where,
+                                "undefined variable/member '%s' in class/namespace '%s'",
                                 S_name(exp->var), env->class_def->name.c_str() );
                             return NULL;
                         }
@@ -2700,8 +2712,8 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
                 // make sure v is legit as this point
                 if( !v->is_decl_checked )
                 {
-                    EM_error2( exp->linepos,
-                        "variable/member '%s' is used before declaration...",
+                    EM_error2( exp->where,
+                        "variable/member '%s' is used before declaration",
                         S_name(exp->var) );
                     return NULL;
                 }
@@ -2712,7 +2724,7 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
                 //    // check level
                 //    if( env->deprecate_level < 2 )
                 //    {
-                //        EM_error2( exp->linepos, "deprecated: '%s' --> use: '%s'...",
+                //        EM_error2( exp->where, "deprecated: '%s' --> use: '%s'",
                 //                   "pi", "Math.PI" );
                 //    }
                 // }
@@ -2737,7 +2749,7 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
         // string
         case ae_primary_str:
             // escape the thing
-            if( !escape_str( exp->str, exp->linepos ) )
+            if( !escape_str( exp->str, exp->where ) )
                 return NULL;
 
             // a string
@@ -2747,7 +2759,7 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
         // char
         case ae_primary_char:
             // check escape sequences
-            if( str2char( exp->chr, exp->linepos ) == -1 )
+            if( str2char( exp->chr, exp->where ) == -1 )
                 return NULL;
 
             // a string
@@ -2784,8 +2796,8 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
             // make sure not l-value
             if( exp->exp->s_type == ae_exp_decl )
             {
-                EM_error2( exp->linepos,
-                    "cannot use <<< >>> on variable declarations..." );
+                EM_error2( exp->where,
+                    "cannot use <<< >>> on variable declarations" );
                 return NULL;
             }
 
@@ -2799,8 +2811,8 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
 
         // no match
         default:
-            EM_error2( exp->linepos,
-                "internal error - unrecognized primary type '%i'...", exp->s_type );
+            EM_error2( exp->where,
+                "internal error - unrecognized primary type '%i'", exp->s_type );
         return NULL;
     }
 
@@ -2832,7 +2844,7 @@ t_CKTYPE type_engine_check_exp_array_lit( Chuck_Env * env, a_Exp_Primary exp )
     // can't be []
     if( !e )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
                    "must provide values/expressions for array [...]" );
         return NULL;
     }
@@ -2871,7 +2883,7 @@ t_CKTYPE type_engine_check_exp_array_lit( Chuck_Env * env, a_Exp_Primary exp )
                 else
                 {
                     // incompatible
-                    EM_error2( e->linepos, "array init [...] contains incompatible types..." );
+                    EM_error2( e->where, "array init [...] contains incompatible types" );
                     return NULL;
                 }
             }
@@ -2944,7 +2956,7 @@ t_CKTYPE type_engine_check_exp_complex_lit( Chuck_Env * env, a_Exp_Primary exp )
     // check if we have enough
     if( val->im == NULL )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "missing imaginary component in complex value...\n"
             "    --> format: #(re,im)" );
         return NULL;
@@ -2952,7 +2964,7 @@ t_CKTYPE type_engine_check_exp_complex_lit( Chuck_Env * env, a_Exp_Primary exp )
     // check if we have too much
     if( val->im->next != NULL )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "extraneous arguments in complex value...\n"
             "    --> format #(re,im)" );
         return NULL;
@@ -2968,14 +2980,14 @@ t_CKTYPE type_engine_check_exp_complex_lit( Chuck_Env * env, a_Exp_Primary exp )
     // check types
     if( !isa( type_re, env->t_float ) && !isa( type_re, env->t_int ) )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "invalid type '%s' in real component of complex value...\n"
             "    (must be of type 'int' or 'float')", type_re->c_name() );
         return NULL;
     }
     if( !isa( type_im, env->t_float ) && !isa( type_im, env->t_int ) )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "invalid type '%s' in imaginary component of complex value...\n"
             "    (must be of type 'int' or 'float')", type_im->c_name() );
         return NULL;
@@ -3009,7 +3021,7 @@ t_CKTYPE type_engine_check_exp_polar_lit( Chuck_Env * env, a_Exp_Primary exp )
     // check if we have enough
     if( val->phase == NULL )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "missing phase component in polar value...\n"
             "    --> format: %%(mag,phase)" );
         return NULL;
@@ -3017,7 +3029,7 @@ t_CKTYPE type_engine_check_exp_polar_lit( Chuck_Env * env, a_Exp_Primary exp )
     // check if we have extra
     if( val->phase->next != NULL )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "extraneous arguments in polar value...\n"
             "    --> format: %%(mag,phase)" );
         return NULL;
@@ -3037,14 +3049,14 @@ t_CKTYPE type_engine_check_exp_polar_lit( Chuck_Env * env, a_Exp_Primary exp )
     // check types
     if( !isa( type_mod, env->t_float ) && !isa( type_mod, env->t_int ) )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "invalid type '%s' in magnitude component of polar value...\n"
             "    (must be of type 'int' or 'float')", type_mod->c_name() );
         return NULL;
     }
     if( !isa( type_phase, env->t_float ) && !isa( type_phase, env->t_int ) )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
             "invalid type '%s' in phase component of polar value...\n"
             "    (must be of type 'int' or 'float')", type_phase->c_name() );
         return NULL;
@@ -3078,7 +3090,7 @@ t_CKTYPE type_engine_check_exp_vec_lit( Chuck_Env * env, a_Exp_Primary exp )
     // check if we have extra
     if( val->numdims > 4 )
     {
-        EM_error2( exp->linepos,
+        EM_error2( exp->where,
                    "vector dimensions not supported > 4...\n"
                   "    --> format: %@(x,y,z,w)" );
         return NULL;
@@ -3099,7 +3111,7 @@ t_CKTYPE type_engine_check_exp_vec_lit( Chuck_Env * env, a_Exp_Primary exp )
         if( isa( t, env->t_int ) ) e->cast_to = env->t_float;
         else if( !isa( t, env->t_float ) )
         {
-            EM_error2( exp->linepos,
+            EM_error2( exp->where,
                       "invalid type '%s' in vector value #%d...\n"
                       "    (must be of type 'int' or 'float')", t->c_name(), count );
             return NULL;
@@ -3136,16 +3148,16 @@ t_CKTYPE type_engine_check_exp_cast( Chuck_Env * env, a_Exp_Cast cast )
     t_CKTYPE t2 = type_engine_find_type( env, cast->type->xid );
     if( !t2 )
     {
-        EM_error2( cast->linepos, "... in cast expression ..." );
+        EM_error2( cast->where, "...in cast expression" );
         return NULL;
     }
 
     // check if cast valid
     if( !type_engine_check_cast_valid( env, t2, t ) )
     {
-        EM_error2( cast->linepos,
-            "invalid cast to '%s' from '%s'...",
-            S_name( cast->type->xid->xid ), t->c_name() );
+        EM_error2( cast->where,
+            "invalid cast from '%s' to '%s'",
+            t->c_name(), S_name( cast->type->xid->xid ) );
         return NULL;
     }
 
@@ -3203,7 +3215,7 @@ t_CKTYPE type_engine_check_exp_dur( Chuck_Env * env, a_Exp_Dur dur )
     // check base type
     if( !isa( base, env->t_int ) && !isa( base, env->t_float ) )
     {
-        EM_error2( dur->base->linepos,
+        EM_error2( dur->base->where,
             "invalid type '%s' in prefix of dur expression...\n"
             "    (must be of type 'int' or 'float')", base->c_name() );
         return NULL;
@@ -3212,7 +3224,7 @@ t_CKTYPE type_engine_check_exp_dur( Chuck_Env * env, a_Exp_Dur dur )
     // check unit type
     if( !isa( unit, env->t_dur ) )
     {
-        EM_error2( dur->unit->linepos,
+        EM_error2( dur->unit->where,
             "invalid type '%s' in postfix of dur expression...\n"
             "    (must be of type 'dur')", unit->c_name() );
         return NULL;
@@ -3242,8 +3254,8 @@ t_CKTYPE type_engine_check_exp_postfix( Chuck_Env * env, a_Exp_Postfix postfix )
             // assignable?
             if( postfix->exp->s_meta != ae_meta_var )
             {
-                EM_error2( postfix->exp->linepos,
-                    "postfix operator '%s' cannot be used on non-mutable data-type...",
+                EM_error2( postfix->exp->where,
+                    "postfix operator '%s' cannot be used on non-mutable data-type",
                     op2str( postfix->op ) );
                 return NULL;
             }
@@ -3258,14 +3270,14 @@ t_CKTYPE type_engine_check_exp_postfix( Chuck_Env * env, a_Exp_Postfix postfix )
 
         default:
             // no match
-            EM_error2( postfix->linepos,
+            EM_error2( postfix->where,
                 "internal compiler error: unrecognized postfix '%i'", postfix->op );
         return NULL;
     }
 
     // no match
-    EM_error2( postfix->linepos,
-        "no suitable resolutation for postfix operator '%s' on type '%s'...",
+    EM_error2( postfix->where,
+        "cannot resolve postfix operator '%s' on type '%s'",
         op2str( postfix->op ), t->c_name() );
     return NULL;
 }
@@ -3287,17 +3299,17 @@ t_CKTYPE type_engine_check_exp_if( Chuck_Env * env, a_Exp_If exp_if )
     // make sure everything good
     if( !cond || !if_exp || !else_exp )
     {
-        EM_error2( exp_if->linepos,
-                   "type system (internal) error determining types in IF expression..." );
+        EM_error2( exp_if->where,
+                   "type system (internal) error determining types in IF expression" );
         return NULL;
     }
 
     // check the type
     if( !isa( cond, env->t_int ) )
     {
-        EM_error2( exp_if->linepos,
+        EM_error2( exp_if->where,
                    "non-integer conditional type '%s' in IF expression...", cond->name.c_str() );
-        EM_error2( exp_if->linepos,
+        EM_error2( exp_if->where,
                    "...(note: check order of operation precedence)" );
         return NULL;
     }
@@ -3306,8 +3318,8 @@ t_CKTYPE type_engine_check_exp_if( Chuck_Env * env, a_Exp_If exp_if )
     // TODO: the lesser of two types
     if( !( *if_exp == *else_exp ) )
     {
-        EM_error2( exp_if->linepos,
-            "incompatible types '%s' and '%s' in if expression...",
+        EM_error2( exp_if->where,
+            "incompatible types '%s' and '%s' in if expression",
             if_exp->c_name(), else_exp->c_name() );
         return NULL;
     }
@@ -3332,8 +3344,8 @@ t_CKBOOL type_engine_check_array_subscripts( Chuck_Env * env, a_Exp exp_list )
         // if not int
         if( !isa( exp->type, env->t_int ) )
         {
-            EM_error2( exp->linepos,
-                "incompatible array subscript type '%s'...",
+            EM_error2( exp->where,
+                "incompatible array subscript type '%s'",
                 exp->type->name.c_str() );
             return FALSE;
         }
@@ -3374,8 +3386,8 @@ t_CKTYPE type_engine_check_exp_decl( Chuck_Env * env, a_Exp_Decl decl )
             value = type_engine_find_value( env->class_def->parent, var_decl->xid );
             if( value )
             {
-                EM_error2( var_decl->linepos,
-                    "'%s' has already been defined in super class '%s'...",
+                EM_error2( var_decl->where,
+                    "'%s' has already been defined in super class '%s'",
                     S_name(var_decl->xid), value->owner_class->c_name() );
                 return NULL;
             }
@@ -3429,8 +3441,8 @@ t_CKTYPE type_engine_check_exp_decl( Chuck_Env * env, a_Exp_Decl decl )
             // base scope
             if( env->class_def == NULL || env->class_scope > 0 )
             {
-                EM_error2( decl->linepos,
-                    "static variables must be declared at class scope..." );
+                EM_error2( decl->where,
+                    "static variables must be declared at class scope" );
                 return FALSE;
             }
 
@@ -3446,9 +3458,9 @@ t_CKTYPE type_engine_check_exp_decl( Chuck_Env * env, a_Exp_Decl decl )
             {
                 // for now - no good for static, since we need separate
                 // initialization which we don't have
-                EM_error2( var_decl->linepos,
+                EM_error2( var_decl->where,
                     "cannot declare static non-primitive objects (yet)..." );
-                EM_error2( var_decl->linepos,
+                EM_error2( var_decl->where,
                     "...(hint: declare as reference (@) & initialize outside class for now)" );
                 return FALSE;
             }
@@ -3535,7 +3547,7 @@ Chuck_Func * find_func_match_actual( Chuck_Env * env, Chuck_Func * up, a_Exp arg
         while( theFunc )
         {
             e = args;
-            e1 = theFunc->def->arg_list;
+            e1 = theFunc->def()->arg_list;
             count = 1;
 
             // check arguments against the definition
@@ -3634,7 +3646,7 @@ t_CKTYPE type_engine_check_exp_func_call( Chuck_Env * env, a_Exp exp_func, a_Exp
     // make sure we have a function
     if( !isa( f, env->t_function ) )
     {
-        EM_error2( exp_func->linepos,
+        EM_error2( exp_func->where,
             "function call using a non-function value" );
         return NULL;
     }
@@ -3658,27 +3670,23 @@ t_CKTYPE type_engine_check_exp_func_call( Chuck_Env * env, a_Exp exp_func, a_Exp
         // if primary
         if( exp_func->s_type == ae_exp_primary && exp_func->primary.s_type == ae_primary_var )
         {
-            EM_error2( exp_func->linepos,
-                "argument type(s) do not match:" );
-            EM_error2( exp_func->linepos,
-                "... for function '%s(...)' ...",
+            EM_error2( exp_func->where,
+                "argument type(s) do not match...\n...for function '%s(...)'...",
                 S_name(exp_func->primary.var) );
         }
         else if( exp_func->s_type == ae_exp_dot_member )
         {
-            EM_error2( exp_func->linepos,
-                "arguments type(s) do not match:" );
-            EM_error2( exp_func->linepos,
-                "... for function '%s(...)' ...",
+            EM_error2( exp_func->where,
+                "argument type(s) do not match...\n...for function '%s(...)'...",
                 type_engine_print_exp_dot_member( env, &exp_func->dot_member ).c_str() );
         }
         else
         {
-            EM_error2( exp_func->linepos,
-                "argument type(s) do not match for function ..." );
+            EM_error2( exp_func->where,
+                "argument type(s) do not match for function..." );
         }
 
-        EM_error2( exp_func->linepos,
+        EM_error2( 0,
             "...(please check the argument types)" );
 
         return NULL;
@@ -3694,8 +3702,8 @@ t_CKTYPE type_engine_check_exp_func_call( Chuck_Env * env, a_Exp exp_func, a_Exp
         if( *exp_func->type != *type_engine_check_exp( env, exp_func ) )
         {
             // error
-            EM_error2( exp_func->linepos,
-                "internal error: function type different on second check..." );
+            EM_error2( exp_func->where,
+                "(internal error) function type different on second check" );
             return NULL;
         }
     }
@@ -3710,8 +3718,8 @@ t_CKTYPE type_engine_check_exp_func_call( Chuck_Env * env, a_Exp exp_func, a_Exp
         if( *exp_func->type != *type_engine_check_exp( env, exp_func ) )
         {
             // error
-            EM_error2( exp_func->linepos,
-                "internal error: function type different on second check..." );
+            EM_error2( exp_func->where,
+                "(internal error) function type different on second check" );
             return NULL;
         }
         */
@@ -3720,7 +3728,7 @@ t_CKTYPE type_engine_check_exp_func_call( Chuck_Env * env, a_Exp exp_func, a_Exp
 
     ck_func = theFunc;
 
-    return theFunc->def->ret_type;
+    return theFunc->def()->ret_type;
 }
 
 
@@ -3734,7 +3742,7 @@ t_CKTYPE type_engine_check_exp_func_call( Chuck_Env * env, a_Exp_Func_Call func_
 {
     // type check it
     return type_engine_check_exp_func_call( env, func_call->func, func_call->args,
-                                            func_call->ck_func, func_call->linepos );
+                                            func_call->ck_func, func_call->where );
 }
 
 
@@ -3758,8 +3766,8 @@ t_CKTYPE type_engine_check_exp_dot_member_special( Chuck_Env * env, a_Exp_Dot_Me
             if( member->self->emit_var && member->base->s_meta != ae_meta_var )
             {
                 // error
-                EM_error2( member->base->linepos,
-                          "cannot assign value to literal complex value..." );
+                EM_error2( member->base->where,
+                          "cannot assign value to literal complex value" );
                 return NULL;
             }
 
@@ -3768,8 +3776,8 @@ t_CKTYPE type_engine_check_exp_dot_member_special( Chuck_Env * env, a_Exp_Dot_Me
         else
         {
             // not valid
-            EM_error2( member->linepos,
-                      "type '%s' has no member named '%s'...", member->t_base->c_name(), str.c_str() );
+            EM_error2( member->where,
+                      "type '%s' has no member named '%s'", member->t_base->c_name(), str.c_str() );
             return NULL;
         }
     }
@@ -3784,8 +3792,8 @@ t_CKTYPE type_engine_check_exp_dot_member_special( Chuck_Env * env, a_Exp_Dot_Me
             if( member->self->emit_var && member->base->s_meta != ae_meta_var )
             {
                 // error
-                EM_error2( member->base->linepos,
-                          "cannot assign value to literal polar value..." );
+                EM_error2( member->base->where,
+                          "cannot assign value to literal polar value" );
                 return NULL;
             }
 
@@ -3794,8 +3802,8 @@ t_CKTYPE type_engine_check_exp_dot_member_special( Chuck_Env * env, a_Exp_Dot_Me
         else
         {
             // not valid
-            EM_error2( member->linepos,
-                      "type '%s' has no member named '%s'...", member->t_base->c_name(), str.c_str() );
+            EM_error2( member->where,
+                      "type '%s' has no member named '%s'", member->t_base->c_name(), str.c_str() );
             return NULL;
         }
     }
@@ -3812,8 +3820,8 @@ t_CKTYPE type_engine_check_exp_dot_member_special( Chuck_Env * env, a_Exp_Dot_Me
             if( member->self->emit_var && member->base->s_meta != ae_meta_var )
             {
                 // error
-                EM_error2( member->base->linepos,
-                           "cannot assign value to literal %s value...",
+                EM_error2( member->base->where,
+                           "cannot assign value to literal %s value",
                            member->t_base->c_name() );
                 return NULL;
             }
@@ -3827,8 +3835,8 @@ t_CKTYPE type_engine_check_exp_dot_member_special( Chuck_Env * env, a_Exp_Dot_Me
             if( member->self->emit_var && member->base->s_meta != ae_meta_var )
             {
                 // error
-                EM_error2( member->base->linepos,
-                           "cannot assign value to literal %s value...",
+                EM_error2( member->base->where,
+                           "cannot assign value to literal %s value",
                            member->t_base->c_name() );
                 return NULL;
             }
@@ -3843,8 +3851,8 @@ t_CKTYPE type_engine_check_exp_dot_member_special( Chuck_Env * env, a_Exp_Dot_Me
     }
 
     // should not get here
-    EM_error2( member->base->linepos,
-               "type checer internal error in special literal..." );
+    EM_error2( member->base->where,
+               "type checer internal error in special literal" );
 
     return NULL;
 
@@ -3864,8 +3872,8 @@ check_func:
     if( member->base->s_meta == ae_meta_value ) // is literal
     {
         // error
-        EM_error2( member->base->linepos,
-                  "cannot call function from literal %s value...",
+        EM_error2( member->base->where,
+                  "cannot call function from literal %s value",
                   member->t_base->c_name() );
         return NULL;
     }
@@ -3875,7 +3883,7 @@ check_func:
     if( !value )
     {
         // can't find member
-        EM_error2( member->base->linepos,
+        EM_error2( member->where,
                   "class '%s' has no member '%s'",
                   the_base->c_name(), S_name(member->xid) );
         return NULL;
@@ -3924,7 +3932,7 @@ t_CKTYPE type_engine_check_exp_dot_member( Chuck_Env * env, a_Exp_Dot_Member mem
     if( !the_base->info )
     {
         // base type does not have members
-        EM_error2( member->base->linepos,
+        EM_error2( member->base->where,
             "type '%s' does not have members - invalid use in dot expression",
             the_base->c_name() );
         return NULL;
@@ -3937,15 +3945,15 @@ t_CKTYPE type_engine_check_exp_dot_member( Chuck_Env * env, a_Exp_Dot_Member mem
         // uh
         if( base_static )
         {
-            EM_error2( member->linepos,
-                "keyword 'this' must be associated with object instance..." );
+            EM_error2( member->where,
+                "keyword 'this' must be associated with object instance" );
             return NULL;
         }
         // in member func
         if( env->func && !env->func->is_member )
         {
-            EM_error2( member->linepos,
-                "keyword 'this' cannot be used inside static functions..." );
+            EM_error2( member->where,
+                "keyword 'this' cannot be used inside static functions" );
             return NULL;
         }
 
@@ -3957,7 +3965,7 @@ t_CKTYPE type_engine_check_exp_dot_member( Chuck_Env * env, a_Exp_Dot_Member mem
     if( !value )
     {
         // can't find member
-        EM_error2( member->base->linepos,
+        EM_error2( member->where,
                    "class '%s' has no member '%s'",
                    the_base->c_name(), S_name(member->xid) );
         return NULL;
@@ -3967,8 +3975,8 @@ t_CKTYPE type_engine_check_exp_dot_member( Chuck_Env * env, a_Exp_Dot_Member mem
     if( base_static && value->is_member )
     {
         // this won't work
-        EM_error2( member->linepos,
-            "cannot access member '%s.%s' without object instance...",
+        EM_error2( member->where,
+            "cannot access member '%s.%s' without object instance",
             the_base->c_name(), S_name(member->xid) );
         return NULL;
     }
@@ -3996,7 +4004,7 @@ t_CKTYPE type_engine_check_exp_array( Chuck_Env * env, a_Exp_Array array )
     // dimension
     if( array->indices->depth > t_base->array_depth )
     {
-        EM_error2( array->linepos,
+        EM_error2( array->where,
             "array subscripts (%i) exceeds defined dimension (%i)",
             array->indices->depth, t_base->array_depth );
         return NULL;
@@ -4019,7 +4027,7 @@ t_CKTYPE type_engine_check_exp_array( Chuck_Env * env, a_Exp_Array array )
         if( !isa( e->type, env->t_int ) && !isa( e->type, env->t_string ) )
         {
             // not int or string
-            EM_error2( e->linepos,
+            EM_error2( e->where,
                 "array index %i must be of type 'int' or 'string', not '%s'",
                 depth, e->type->c_name() );
             return NULL;
@@ -4028,12 +4036,13 @@ t_CKTYPE type_engine_check_exp_array( Chuck_Env * env, a_Exp_Array array )
         // advance the list
         e = e->next;
     }
-    //TODO: Catch commas inside array subscripts earlier on, perhaps in .y
+    // TODO: Catch commas inside array subscripts earlier on, perhaps in .y
     if( array->indices->depth != depth )
     {
-      EM_error2( array->linepos,
-          "[..., ...] is invalid subscript syntax." );
-      return NULL;
+        a_Exp e2 = array->indices->exp_list;
+        EM_error2( e2 ? e2->where : array->where,
+                   "[..., ...] is invalid subscript syntax." );
+        return NULL;
     }
     t_CKTYPE t = NULL;
     // make sure depth <= max
@@ -4082,7 +4091,7 @@ t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def )
             t_parent = type_engine_find_type( env, class_def->ext->extend_id );
             if( !t_parent )
             {
-                EM_error2( class_def->ext->linepos,
+                EM_error2( class_def->ext->where,
                     "undefined super class '%s' in definition of class '%s'",
                     type_path(class_def->ext->extend_id), S_name(class_def->name->xid) );
                 return FALSE;
@@ -4091,21 +4100,20 @@ t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def )
             // must not be primitive
             if( isprim( env, t_parent ) )
             {
-                EM_error2( class_def->ext->linepos,
+                EM_error2( class_def->ext->extend_id->where,
                     "cannot extend primitive type '%s'",
                     t_parent->c_name() );
-                EM_error2( class_def->ext->linepos,
-                    "...(note: primitives types are 'int', 'float', 'time', and 'dur')" );
+                EM_error2( 0, "...(primitive types: 'int', 'float', 'time', 'dur', etc.)" );
                 return FALSE;
             }
 
             // if not complete
             if( t_parent->is_complete == FALSE )
             {
-                EM_error2( class_def->ext->linepos,
+                EM_error2( class_def->ext->where,
                     "cannot extend incomplete type '%s'",
                     t_parent->c_name() );
-                EM_error2( class_def->ext->linepos,
+                EM_error2( class_def->ext->where,
                     "...(note: the parent's declaration must precede child's)" );
                 return FALSE;
             }
@@ -4191,7 +4199,7 @@ t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def )
     if( !ret )
     {
         // delete the class definition
-        SAFE_RELEASE( class_def->type );
+        CK_SAFE_RELEASE( class_def->type );
         // set the thing to NULL
         the_class = NULL;
     }
@@ -4224,7 +4232,7 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
     // see if we are already in a function definition
     if( env->func != NULL )
     {
-        EM_error2( f->linepos,
+        EM_error2( f->where,
             "nested function definitions are not (yet) allowed" );
         return FALSE;
     }
@@ -4247,9 +4255,9 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
             // see if the target is a function
             if( !isa( theOverride->type, env->t_function ) )
             {
-                EM_error2( f->linepos, "function name '%s' conflicts with previously defined value...",
+                EM_error2( f->where, "function name '%s' conflicts with previously defined value...",
                     S_name(f->name) );
-                EM_error2( f->linepos, "from super class '%s'...", theOverride->owner_class->c_name() );
+                EM_error2( f->where, "from super class '%s'...", theOverride->owner_class->c_name() );
                 return FALSE;
             }
         }
@@ -4272,8 +4280,8 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
     // only class functions can be pure
     if( !env->class_def && f->static_decl == ae_key_abstract )
     {
-        EM_error2( f->linepos, "non-class function cannot be declared as 'pure'..." );
-        EM_error2( f->linepos, "...at function '%s'", S_name(f->name) );
+        EM_error2( f->where, "non-class function cannot be declared as 'pure'..." );
+        EM_error2( f->where, "...at function '%s'", S_name(f->name) );
         goto error;
     }
 
@@ -4281,28 +4289,28 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
     if( f->s_type == ae_func_user ) has_code = ( f->code != NULL );
     else has_code = (f->dl_func_ptr != NULL); // imported
 
-    // if interface, then cannot have code
-    if( env->class_def && env->class_def->def && env->class_def->def->iface && has_code )
-    {
-        EM_error2( f->linepos, "interface function signatures cannot contain code..." );
-        EM_error2( f->linepos, "...at function '%s'", S_name(f->name) );
-        goto error;
-    }
+//    // if interface, then cannot have code | a_Class_Def class_def->def removed for now
+//    if( env->class_def && env->class_def->def && env->class_def->def->iface && has_code )
+//    {
+//        EM_error2( f->where, "interface function signatures cannot contain code..." );
+//        EM_error2( f->where, "...at function '%s'", S_name(f->name) );
+//        goto error;
+//    }
 
     // if pure, then cannot have code
     if( f->static_decl == ae_key_abstract && has_code )
     {
-        EM_error2( f->linepos, "'pure' function signatures cannot contain code..." );
-        EM_error2( f->linepos, "...at function '%s'", S_name(f->name) );
+        EM_error2( f->where, "'pure' function signatures cannot contain code..." );
+        EM_error2( f->where, "...at function '%s'", S_name(f->name) );
         goto error;
     }
 
     // yeah
     if( f->static_decl != ae_key_abstract && !has_code )
     {
-        EM_error2( f->linepos, "function declaration must contain code..." );
-        EM_error2( f->linepos, "(unless in interface, or is declared 'pure')" );
-        EM_error2( f->linepos, "...at function '%s'", S_name(f->name) );
+        EM_error2( f->where, "function declaration must contain code..." );
+        EM_error2( f->where, "(unless in interface, or is declared 'pure')" );
+        EM_error2( f->where, "...at function '%s'", S_name(f->name) );
         goto error;
     }
 
@@ -4319,9 +4327,9 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                 // see if the target is a function
                 if( !isa( v->type, env->t_function ) )
                 {
-                    EM_error2( f->linepos, "function name '%s' conflicts with previously defined value...",
+                    EM_error2( f->where, "function name '%s' conflicts with previously defined value...",
                         S_name(f->name) );
-                    EM_error2( f->linepos, "from super class '%s'...", v->owner_class->c_name() );
+                    EM_error2( f->where, "from super class '%s'...", v->owner_class->c_name() );
                     goto error;
                 }
 
@@ -4333,7 +4341,7 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                 {
                     // match the prototypes
                     string err;
-                    if( !type_engine_compat_func( f, parent_func->def, f->linepos, err, FALSE ) )
+                    if( !type_engine_compat_func( f, parent_func->def(), f->where, err, FALSE ) )
                     {
                         // next
                         parent_func = parent_func->next;
@@ -4341,22 +4349,22 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                         continue;
                     }
                     /*{
-                        EM_error2( f->linepos,
+                        EM_error2( f->where,
                             "function '%s.%s' resembles '%s.%s' but cannot override...",
                             env->class_def->c_name(), S_name(f->name),
                             value->owner_class->c_name(), S_name(f->name) );
-                        if( err != "" ) EM_error2( f->linepos, "...(reason: %s)", err.c_str() );
+                        if( err != "" ) EM_error2( f->where, "...(reason: %s)", err.c_str() );
                         goto error;
                     }*/
 
                     // see if parent function is static
                     if( parent_func->is_static )
                     {
-                        EM_error2( f->linepos,
+                        EM_error2( f->where,
                             "function '%s.%s' resembles '%s.%s' but cannot override...",
                             env->class_def->c_name(), S_name(f->name),
                             v->owner_class->c_name(), S_name(f->name) );
-                        EM_error2( f->linepos,
+                        EM_error2( f->where,
                             " |- reason: '%s.%s' is declared as 'static'",
                             v->owner_class->c_name(), S_name(f->name) );
                         goto error;
@@ -4365,11 +4373,11 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                     // see if function is static
                     if( f->static_decl == ae_key_static )
                     {
-                        EM_error2( f->linepos,
+                        EM_error2( f->where,
                             "function '%s.%s' resembles '%s.%s' but cannot override...",
                             env->class_def->c_name(), S_name(f->name),
                             v->owner_class->c_name(), S_name(f->name) );
-                        EM_error2( f->linepos,
+                        EM_error2( f->where,
                             " |- reason: '%s.%s' is declared as 'static'",
                             env->class_def->c_name(), S_name(f->name) );
                         goto error;
@@ -4378,21 +4386,21 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
                     // see if function is pure
                     if( f->static_decl == ae_key_abstract )
                     {
-                        EM_error2( f->linepos,
+                        EM_error2( f->where,
                             "function '%s.%s' resembles '%s.%s' but cannot override...",
                             env->class_def->c_name(), S_name(f->name),
                             v->owner_class->c_name(), S_name(f->name) );
-                        EM_error2( f->linepos,
+                        EM_error2( f->where,
                             " |- reason: '%s.%s' is declared as 'pure'",
                             env->class_def->c_name(), S_name(f->name) );
                         goto error;
                     }
 
                     // make sure returns are equal
-                    if( *(f->ret_type) != *(parent_func->def->ret_type) )
+                    if( *(f->ret_type) != *(parent_func->def()->ret_type) )
                     {
-                        EM_error2( f->linepos, "function signatures differ in return type..." );
-                        EM_error2( f->linepos,
+                        EM_error2( f->where, "function signatures differ in return type..." );
+                        EM_error2( f->where,
                             "function '%s.%s' matches '%s.%s' but cannot override...",
                             env->class_def->c_name(), S_name(f->name),
                             v->owner_class->c_name(), S_name(f->name) );
@@ -4449,8 +4457,8 @@ t_CKBOOL type_engine_check_func_def( Chuck_Env * env, a_Func_Def f )
         // look up in scope: later
         if( env->curr->lookup_value( arg_list->var_decl->xid, FALSE ) )
         {
-            EM_error2( arg_list->linepos, "in function '%s':", S_name(f->name) );
-            EM_error2( arg_list->linepos, "argument %i '%s' is already defined in this scope",
+            EM_error2( arg_list->where, "in function '%s':", S_name(f->name) );
+            EM_error2( arg_list->where, "argument %i '%s' is already defined in this scope",
                 count, S_name(arg_list->var_decl->xid) );
             goto error;
         }
@@ -4754,7 +4762,7 @@ Chuck_Context::~Chuck_Context()
     // the type system, since many things have been added to it
     if( has_error )
     {
-        SAFE_DELETE( nspc );
+        CK_SAFE_DELETE( nspc );
 
         // delete the types - can't do this since the type system and vm still use
         // for( t_CKINT i = 0; i < new_types.size(); i++ )
@@ -4763,65 +4771,26 @@ Chuck_Context::~Chuck_Context()
         // clear it
         new_types.clear();
     }
-
-    // TODO: delete abstract syntax tree *
 }
 
 
 
 
 //-----------------------------------------------------------------------------
-// name: add_commit_candidate()
-// desc: ...
+// name: decouple_ast()
+// desc: decouple from AST (called when a context is compiled)
 //-----------------------------------------------------------------------------
-void Chuck_Context::add_commit_candidate( Chuck_Namespace * theNpsc )
+void Chuck_Context::decouple_ast()
 {
-    // add for commit
-    commit_map[theNpsc] = theNpsc;
-}
-
-
-
-
-//-----------------------------------------------------------------------------
-// name: commit()
-// desc: ...
-//-----------------------------------------------------------------------------
-void Chuck_Context::commit()
-{
-    std::map<Chuck_Namespace *, Chuck_Namespace *>::iterator iter;
-
-    // loop through
-    for( iter = commit_map.begin(); iter != commit_map.end(); iter++ )
+    Chuck_Func * f = NULL;
+    // iterate over Chuck_Func * added as part of this context
+    for( t_CKINT i = 0; i < new_funcs.size(); i++ )
     {
-        // commit
-        (*iter).second->commit();
+        // get as func
+        f = (Chuck_Func *)new_funcs[i];
+        // decouple with intention of keep func def around
+        f->funcdef_decouple_ast();
     }
-
-    // clear
-    commit_map.clear();
-}
-
-
-
-
-//-----------------------------------------------------------------------------
-// name: rollback()
-// desc: ...
-//-----------------------------------------------------------------------------
-void Chuck_Context::rollback()
-{
-    std::map<Chuck_Namespace *, Chuck_Namespace *>::iterator iter;
-
-    // loop through
-    for( iter = commit_map.begin(); iter != commit_map.end(); iter++ )
-    {
-        // rollback
-        (*iter).second->rollback();
-    }
-
-    // clear
-    commit_map.clear();
 }
 
 
@@ -5078,7 +5047,7 @@ Chuck_Type * type_engine_find_deprecated_type( Chuck_Env * env, a_Id_List thePat
         // check level
         if( env->deprecate_level < 2 )
         {
-            EM_error2( thePath->linepos, "deprecated: '%s' --> use: '%s'...",
+            EM_error2( thePath->where, "deprecated: '%s' --> use: '%s'",
                 type_path( thePath ), actual.c_str() );
         }
     }
@@ -5108,7 +5077,7 @@ Chuck_Type * type_engine_find_type( Chuck_Env * env, a_Id_List thePath )
         // error
         if( !type )
         {
-            EM_error2( thePath->linepos, "undefined type '%s'...",
+            EM_error2( thePath->where, "undefined type '%s'...",
                 type_path( thePath ) );
             return NULL;
         }
@@ -5134,9 +5103,9 @@ Chuck_Type * type_engine_find_type( Chuck_Env * env, a_Id_List thePath )
         if( !t )
         {
             // error
-            EM_error2( thePath->linepos, "undefined type '%s'...",
+            EM_error2( thePath->where, "undefined type '%s'...",
                 type_path( thePath ) );
-            EM_error2( thePath->linepos,
+            EM_error2( thePath->where,
                 "...(cannot find class '%s' in namespace '%s')",
                 S_name(xid), theNpsc->name.c_str() );
             return NULL;
@@ -5240,7 +5209,7 @@ Chuck_Value * type_engine_find_value( Chuck_Env * env, const string & xid,
             // check level
             if( env->deprecate_level < 2 )
             {
-                EM_error2( linepos, "deprecated: '%s' --> use: '%s'...",
+                EM_error2( linepos, "deprecated: '%s' --> use: '%s'",
                     xid.c_str(), actual.c_str() );
             }
         }
@@ -5274,14 +5243,14 @@ Chuck_Namespace * type_engine_find_nspc( Chuck_Env * env, a_Id_List thePath )
         if( isprim( env, type ) )
         {
             // error
-            EM_error2( 0, "primitive type '%s' has no namespace and cannot be extended...",
+            EM_error2( 0, "primitive type '%s' has no namespace and cannot be extended",
                 type->c_name() );
             return NULL;
         }
         else
         {
             // internal error
-            EM_error2( 0, "internal error: type '%s' without namespace...",
+            EM_error2( 0, "(internal error) type '%s' without namespace",
                 type->c_name() );
             return NULL;
         }
@@ -5317,7 +5286,7 @@ t_CKBOOL type_engine_compat_func( a_Func_Def lhs, a_Func_Def rhs, int pos, strin
         if( print )
         {
             EM_error2( pos, "function signatures differ in access modifiers..." );
-            EM_error2( pos, "(both must be one of public/private/protected/function)..." );
+            EM_error2( pos, "(both must be one of public/private/protected/function)" );
         }
         return FALSE;
     }
@@ -5335,7 +5304,7 @@ t_CKBOOL type_engine_compat_func( a_Func_Def lhs, a_Func_Def rhs, int pos, strin
         // match types
         if( *e1->type != *e2->type )
         {
-            if( print ) EM_error2( pos, "function signatures differ in argument %i's type...", count );
+            if( print ) EM_error2( pos, "function signatures differ in argument %i's type", count );
             return FALSE;
         }
 
@@ -5348,7 +5317,7 @@ t_CKBOOL type_engine_compat_func( a_Func_Def lhs, a_Func_Def rhs, int pos, strin
     if( e1 != NULL || e2 != NULL )
     {
         if( print ) EM_error2( pos,
-            "function signatures differ in number of arguments..." );
+            "function signatures differ in number of arguments" );
         return FALSE;
     }
 
@@ -5375,20 +5344,20 @@ Chuck_Type * type_engine_import_class_begin( Chuck_Env * env, Chuck_Type * type,
     if( type->info != NULL )
     {
         // error
-        EM_error2( 0, "during import: class '%s' already imported...", type->c_name() );
+        EM_error2( 0, "during import: class '%s' already imported", type->c_name() );
         return NULL;
     }
 
     // allocate namespace for type
     type->info = new Chuck_Namespace;
     // add reference
-    SAFE_ADD_REF(type->info);
+    CK_SAFE_ADD_REF(type->info);
     // name it
     type->info->name = type->name;
     // set the parent namespace
     type->info->parent = where;
     // add reference
-    SAFE_ADD_REF(type->info->parent);
+    CK_SAFE_ADD_REF(type->info->parent);
 
     // if pre constructor
     if( pre_ctor != 0 )
@@ -5438,7 +5407,7 @@ Chuck_Type * type_engine_import_class_begin( Chuck_Env * env, Chuck_Type * type,
     // set the owner namespace
     type->owner = where;
     // add reference
-    SAFE_ADD_REF(type->owner);
+    CK_SAFE_ADD_REF(type->owner);
     // check if primitive
     if( !isprim( env, type ) ) // 1.3.5.3 (primitives already have size!)
     {
@@ -5451,12 +5420,12 @@ Chuck_Type * type_engine_import_class_begin( Chuck_Env * env, Chuck_Type * type,
     // make type
     type_type = env->t_class->copy( env );
     type_type->actual_type = type;
-    // SAFE_REF_ASSIGN( type_type->actual_type, type );
+    // CK_SAFE_REF_ASSIGN( type_type->actual_type, type );
 
     // make value
     value = new Chuck_Value( type_type, type->name );
     value->owner = where;
-    // SAFE_REF_ASSIGN( value->owner, where );
+    // CK_SAFE_REF_ASSIGN( value->owner, where );
     value->is_const = TRUE;
     value->is_member = FALSE;
 
@@ -5473,7 +5442,7 @@ Chuck_Type * type_engine_import_class_begin( Chuck_Env * env, Chuck_Type * type,
     if( doc != NULL) type->doc = doc;
 
     // ref count
-    SAFE_ADD_REF(type);
+    CK_SAFE_ADD_REF(type);
     // type->add_ref();
 
     return type;
@@ -5525,9 +5494,9 @@ Chuck_Type * type_engine_import_class_begin( Chuck_Env * env, const char * name,
 
 error:
     // error
-    EM_error2( 0, "... during import of class '%s'", name );
+    EM_error2( 0, "...during import of class '%s'", name );
     // free
-    SAFE_DELETE( type );
+    CK_SAFE_DELETE( type );
 
 cleanup:
     // cleanup
@@ -5681,7 +5650,7 @@ t_CKBOOL type_engine_import_class_end( Chuck_Env * env )
     if( !env->class_def )
     {
         // error
-        EM_error2( 0, "import: too many class_end called..." );
+        EM_error2( 0, "import: too many class_end called" );
         return FALSE;
     }
 
@@ -5813,22 +5782,22 @@ t_CKUINT type_engine_import_mvar( Chuck_Env * env, const char * type,
     if( !thePath )
     {
         // error
-        EM_error2( 0, "... during mvar import '%s.%s'...",
+        EM_error2( 0, "...during mvar import '%s.%s'",
             env->class_def->c_name(), name );
         return CK_INVALID_OFFSET;
     }
     // make type decl
-    a_Type_Decl type_decl = new_type_decl( thePath, FALSE, 0 );
+    a_Type_Decl type_decl = new_type_decl( thePath, FALSE, 0, 0 );
     // check for array
     if( array_depth )
     {
         // add the array
-        type_decl->array = new_array_sub( NULL, 0 );
+        type_decl->array = new_array_sub( NULL, 0, 0 );
         // set the depth
         type_decl->array->depth = array_depth;
     }
     // make var decl
-    a_Var_Decl var_decl = new_var_decl( (char *)name, NULL, 0 );
+    a_Var_Decl var_decl = new_var_decl( (char *)name, NULL, 0, 0 );
 
     // added 2013-10-22 - spencer
     // allow array-type mvars
@@ -5836,28 +5805,31 @@ t_CKUINT type_engine_import_mvar( Chuck_Env * env, const char * type,
     if( array_depth )
     {
         // add the array
-        var_decl->array = new_array_sub( NULL, 0 );
+        var_decl->array = new_array_sub( NULL, 0, 0 );
         // set the depth
         var_decl->array->depth = array_depth;
     }
 
     // make var decl list
-    a_Var_Decl_List var_decl_list = new_var_decl_list( var_decl, 0 );
+    a_Var_Decl_List var_decl_list = new_var_decl_list( var_decl, 0, 0 );
     // make exp decl
-    a_Exp exp_decl = new_exp_decl( type_decl, var_decl_list, FALSE, 0 );
+    a_Exp exp_decl = new_exp_decl( type_decl, var_decl_list, FALSE, 0, 0 );
     // add it
     if( !type_engine_scan1_exp_decl( env, &exp_decl->decl ) ||
         !type_engine_scan2_exp_decl( env, &exp_decl->decl ) ||
         !type_engine_check_exp_decl( env, &exp_decl->decl ) )
     {
+        // clean up locally created id list
         delete_id_list( thePath );
         return CK_INVALID_OFFSET;
     }
 
+    // TODO 2023 1.5.0.5 -- clean up the various decls?
+
     if( doc != NULL )
         var_decl->value->doc = doc;
 
-    // cleanup
+    // clean up locally created id list
     delete_id_list( thePath );
 
     // return the offset
@@ -5890,19 +5862,19 @@ t_CKBOOL type_engine_import_svar( Chuck_Env * env, const char * type,
     if( !thePath )
     {
         // error
-        EM_error2( 0, "... during svar import '%s.%s'...",
+        EM_error2( 0, "...during svar import '%s.%s'",
             env->class_def->c_name(), name );
         return FALSE;
     }
 
     // make type decl
-    a_Type_Decl type_decl = new_type_decl( thePath, FALSE, 0 );
+    a_Type_Decl type_decl = new_type_decl( thePath, FALSE, 0, 0 );
     // make var decl
-    a_Var_Decl var_decl = new_var_decl( (char *)name, NULL, 0 );
+    a_Var_Decl var_decl = new_var_decl( (char *)name, NULL, 0, 0 );
     // make var decl list
-    a_Var_Decl_List var_decl_list = new_var_decl_list( var_decl, 0 );
+    a_Var_Decl_List var_decl_list = new_var_decl_list( var_decl, 0, 0 );
     // make exp decl
-    a_Exp exp_decl = new_exp_decl( type_decl, var_decl_list, TRUE, 0 );
+    a_Exp exp_decl = new_exp_decl( type_decl, var_decl_list, TRUE, 0, 0 );
     // add addr
     var_decl->addr = (void *)addr;
     // add it
@@ -5910,14 +5882,17 @@ t_CKBOOL type_engine_import_svar( Chuck_Env * env, const char * type,
         !type_engine_scan2_exp_decl( env, &exp_decl->decl ) ||
         !type_engine_check_exp_decl( env, &exp_decl->decl ) )
     {
+        // clean up locally created id list
         delete_id_list( thePath );
         return FALSE;
     }
 
+    // TODO 2023 1.5.0.5 -- clean up the various decls?
+
     if( doc != NULL )
         var_decl->value->doc = doc;
 
-    // cleanup
+    // clean up locally created id list
     delete_id_list( thePath );
 
     return TRUE;
@@ -6082,7 +6057,7 @@ Chuck_Type * new_array_type( Chuck_Env * env, Chuck_Type * array_parent,
     // make new type
     Chuck_Type * t = env->context->new_Chuck_Type( env );
     // 1.4.2.0 (ge) | added
-    SAFE_ADD_REF(t);
+    CK_SAFE_ADD_REF(t);
     // set the id
     t->xid = te_array;
     // set the name
@@ -6098,7 +6073,7 @@ Chuck_Type * new_array_type( Chuck_Env * env, Chuck_Type * array_parent,
     {
         Chuck_Type * new_parent = new_array_element_type( env, base_curr, depth, owner_nspc );
         t_curr->parent = new_parent;
-        SAFE_ADD_REF(t_curr->parent );
+        CK_SAFE_ADD_REF(t_curr->parent );
 
         base_curr = base_curr->parent;
         t_curr = t_curr->parent;
@@ -6106,7 +6081,7 @@ Chuck_Type * new_array_type( Chuck_Env * env, Chuck_Type * array_parent,
     // ???
     t_curr->parent = array_parent;
     // add reference
-    SAFE_ADD_REF(t_curr->parent);
+    CK_SAFE_ADD_REF(t_curr->parent);
 
     // is a ref
     t->size = array_parent->size;
@@ -6117,15 +6092,15 @@ Chuck_Type * new_array_type( Chuck_Env * env, Chuck_Type * array_parent,
     // set the base type
     t->array_type = base_type;
     // add reference
-    SAFE_ADD_REF(t->array_type);
+    CK_SAFE_ADD_REF(t->array_type);
     // set the namesapce
     t->info = array_parent->info;
     // add reference
-    SAFE_ADD_REF(t->info);
+    CK_SAFE_ADD_REF(t->info);
     // set owner
     t->owner = owner_nspc;
     // add reference
-    SAFE_ADD_REF(t->owner);
+    CK_SAFE_ADD_REF(t->owner);
 
     // return the type
     return t;
@@ -6157,17 +6132,17 @@ Chuck_Type * new_array_element_type( Chuck_Env * env, Chuck_Type * base_type,
     // set the array type
     if (base_type->array_type != NULL) {
       t->array_type = base_type->array_type;
-      SAFE_ADD_REF(t->array_type);
+      CK_SAFE_ADD_REF(t->array_type);
     }
     // set the namespace
     if (base_type->info != NULL) {
       t->info = base_type->info;
-      SAFE_ADD_REF(t->info);
+      CK_SAFE_ADD_REF(t->info);
     }
     // set owner
     t->owner = owner_nspc;
     // add reference
-    SAFE_ADD_REF(t->owner);
+    CK_SAFE_ADD_REF(t->owner);
 
     // return the type
     return t;
@@ -6187,20 +6162,20 @@ t_CKBOOL verify_array( a_Array_Sub array )
     {
         if( array->err_num == 1 )
         {
-            EM_error2( array->linepos,
-                "invalid format for array init [...][...]..." );
+            EM_error2( array->where,
+                "invalid format for array init [...][...]" );
             return FALSE;
         }
         else if( array->err_num == 2 )
         {
-            EM_error2( array->linepos,
-                "partially empty array init [...][]..." );
+            EM_error2( array->where,
+                "partially empty array init [...][]" );
             return FALSE;
         }
         else
         {
-            EM_error2( array->linepos,
-                "internal error: unrecognized array error..." );
+            EM_error2( array->where,
+                "(internal error) unrecognized array error" );
             return FALSE;
         }
     }
@@ -6263,9 +6238,9 @@ a_Id_List str2list( const string & thePath, t_CKUINT & array_depth )
             else
             {
                 // error
-                EM_error2( 0, "illegal character '%c' in path '%s'...",
+                EM_error2( 0, "illegal character '%c' in path '%s'",
                     c, thePath.c_str() );
-                // delete
+                // clean up locally created id list
                 delete_id_list( list );
                 return NULL;
             }
@@ -6289,7 +6264,7 @@ a_Id_List str2list( const string & thePath, t_CKUINT & array_depth )
                     curr[size-j-1] = s;
                 }
                 // make a new id and put in list
-                list = prepend_id_list( (char *)curr.c_str(), list, 0 );
+                list = prepend_id_list( (char *)curr.c_str(), list, 0, 0 /*, NULL */ );
                 // clear
                 curr = "";
             }
@@ -6298,7 +6273,7 @@ a_Id_List str2list( const string & thePath, t_CKUINT & array_depth )
                 // error
                 EM_error2( 0, "path '%s' must not begin or end with '.'",
                     thePath.c_str() );
-                // delete
+                // clean up locally created id list
                 delete_id_list( list );
                 return NULL;
             }
@@ -6309,6 +6284,67 @@ a_Id_List str2list( const string & thePath, t_CKUINT & array_depth )
     }
 
     return list;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: partial_deep_copy_args()
+// desc: partial deep copy of an arg list AST node
+//-----------------------------------------------------------------------------
+a_Arg_List partial_deep_copy_args( a_Arg_List list )
+{
+    if( !list ) return NULL;
+
+    a_Arg_List copy = NULL;
+    a_Var_Decl var_decl = NULL;
+
+    // need name but not 'array' on var_decl
+    var_decl = new_var_decl( S_name(list->var_decl->xid), NULL, list->var_decl->line, list->var_decl->where );
+    // need var_decl by not type_decl
+    copy = new_arg_list( NULL, var_decl, list->line, list->where );
+    // set type and add reference
+    copy->type = list->type; CK_SAFE_ADD_REF( copy->type );
+
+    // go down the list
+    copy->next = partial_deep_copy_args( list->next );
+
+    // return
+    return copy;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: partial_deep_copy()
+// desc: partial deep copy of a func def AST node; useful and safer because
+//       the original AST node will be cleaned up after compilation
+//-----------------------------------------------------------------------------
+a_Func_Def partial_deep_copy_fn( a_Func_Def f )
+{
+    a_Func_Def copy = new_func_def( f->func_decl,
+                                    f->static_decl,
+                                    NULL,
+                                    S_name(f->name),
+                                    partial_deep_copy_args(f->arg_list),
+                                    NULL,
+                                    FALSE, // from AST
+                                    f->line,
+                                    f->where );
+    // copy ret_type and reference count
+    copy->ret_type = f->ret_type; CK_SAFE_ADD_REF( copy->ret_type );
+    // copy ck_func and reference count
+    copy->ck_func = f->ck_func; CK_SAFE_ADD_REF( copy->ck_func );
+
+    // copy DL func pointers
+    copy->dl_func_ptr = f->dl_func_ptr;
+    // copy other data
+    copy->global = f->global;
+    copy->stack_depth = f->stack_depth;
+
+    return copy;
 }
 
 
@@ -6347,14 +6383,14 @@ a_Arg_List make_dll_arg_list( Chuck_DL_Func * dl_fun )
         if( !type_path )
         {
             // error
-            EM_error2( 0, "...at argument '%i'...", i+1 );
+            EM_error2( 0, "...at argument '%i'", i+1 );
             // delete the arg list
             // delete_arg_list( arg_list );
             return NULL;
         }
 
         // type
-        type_decl = new_type_decl( type_path, FALSE, 0 );
+        type_decl = new_type_decl( type_path, FALSE, 0, 0 );
         // TODO: fix this
         assert( type_decl );
 
@@ -6375,16 +6411,16 @@ a_Arg_List make_dll_arg_list( Chuck_DL_Func * dl_fun )
         if( array_depth2 ) array_depth = array_depth2;
         if( array_depth )
         {
-            array_sub = new_array_sub( NULL, 0 );
+            array_sub = new_array_sub( NULL, 0, 0 );
 
             for( int j = 1; j < array_depth; j++ )
-                array_sub = prepend_array_sub( array_sub, NULL, 0 );
+                array_sub = prepend_array_sub( array_sub, NULL, 0, 0 );
         }
 
-        var_decl = new_var_decl( (char *)arg->name.c_str(), array_sub, 0 );
+        var_decl = new_var_decl( (char *)arg->name.c_str(), array_sub, 0, 0 );
 
         // make new arg
-        arg_list = prepend_arg_list( type_decl, var_decl, arg_list, 0 );
+        arg_list = prepend_arg_list( type_decl, var_decl, arg_list, 0, 0 );
     }
 
     return arg_list;
@@ -6418,21 +6454,21 @@ a_Func_Def make_dll_as_fun( Chuck_DL_Func * dl_fun,
     if( !type_path )
     {
         // error
-        EM_error2( 0, "...during function import '%s' (type)...",
+        EM_error2( 0, "...during function import '%s' (type)",
             dl_fun->name.c_str() );
         goto error;
     }
 
     // type decl
     // old: type_decl = new_type_decl( type_path, 1, 0 );
-    type_decl = new_type_decl( type_path, 0, 0 );
+    type_decl = new_type_decl( type_path, 0, 0, 0 );
     assert( type_decl );
     if( !type_decl )
     {
         // error
-        EM_error2( 0, "...during function import '%s' (type2)...",
+        EM_error2( 0, "...during function import '%s' (type2)",
             dl_fun->name.c_str() );
-        // delete list
+        // clean up locally created id list
         delete_id_list( type_path );
         type_path = NULL;
         goto error;
@@ -6444,12 +6480,12 @@ a_Func_Def make_dll_as_fun( Chuck_DL_Func * dl_fun,
     // -spencer
     if( array_depth )
     {
-        a_Array_Sub array_sub = new_array_sub( NULL, 0 );
+        a_Array_Sub array_sub = new_array_sub( NULL, 0, 0 );
 
         for( int i = 1; i < array_depth; i++ )
-            array_sub = prepend_array_sub( array_sub, NULL, 0 );
+            array_sub = prepend_array_sub( array_sub, NULL, 0, 0 );
 
-        type_decl = add_type_decl_array( type_decl, array_sub, 0 );
+        type_decl = add_type_decl_array( type_decl, array_sub, 0, 0 );
     }
 
     // name of the function
@@ -6459,7 +6495,7 @@ a_Func_Def make_dll_as_fun( Chuck_DL_Func * dl_fun,
     if( dl_fun->args.size() > 0 && !arg_list )
     {
         // error
-        EM_error2( 0, "...during function import '%s' (arg_list)...",
+        EM_error2( 0, "...during function import '%s' (arg_list)",
             dl_fun->name.c_str() );
         // delete type_decl
         // delete_type_decl( type_decl );
@@ -6467,13 +6503,13 @@ a_Func_Def make_dll_as_fun( Chuck_DL_Func * dl_fun,
         goto error;
     }
 
-    // make a func_def
+    // make a func_def | added from_ast=FALSE 1.5.0.5
     func_def = new_func_def( func_decl, static_decl, type_decl,
-                             (char *)name, arg_list, NULL, 0 );
+                             (char *)name, arg_list, NULL, FALSE, 0, 0 );
     // mark the function as imported (instead of defined in ChucK)
     func_def->s_type = ae_func_builtin;
     // copy the function pointer - the type doesn't matter here
-    // ... since we copying into a void * - so mfun is used
+    // ...since we copying into a void * - so mfun is used
     func_def->dl_func_ptr = (void *)dl_fun->mfun;
 
     return func_def;
@@ -6570,7 +6606,7 @@ t_CKBOOL type_engine_add_dll( Chuck_Env * env, Chuck_DLL * dll, const string & d
         }
 
         // loop over member data
-        // ignored for now... -spencer
+        // ignored for now...-spencer
         for( j = 0; j < cl->mvars.size(); j++ )
         {
         }
@@ -6589,32 +6625,32 @@ t_CKBOOL type_engine_add_dll( Chuck_Env * env, Chuck_DLL * dll, const string & d
             // get type
             a_Id_List thePath2 = str2list( cl->svars[j]->type.c_str() );
             // make type decl
-            a_Type_Decl type_decl = new_type_decl( thePath2, FALSE, 0 );
+            a_Type_Decl type_decl = new_type_decl( thePath2, FALSE, 0, 0 );
             // make var decl
-            a_Var_Decl var_decl = new_var_decl( cl->svars[j]->name.c_str(), NULL, 0 );
+            a_Var_Decl var_decl = new_var_decl( cl->svars[j]->name.c_str(), NULL, 0, 0 );
             // make var decl list
-            a_Var_Decl_List var_decl_list = new_var_decl_list( var_decl, 0 );
+            a_Var_Decl_List var_decl_list = new_var_decl_list( var_decl, 0, 0 );
             // make exp decl
-            a_Exp exp_decl = new_exp_decl( type_decl, var_decl_list, TRUE, 0 );
+            a_Exp exp_decl = new_exp_decl( type_decl, var_decl_list, TRUE, 0, 0 );
             // add addr
             var_decl->addr = (void *)cl->svars[j]->static_addr;
             // append exp stmt to stmt list
-            svar_decls = append_stmt_list( svar_decls, new_stmt_from_expression( exp_decl, 0 ), 0 );
+            svar_decls = append_stmt_list( svar_decls, new_stmt_from_expression( exp_decl, 0, 0 ), 0, 0 );
         }
 
         // if there are any declarations, prepend them to body
         if( svar_decls )
-            body = prepend_class_body( new_section_stmt( svar_decls, 0 ), body, 0 );
+            body = prepend_class_body( new_section_stmt( svar_decls, 0, 0 ), body, 0, 0 );
 
         // go through funs backwards, and prepend
         for( t_CKINT k = (t_CKINT)the_funs.size() - 1; k >= 0; k-- )
         {
             // add to body
-            body = prepend_class_body( new_section_func_def( the_funs[k], 0 ), body, 0 );
+            body = prepend_class_body( new_section_func_def( the_funs[k], 0, 0 ), body, 0, 0 );
         }
 
         // construct class
-        def = new_class_def( ae_key_public, name, ext, body, 0 );
+        def = new_class_def( ae_key_public, name, ext, body, 0, 0 );
         // set where to add
         def->home = nspc;
         // TODO: mark the class as dll import?
@@ -6628,7 +6664,7 @@ t_CKBOOL type_engine_add_dll( Chuck_Env * env, Chuck_DLL * dll, const string & d
         // TODO: clean up?
     }
 
-    // free the path
+    // clean up locally created id list
     delete_id_list( thePath );
 
     return TRUE;
@@ -6638,7 +6674,7 @@ error:
     EM_error2( 0, "...(in object import '%s' in DLL '%s')",
         query ? ( query->dll_name == "" ? query->dll_name.c_str() : "[empty]" ) : "[null]", dll->name() );
 
-    // free the path
+    // clean up locally created id list
     delete_id_list( thePath );
 
     // TODO: free the absyn stuff?
@@ -7037,6 +7073,116 @@ string arglist2string( a_Arg_List list )
 
 
 //-----------------------------------------------------------------------------
+// name: ~Chuck_Func()
+// desc: destructor
+//-----------------------------------------------------------------------------
+Chuck_Func::~Chuck_Func()
+{
+    // TODO: release references
+
+    // delete our partial deep copy
+    funcdef_cleanup();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: funcdef_connect()
+// desc: connect a Func_Def (called when this func is type checked)
+//-----------------------------------------------------------------------------
+void Chuck_Func::funcdef_connect( a_Func_Def f )
+{
+    // cleanup first
+    this->funcdef_cleanup();
+
+    if( !f )
+    {
+        EM_error2( 0, "(internal error): Chuck_Func::referenceTo() NULL func def" );
+        return;
+    }
+
+    // copy | NOTE the func_def could continue to be modified during compilation
+    // after compilation, we keep this Func around but make deep copy of this->def
+    this->m_def = f;
+
+    // if AST owned, increment the ref
+    if( f->ast_owned ) f->vm_refs++;
+
+    // log
+    EM_log( CK_LOG_FINEST, "funcdef_connect() for '%s' | AST-owned: %s vm_refs: %s",
+            S_name(f->name), f->ast_owned ? "YES" : "NO", f->ast_owned ? itoa(f->vm_refs).c_str() : "N/A" );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: funcdef_decouple_ast()
+// desc: severe references to AST (called after compilation, before AST cleanup)
+// make a fresh partial deep copy of m_def ONLY IF it is owned by AST
+//-----------------------------------------------------------------------------
+void Chuck_Func::funcdef_decouple_ast()
+{
+    // make copy
+    a_Func_Def f = this->m_def;
+
+    // if NULL
+    if( !f ) return;
+
+    // if AST owned
+    if( f->ast_owned )
+    {
+        // make partial deep copy
+        this->m_def = partial_deep_copy_fn( f );
+        // decrement ref count
+        f->vm_refs--;
+    }
+
+    // log
+    EM_log( CK_LOG_FINEST, "funcdef_decouple_ast() for '%s' | AST-owned: %s vm_refs: %s",
+            S_name(f->name), f->ast_owned ? "YES" : "NO", f->ast_owned ? itoa(f->vm_refs).c_str() : "N/A" );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: funcdef_decouple_ast()
+// desc: cleanup funcdef (if/when this function is cleaned up)
+//-----------------------------------------------------------------------------
+void Chuck_Func::funcdef_cleanup()
+{
+    // make copy
+    a_Func_Def f = this->m_def;
+
+    // if NULL
+    if( !f ) return;
+
+    // log
+    EM_log( CK_LOG_FINEST, "funcdef_cleanup() for '%s' | AST-owned: %s vm_refs: %s",
+            S_name(f->name), f->ast_owned ? "YES" : "NO", f->ast_owned ? itoa(f->vm_refs).c_str() : "N/A" );
+
+    // if AST owned
+    if( f->ast_owned )
+    {
+        // decrement ref count
+        f->vm_refs--;
+    }
+    else
+    {
+        // not AST owned, we created this, we delete this
+        delete_func_def( f );
+    }
+
+    // zero out
+    this->m_def = NULL;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: Chuck_Type()
 // desc: constructor
 //-----------------------------------------------------------------------------
@@ -7046,7 +7192,7 @@ Chuck_Type::Chuck_Type( Chuck_Env * env, te_Type _id, const std::string & _n,
     m_env = env;
     xid = _id; name = _n; parent = _p; size = _s; owner = NULL;
     array_type = NULL; array_depth = 0; obj_size = 0;
-    info = NULL; func = NULL; def = NULL; is_copy = FALSE;
+    info = NULL; func = NULL; /* def = NULL; */ is_copy = FALSE;
     ugen_info = NULL; is_complete = TRUE; has_constructor = FALSE;
     has_destructor = FALSE; allocator = NULL; originHint = te_originUnknown;
 
@@ -7088,12 +7234,12 @@ void Chuck_Type::reset()
     {
         // TODO: uncomment this, fix it to behave correctly
         // release references
-        // SAFE_RELEASE(parent);
-        // SAFE_RELEASE(array_type);
-        SAFE_RELEASE(info);
-        // SAFE_RELEASE(owner);
-        // SAFE_RELEASE(func);
-        // SAFE_RELEASE(ugen_info);
+        // CK_SAFE_RELEASE(parent);
+        // CK_SAFE_RELEASE(array_type);
+        CK_SAFE_RELEASE(info);
+        // CK_SAFE_RELEASE(owner);
+        // CK_SAFE_RELEASE(func);
+        // CK_SAFE_RELEASE(ugen_info);
     }
 }
 
@@ -7115,13 +7261,12 @@ const Chuck_Type & Chuck_Type::operator =( const Chuck_Type & rhs )
     this->parent = rhs.parent;
     this->obj_size = rhs.obj_size;
     this->size = rhs.size;
-    this->def = rhs.def;
     this->is_copy = TRUE;
     this->array_depth = rhs.array_depth;
-    this->array_type = rhs.array_type; // SAFE_ADD_REF(this->array_type);
-    this->func = rhs.func; // SAFE_ADD_REF(this->func);
-    this->info = rhs.info; SAFE_ADD_REF(this->info);
-    this->owner = rhs.owner; // SAFE_ADD_REF(this->owner);
+    this->array_type = rhs.array_type; // CK_SAFE_ADD_REF(this->array_type);
+    this->func = rhs.func; // CK_SAFE_ADD_REF(this->func);
+    this->info = rhs.info; CK_SAFE_ADD_REF(this->info);
+    this->owner = rhs.owner; // CK_SAFE_ADD_REF(this->owner);
 
     return *this;
 }
@@ -7324,7 +7469,7 @@ void Chuck_Type::apropos_top( std::string & output, const std::string & PREFIX )
         nameStr += " (";
         if( this->array_depth > 1 )
         {
-            // sigh... to_string() on earlier windows / VC++ 2010
+            // sigh...to_string() on earlier windows / VC++ 2010
             ostringstream num;
             num << this->array_depth;
             nameStr += num.str() + "D ";
@@ -7406,20 +7551,20 @@ void apropos_func( std::ostringstream & sout, Chuck_Func * theFunc,
     // print line prefix, if any
     sout << PREFIX;
     // print static
-    sout << (theFunc->def->static_decl == ae_key_static ? "static " : "");
+    sout << (theFunc->def()->static_decl == ae_key_static ? "static " : "");
     // output return type
-    sout << theFunc->def->ret_type->str();
+    sout << theFunc->def()->ret_type->str();
     // space
     sout << " ";
     // output function name
-    sout << S_name(theFunc->def->name);
+    sout << S_name(theFunc->def()->name);
     // open paren
     sout << "(";
     // extra space, if we have args
-    if( theFunc->def->arg_list != NULL ) sout << " ";
+    if( theFunc->def()->arg_list != NULL ) sout << " ";
 
     // argument list
-    a_Arg_List args = theFunc->def->arg_list;
+    a_Arg_List args = theFunc->def()->arg_list;
     while( args != NULL )
     {
         // output arg
@@ -7429,7 +7574,7 @@ void apropos_func( std::ostringstream & sout, Chuck_Func * theFunc,
     }
 
     // extra space, if we are args
-    if( theFunc->def->arg_list != NULL ) sout << " ";
+    if( theFunc->def()->arg_list != NULL ) sout << " ";
 
     // close paren
     sout << ");" << endl;
@@ -7676,15 +7821,15 @@ void Chuck_Type::apropos_vars( std::string & output, const std::string & PREFIX,
 
 
 //-----------------------------------------------------------------------------
-// name: dump()
+// name: dump_obj()
 // desc: generate object state; output to console | 1.4.1.1 (ge)
 //-----------------------------------------------------------------------------
-void Chuck_Type::dump( Chuck_Object * obj )
+void Chuck_Type::dump_obj( Chuck_Object * obj )
 {
     // the info
     string output;
     // get it
-    this->dump( obj, output );
+    this->dump_obj( obj, output );
     // print it
     CK_STDCERR << output << CK_STDENDL;
 }
@@ -7693,10 +7838,10 @@ void Chuck_Type::dump( Chuck_Object * obj )
 
 
 //-----------------------------------------------------------------------------
-// name: dump()
+// name: dump_obj()
 // desc: generate object state; output to string | 1.4.1.1 (ge)
 //-----------------------------------------------------------------------------
-void Chuck_Type::dump( Chuck_Object * obj, std::string & output )
+void Chuck_Type::dump_obj( Chuck_Object * obj, std::string & output )
 {
     // TODO
 }

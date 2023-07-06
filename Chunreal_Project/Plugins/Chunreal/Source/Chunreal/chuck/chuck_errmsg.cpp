@@ -33,6 +33,7 @@
 //-----------------------------------------------------------------------------
 #include "chuck_errmsg.h"
 #include "chuck_utils.h"
+#include "chuck.h"
 #include "util_platforms.h"
 #include "util_string.h"
 
@@ -46,21 +47,26 @@
 #include <string.h>
 #include <sstream>
 #include <iostream>
+using namespace std;
+
 
 // global
 t_CKINT EM_tokPos = 0;
 t_CKINT EM_lineNum = 1;
 t_CKINT EM_extLineNum = 1;
-t_CKBOOL anyErrors= FALSE;
 
-// local global
-static const char * fileName = "";
-static int lineNum = 1;
-#define CK_ERR_BUF_LENGTH 1024
+// current filename
+static const char * the_filename = "";
+// current line number
+static t_CKINT the_lineNum = 1;
+// current chuck
+static ChucK * the_chuck = NULL;
+
+// a local global string buffer for snprintf
+#define CK_ERR_BUF_LENGTH 2048
 static char g_buffer[CK_ERR_BUF_LENGTH] = "";
-static const size_t LASTERROR_SIZE = 1024;
-static char g_lasterror[LASTERROR_SIZE] = "[chuck]: (no error)";
-static size_t g_lasterrorIndex = strlen(g_lasterror);
+// last error
+static std::string g_lasterror = "";
 
 // log globals
 t_CKINT g_loglevel = CK_LOG_CORE;
@@ -70,10 +76,12 @@ XMutex g_logmutex;
 #endif
 
 // more local globals
-static const size_t g_buffer2_size = 1024;
-static char g_buffer2[g_buffer2_size] = "";
 std::stringstream g_stdout_stream;
 std::stringstream g_stderr_stream;
+// 1.5.0.5 (ge) increase g_buffer2_size from 1024 to 8192
+// to accomodate longer, potentially multiline output strings
+static const size_t g_buffer2_size = 8192;
+static char g_buffer2[g_buffer2_size] = "";
 
 // local global callbacks
 void (*g_stdout_callback)(const char *) = NULL;
@@ -84,7 +92,6 @@ static CompileFileSource g_currentFile;
 // whether to highlight
 static t_CKBOOL g_highlight_on_error = TRUE;
 
-
 // name
 static const char * g_str[] = {
     "NONE",         // 0
@@ -93,7 +100,7 @@ static const char * g_str[] = {
     "SEVERE",       // 3
     "WARN!!",       // 4
     "INFORM",       // 5
-    "CONFIG",       // 6
+    "DEBUG!",       // 6 <-- 1.5.0.5 changed from "CONFIG" to "DEBUG!"
     "FINE!!",       // 7
     "FINER!",       // 8
     "FINEST",       // 9
@@ -101,26 +108,28 @@ static const char * g_str[] = {
 };
 
 
-// intList
-typedef struct intList { t_CKINT i; struct intList *rest; } *IntList;
-static IntList linePos = NULL;
 
 
-static int lastErrorCat(const char * str)
+//-----------------------------------------------------------------------------
+// name: EM_set_current_chuck()
+// set current ChucK; used to query current params
+//-----------------------------------------------------------------------------
+void EM_set_current_chuck( ChucK * ck )
 {
-    assert(g_lasterrorIndex <= LASTERROR_SIZE-1);
-
-    size_t len = strlen(str);
-
-    strncat(g_lasterror, str, LASTERROR_SIZE-g_lasterrorIndex-1);
-
-    size_t appendCount = ck_min(LASTERROR_SIZE-g_lasterrorIndex-1, len);
-    g_lasterrorIndex += appendCount;
-
-    return appendCount > 0;
+    // set as current chuck
+    the_chuck = ck;
 }
 
 
+
+
+//-----------------------------------------------------------------------------
+// name: intList
+// desc: a linked list of token positions by line
+//-----------------------------------------------------------------------------
+typedef struct intList { t_CKINT i; struct intList *rest; } *IntList;
+// for the current file
+static IntList the_linePos = NULL;
 // constructor
 static IntList intList( t_CKINT i, IntList rest )
 {
@@ -128,19 +137,27 @@ static IntList intList( t_CKINT i, IntList rest )
     l->i=i; l->rest=rest;
     return l;
 }
-
-
-// new line in lexer
-void EM_newline(void)
+//-----------------------------------------------------------------------------
+// called by lexer on new line
+// 1.5.0.5 (ge) updated to take a pos argument
+//-----------------------------------------------------------------------------
+void EM_newline( t_CKINT pos )
 {
-    lineNum++;
+    the_lineNum++;
     EM_lineNum++;
     EM_extLineNum++;
-    linePos = intList(EM_tokPos, linePos);
+    the_linePos = intList( pos, the_linePos );
+
+    // debug print
+    // cerr << "line: " << EM_lineNum << " pos: " << pos << endl;
 }
 
 
+
+
+//-----------------------------------------------------------------------------
 // content after rightmost '/'
+//-----------------------------------------------------------------------------
 const char * mini( const char * str )
 {
     t_CKINT len = strlen( str );
@@ -150,7 +167,11 @@ const char * mini( const char * str )
 }
 
 
+
+
+//-----------------------------------------------------------------------------
 // content after 'struct'
+//-----------------------------------------------------------------------------
 const char * mini_type( const char * str )
 {
     if( !strncmp( str, "struct ", 7 ) ) str += 7;
@@ -159,17 +180,50 @@ const char * mini_type( const char * str )
     return p;
 }
 
-// clear last error
-void EM_reset_msg()
+
+
+
+//-----------------------------------------------------------------------------
+// name: lastErrorCat()
+// desc: concatenate into last error string buffer
+//-----------------------------------------------------------------------------
+static void lastErrorCat( const std::string & str )
 {
-    g_lasterror[0] = '\0';
-    g_lasterrorIndex = 0;
+    // concat
+    g_lasterror += str;
 }
 
-// whether to highlight code on compiler error
-void EM_highlight_on_error( t_CKBOOL yesOrNo )
+
+
+
+//-----------------------------------------------------------------------------
+// clear last error
+//-----------------------------------------------------------------------------
+void EM_reset_msg()
 {
-    g_highlight_on_error = yesOrNo;
+    g_lasterror = "";
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: EM_highlight_on_error() | 1.5.0.5 (ge) added
+// desc: whether to highligh code on compiler error
+//       this defaults to true, but may be disabled when helpful
+//       (e.g., to match output for automated testing)
+//-----------------------------------------------------------------------------
+t_CKBOOL EM_highlight_on_error()
+{
+    // if we have a chuck reference
+    if( the_chuck )
+    {
+        // update
+        g_highlight_on_error = the_chuck->getParamInt( CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR );
+    }
+
+    // return
+    return g_highlight_on_error;
 }
 
 
@@ -177,32 +231,87 @@ void EM_highlight_on_error( t_CKBOOL yesOrNo )
 
 //-----------------------------------------------------------------------------
 // name: EM_printLineInCode() | 1.5.0.5 (ge) added
-// desc: output a particular line of code, with optional token `pos`
+// desc: output a particular line of code, with optional char pos for caret ^
 //-----------------------------------------------------------------------------
-void EM_printLineInCode( t_CKINT lineNumber, t_CKINT pos )
+void EM_printLineInCode( t_CKINT lineNumber, t_CKINT charNumber )
 {
     // check
-    if( !g_highlight_on_error || lineNumber <= 0 ) return;
-
-    t_CKINT spaces = 0;
-
-    // line num display
-    //std::string lineDisplay;
-    // lineDisplay += "line(" + itoa(lineNumber) + "): ";
+    if( !EM_highlight_on_error() || lineNumber <= 0 ) return;
 
     // get error line
     std::string line = g_currentFile.getLine(lineNumber);
+
+    // detect empty file
+    if( lineNumber == 1 && trim(line) == "" )
+    {
+        CK_FPRINTF_STDERR( "(empty file)\n" );
+        return;
+    }
+
+    // spaces before caret
+    t_CKINT spaces = charNumber - 1;
+
+    // if not empty
     if( line != "" )
     {
-        //spaces = strlen(g_lasterror);
-        //for( t_CKINT i = 0; i < spaces; i++ ) CK_FPRINTF_STDERR( "-" );
-        CK_FPRINTF_STDERR( "  %s\n  ", line.c_str() );
+        // replace tabs with a single space
+        line = replace_tabs( line, ' ' );
 
-        if( pos >= 0 )
+        // line position
+        string posLine = itoa(lineNumber);
+        // spaces due to lineNumber + [] + space
+        t_CKINT posLineIndent = posLine.length() + 3;
+
+        // get terminal width; -2 for the indentation below
+        t_CKUINT WIDTH = ck_ttywidth()-posLineIndent;
+        t_CKUINT CARET_POS = (t_CKUINT)(WIDTH/3.0);
+
+        // check for some mininum
+        if( WIDTH < posLineIndent + 4 )
         {
-            spaces = pos - 1; // + lineDisplay.length();
+            // base defaults
+            WIDTH = 80; CARET_POS = 28;
+            // check if update
+            if( the_chuck )
+            {
+                // get params stored in chuck; could have been set from host
+                WIDTH = the_chuck->getParamInt( CHUCK_PARAM_TTY_WIDTH_HINT );
+                CARET_POS = (t_CKUINT)(WIDTH/3.0);
+            }
+        }
+        // any padding on the right
+        else{ WIDTH -= 1; CARET_POS -= 1; }
+
+        // if line too long, snippet it
+        if( line.length() > WIDTH || spaces > CARET_POS )
+        {
+            t_CKINT leftTrimmed = 0;
+            t_CKINT rightTrimmed = 0;
+            // quote the line
+            line = snippet( line, WIDTH, CARET_POS, spaces, &leftTrimmed, &rightTrimmed );
+
+            // beyond certain length, replace end(s) with ...
+            if( line.length() > 32 )
+            {
+                // left
+                if( leftTrimmed >= 3 ) line.replace( 0, 3, "..." );
+                // right
+                if( rightTrimmed >= 3 ) line.replace( line.length()-3, 3, "..." );
+            }
+        }
+
+        // account for lineNumber width + [] + space
+        spaces += posLineIndent;
+
+        // print the line with indentation e.g., [5]
+        CK_FPRINTF_STDERR( "[%s] %s\n", TC::blue(posLine,TRUE).c_str(), line.c_str() );
+
+        // if valid char position to print caret
+        if( spaces >= 0 )
+        {
+            // print spaces
             for( t_CKINT i = 0; i < spaces; i++ ) CK_FPRINTF_STDERR( " " );
-            // carat
+            // print caret
             CK_FPRINTF_STDERR( "%s", TC::green("^",TRUE).c_str() );
         }
 
@@ -210,6 +319,8 @@ void EM_printLineInCode( t_CKINT lineNumber, t_CKINT pos )
         CK_FPRINTF_STDERR( "\n" );
     }
 }
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -225,52 +336,124 @@ void EM_printLineInCode( t_CKINT lineNumber )
 
 
 //-----------------------------------------------------------------------------
+// name: EM_error_prefix_begin()
+// desc: begin the error prefix, e.g, "[chuck" or "[FILE.ck"
+//-----------------------------------------------------------------------------
+static void EM_error_prefix_begin( t_CKBOOL colorTTY = TRUE, t_CKBOOL bold = FALSE )
+{
+    // set color TTY mode
+    if( colorTTY ) { TC::on(); } else { TC::off(); }
+
+    // check filename
+    t_CKBOOL hasFilename = (*the_filename) != '\0';
+
+    // prefix text
+    std::string prefix = hasFilename ? mini(the_filename) : "[chuck";
+
+    // print prefix
+    if( hasFilename ) CK_FPRINTF_STDERR( "%s", TC::orange(prefix, bold).c_str() );
+    else CK_FPRINTF_STDERR( "%s", prefix.c_str() );
+
+    // print to string
+    snprintf( g_buffer, CK_ERR_BUF_LENGTH, "%s", prefix.c_str() );
+    // concat into last error
+    lastErrorCat( g_buffer );
+
+    // if off reenable color TTY
+    if( !colorTTY ) TC::on();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: EM_error_prefix_end()
+// desc: close the error prefix, e.g, "]:"
+//-----------------------------------------------------------------------------
+static void EM_error_prefix_end( t_CKBOOL colorTTY = TRUE, t_CKBOOL bold = FALSE )
+{
+    // set color TTY mode
+    if( colorTTY ) { TC::on(); } else { TC::off(); }
+
+    // check filename
+    t_CKBOOL hasFilename = (*the_filename) != '\0';
+
+    // prefix text
+    std::string prefix_end = hasFilename ? TC::orange(": ",bold).c_str() : "]: ";
+
+    // print space
+    CK_FPRINTF_STDERR( prefix_end.c_str() );
+    // buffer the above
+    lastErrorCat( prefix_end.c_str() );
+
+    // if off reenable color TTY
+    if( !colorTTY ) TC::on();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: EM_error()
-// format: [%s]:line(%d).char(%d):
+// format: [%s:%d:%d]: // was [%s].line(%d).char(%d):
 // desc: work horse of compiler and system error reporting
 //-----------------------------------------------------------------------------
 void EM_error( t_CKINT pos, const char * message, ... )
 {
     va_list ap;
-    IntList lines = linePos;
-    int num = lineNum;
+    IntList lines = the_linePos;
+    t_CKINT line = the_lineNum;
+    t_CKINT actualPos = -1;
+    t_CKBOOL bold = TRUE;
+    // declare each time to pick up any TC state
+    string COLON = TC::orange(":",bold);
 
-    anyErrors = TRUE;
-    while( lines && lines->i >= pos )
+    if( pos > 0 )
     {
-        lines = lines->rest;
-        num--;
+        // search for line containing pos
+        while( lines && lines->i >= pos )
+        {
+            lines = lines->rest;
+            line--;
+        }
+        // calculate actual pos on line
+        if( lines ) actualPos = pos - lines->i;
     }
 
     // separate errmsgs with newlines
-    if( g_lasterror[0] != '\0' ) lastErrorCat( "\n" );
+    if( g_lasterror != "" ) lastErrorCat( "\n" );
+    // debug print
+    // cerr << "EM_error(): pos: " << pos << " actualPos:" << actualPos << " the_lineNum: " << the_lineNum << endl;
 
-    CK_FPRINTF_STDERR( "[%s]:", TC::orange(*fileName ? mini(fileName) : "chuck", true).c_str() );
-    snprintf( g_buffer, CK_ERR_BUF_LENGTH, "[%s]:", *fileName ? mini(fileName) : "chuck" );
-    lastErrorCat( g_buffer );
-    if(lines)
+    // begin prefix, e.g, "FILE.ck" or "[chuck"
+    EM_error_prefix_begin( TRUE, bold );
+    // if found
+    if( pos > 0 && actualPos > 0 )
     {
-        CK_FPRINTF_STDERR( TC::orange("line(%d).char(%d):", true).c_str(), num, pos-lines->i );
-        snprintf( g_buffer, CK_ERR_BUF_LENGTH, "line(%d).char(%d):", num, (int)(pos-lines->i) );
+        CK_FPRINTF_STDERR( "%s%s%s%s", COLON.c_str(), TC::blue(itoa(line),bold).c_str(), COLON.c_str(), TC::green(itoa(actualPos),bold).c_str() );
+        snprintf( g_buffer, CK_ERR_BUF_LENGTH, ":%d:%d", (int)line, (int)actualPos );
         lastErrorCat( g_buffer );
     }
-    CK_FPRINTF_STDERR( " " );
-    lastErrorCat( " " );
+    // end prefix, e.g, ": " or "]: "
+    EM_error_prefix_end( TRUE, bold );
 
+    // print the message
     va_start(ap, message);
     CK_VFPRINTF_STDERR( TC::red(message, true).c_str(), ap );
     va_end(ap);
-
+    // buffer the message
     va_start(ap, message);
     vsnprintf( g_buffer, CK_ERR_BUF_LENGTH, message, ap );
     va_end(ap);
-
-    CK_FPRINTF_STDERR( "\n");
-    CK_FFLUSH_STDERR();
     lastErrorCat( g_buffer );
 
-    // print
-    EM_printLineInCode( num, pos-lines->i );
+    // endl
+    CK_FPRINTF_STDERR( "\n");
+    // flush
+    CK_FFLUSH_STDERR();
+
+    // print code on error
+    if( pos > 0 ) EM_printLineInCode( line, actualPos );
 }
 
 
@@ -278,42 +461,60 @@ void EM_error( t_CKINT pos, const char * message, ... )
 
 //-----------------------------------------------------------------------------
 // name: EM_error2()
-// format: [%s]:line(%d):
+// format: [%s:%d:%d]: // was [%s]:line(%d):
 // desc: error output (variant 2, with terminal colors)
 //-----------------------------------------------------------------------------
-void EM_error2( t_CKINT line, const char * message, ... )
+void EM_error2( t_CKINT pos, const char * message, ... )
 {
     va_list ap;
+    IntList lines = the_linePos;
+    t_CKINT line = the_lineNum;
+    t_CKINT actualPos = -1;
+    t_CKBOOL bold = TRUE;
+    // declare each time to pick up any TC state
+    string COLON = TC::orange(":",bold);
 
-    EM_extLineNum = line;
-
-    // separate errmsgs with newlines
-    if( g_lasterror[0] != '\0' ) lastErrorCat( "\n" );
-
-    // is bold?
-    t_CKBOOL bold = true;
-
-    // header
-    std::string prefix = *fileName ? mini(fileName) : "chuck";
-    // print header
-    if( *fileName ) CK_FPRINTF_STDERR( "[%s]:", TC::orange(prefix, bold).c_str() );
-    else CK_FPRINTF_STDERR( "[%s]:", prefix.c_str() );
-    snprintf( g_buffer, CK_ERR_BUF_LENGTH, "[%s]:", *fileName ? mini(fileName) : "chuck" );
-    lastErrorCat( g_buffer );
-
-    // if given a valid line number
-    if( line > 0 )
+    // do if pos is positive
+    if( pos > 0 )
     {
-        CK_FPRINTF_STDERR( TC::orange("line(%d):",bold).c_str(), (int)line );
-        snprintf( g_buffer, CK_ERR_BUF_LENGTH, "line(%d):", (int)line );
-        lastErrorCat( g_buffer );
+        while( lines && lines->i >= pos )
+        {
+            lines = lines->rest;
+            line--;
+        }
 
-        // print error only if there is non-zero line number
-        CK_FPRINTF_STDERR( " %s", TC::red("error:", true).c_str() );
-        lastErrorCat( " error:" );
+        if( lines )
+        {
+            actualPos = pos - lines->i;
+
+            // debug print
+            // std::cerr << "lineNum: " << line << " lines->i: " << lines->i << " pos: " << pos << std::endl;
+        }
     }
-    CK_FPRINTF_STDERR( " " );
-    lastErrorCat( " " );
+
+    // save
+    EM_extLineNum = line;
+    // separate errmsgs with newlines
+    if( g_lasterror != "" ) lastErrorCat( "\n" );
+
+    // begin prefix, e.g, "FILE.ck" or "[chuck"
+    EM_error_prefix_begin( TRUE, bold );
+    // if given a valid line number
+    if( pos )
+    {
+        CK_FPRINTF_STDERR( "%s%s%s%s", COLON.c_str(), TC::blue(itoa(line),bold).c_str(), COLON.c_str(), TC::green(itoa(actualPos),bold).c_str() );
+        snprintf( g_buffer, CK_ERR_BUF_LENGTH, ":%d:%d", (int)line, (int)actualPos );
+        lastErrorCat( g_buffer );
+    }
+    // end prefix, e.g, ": " or "]: "
+    EM_error_prefix_end( TRUE, bold );
+
+    if( pos )
+    {
+        // print error only if there is non-zero line number
+        CK_FPRINTF_STDERR( "%s", TC::red("error: ", true).c_str() );
+        lastErrorCat( "error: " );
+    }
 
     va_start( ap, message );
     CK_VFPRINTF_STDERR( TC::orange(message,bold).c_str(), ap );
@@ -327,8 +528,8 @@ void EM_error2( t_CKINT line, const char * message, ... )
     CK_FPRINTF_STDERR( "\n" );
     CK_FFLUSH_STDERR();
 
-    // print
-    EM_printLineInCode( line );
+    // print code on error
+    if( pos > 0 ) EM_printLineInCode( line, actualPos );
 }
 
 
@@ -336,7 +537,7 @@ void EM_error2( t_CKINT line, const char * message, ... )
 
 //-----------------------------------------------------------------------------
 // name: EM_error2b()
-// format: [%s]:line(%d):
+// format: [%s:%d:%d]: // was [%s]:line(%d):
 // desc: error output -- like variant 2, but without color teriminal output
 //-----------------------------------------------------------------------------
 void EM_error2b( t_CKINT line, const char * message, ... )
@@ -346,21 +547,19 @@ void EM_error2b( t_CKINT line, const char * message, ... )
     EM_extLineNum = line;
 
     // separate errmsgs with newlines
-    if( g_lasterror[0] != '\0' ) lastErrorCat( "\n" );
+    if( g_lasterror != "" ) lastErrorCat( "\n" );
 
-    CK_FPRINTF_STDERR( "[%s]:", *fileName ? mini(fileName) : "chuck" );
-    snprintf( g_buffer, CK_ERR_BUF_LENGTH, "[%s]:", *fileName ? mini(fileName) : "chuck" );
-    lastErrorCat( g_buffer );
-
+    // begin prefix, e.g, "FILE.ck" or "[chuck"
+    EM_error_prefix_begin( FALSE );
     // if given a valid line number
     if( line > 0 )
     {
-        CK_FPRINTF_STDERR( "line(%d):", (int)line );
-        snprintf( g_buffer, CK_ERR_BUF_LENGTH, "line(%d):", (int)line );
+        CK_FPRINTF_STDERR( ":%d", (int)line );
+        snprintf( g_buffer, CK_ERR_BUF_LENGTH, ":%d", (int)line );
         lastErrorCat( g_buffer );
     }
-    CK_FPRINTF_STDERR( " " );
-    lastErrorCat( " " );
+    // end prefix, e.g, ": " or "]: "
+    EM_error_prefix_end( FALSE );
 
     va_start( ap, message );
     CK_VFPRINTF_STDERR( message, ap );
@@ -375,7 +574,7 @@ void EM_error2b( t_CKINT line, const char * message, ... )
     CK_FFLUSH_STDERR();
 
     // print
-    EM_printLineInCode( line );
+    if( line > 0 ) EM_printLineInCode( line );
 }
 
 
@@ -390,11 +589,9 @@ void EM_error3( const char * message, ... )
     va_list ap;
 
     // separate errmsgs with newlines
-    if( g_lasterror[0] != '\0' ) lastErrorCat( "\n" );
+    if( g_lasterror != "" ) lastErrorCat( "\n" );
 
-    // g_lasterror[0] = '\0';
     g_buffer[0] = '\0';
-
     va_start( ap, message );
     CK_VFPRINTF_STDERR( TC::orange(message,true).c_str(), ap );
     va_end( ap );
@@ -420,7 +617,7 @@ void EM_print2vanilla( const char * message, ... )
     va_list ap;
 
     // print
-    CK_FPRINTF_STDERR( "[%s]:", *fileName ? mini(fileName) : "chuck" );
+    CK_FPRINTF_STDERR( "[%s]:", *the_filename ? mini(the_filename) : "chuck" );
     CK_FPRINTF_STDERR( " " );
 
     // print
@@ -445,7 +642,7 @@ void EM_print2green( const char * message, ... )
     va_list ap;
 
     // print
-    CK_FPRINTF_STDERR( "[%s]:", *fileName ? mini(fileName) : "chuck" );
+    CK_FPRINTF_STDERR( "[%s]:", *the_filename ? mini(the_filename) : "chuck" );
     CK_FPRINTF_STDERR( " " );
 
     // print
@@ -470,7 +667,7 @@ void EM_print2blue( const char * message, ... )
     va_list ap;
 
     // print
-    CK_FPRINTF_STDERR( "[%s]:", *fileName ? mini(fileName) : "chuck" );
+    CK_FPRINTF_STDERR( "[%s]:", *the_filename ? mini(the_filename) : "chuck" );
     CK_FPRINTF_STDERR( " " );
 
     // print
@@ -495,7 +692,7 @@ void EM_print2orange( const char * message, ... )
     va_list ap;
 
     // print
-    CK_FPRINTF_STDERR( "[%s]:", *fileName ? mini(fileName) : "chuck" );
+    CK_FPRINTF_STDERR( "[%s]:", *the_filename ? mini(the_filename) : "chuck" );
     CK_FPRINTF_STDERR( " " );
 
     // print
@@ -603,24 +800,23 @@ void EM_poplog()
 //-----------------------------------------------------------------------------
 void EM_start_filename( const char * fname )
 {
-    anyErrors = FALSE;
-    fileName = fname ? fname : (c_str)"";
-    lineNum = 1;
+    the_filename = fname ? fname : (c_str)"";
+    the_lineNum = 1;
     EM_lineNum = 1;
     EM_extLineNum = 1;
 
     // free the intList
     IntList curr = NULL;
-    while( linePos )
+    while( the_linePos )
     {
-        curr = linePos;
-        linePos = linePos->rest;
+        curr = the_linePos;
+        the_linePos = the_linePos->rest;
         // free
         free( curr );
     }
 
     // make new intList
-    linePos = intList( 0, NULL );
+    the_linePos = intList( 0, NULL );
 }
 
 
@@ -633,9 +829,9 @@ void EM_start_filename( const char * fname )
 void EM_reset_filename()
 {
     // set
-    fileName = (c_str)"";
+    the_filename = (c_str)"";
     // more set
-    lineNum = 0;
+    the_lineNum = 0;
     EM_lineNum = 0;
     EM_extLineNum = 0;
 }
@@ -649,7 +845,7 @@ void EM_reset_filename()
 //-----------------------------------------------------------------------------
 const char * EM_lasterror()
 {
-    return g_lasterror;
+    return g_lasterror.c_str();
 }
 
 
@@ -707,8 +903,6 @@ std::string getLineFromCode( const std::string & code, t_CKUINT n )
 
 
 
-
-
 //-----------------------------------------------------------------------------
 // name: getLineFromFile()
 // desc: return a specific line from a presumed open FILE descriptor
@@ -751,7 +945,7 @@ std::string getLineFromFile( FILE * fd, t_CKUINT n )
     }
 
     // free
-    SAFE_FREE( line );
+    CK_SAFE_FREE( line );
 
     // return
     return ret;
@@ -782,8 +976,8 @@ std::string CompileFileSource::getLine( t_CKUINT n )
     }
 
     // empty?
-    if( retval == "" )
-        CK_FPRINTF_STDERR( "[chuck](parser): cannot retrieve source to display!\n" );
+    // if( retval == "" )
+    //     CK_FPRINTF_STDERR( "[chuck]: (parser) cannot retrieve source to display!\n" );
 
     return retval;
 }
@@ -807,6 +1001,12 @@ void ck_fprintf_stdout( const char * format, ... )
 
     // try flushing
     ck_fflush_stdout();
+
+    // NOTE: currently the output size is limitd by g_buffer2_size, which
+    // will cut off longer strings (e.g., trying to print a deep stack trace)
+    // might look into vasprintf(), which dynamically allocates the
+    // final string buffer, accomodates arbitrarily long string; the downside
+    // is that vasprintf dynamically allocates memory each time
 }
 
 
@@ -828,6 +1028,12 @@ void ck_fprintf_stderr( const char * format, ... )
 
     // try flushing
     ck_fflush_stderr();
+
+    // NOTE: currently the output size is limitd by g_buffer2_size, which
+    // will cut off longer strings (e.g., trying to print a deep stack trace)
+    // might look into vasprintf(), which dynamically allocates the
+    // final string buffer, accomodates arbitrarily long string; the downside
+    // is that vasprintf dynamically allocates memory each time
 }
 
 
@@ -973,18 +1179,15 @@ void ck_set_stderr_callback( void (*callback)(const char *) )
 #ifdef __cplusplus
 extern "C++" {
 
-
 ChuckOutStream::ChuckOutStream( bool isErr )
 {
     m_callback = NULL;
     m_isErr = isErr;
 }
 
-
 ChuckOutStream::~ChuckOutStream()
 {
 }
-
 
 ChuckOutStream& ChuckOutStream::operator<<( const std::string val )
 {
@@ -993,14 +1196,12 @@ ChuckOutStream& ChuckOutStream::operator<<( const std::string val )
     return *this;
 }
 
-
 ChuckOutStream& ChuckOutStream::operator<<( const char * val )
 {
     m_stream << val;
     if( m_isErr || std::string(val) == CK_STDENDL ) { this->flush(); }
     return *this;
 }
-
 
 ChuckOutStream& ChuckOutStream::operator<<(const double val)
 {
@@ -1009,14 +1210,12 @@ ChuckOutStream& ChuckOutStream::operator<<(const double val)
     return *this;
 }
 
-
 ChuckOutStream& ChuckOutStream::operator<<( const float val )
 {
     m_stream << val;
     if (m_isErr) { this->flush(); }
     return *this;
 }
-
 
 ChuckOutStream& ChuckOutStream::operator<<( const unsigned long long val )
 {
@@ -1025,14 +1224,12 @@ ChuckOutStream& ChuckOutStream::operator<<( const unsigned long long val )
     return *this;
 }
 
-
 ChuckOutStream& ChuckOutStream::operator<<( const long long val )
 {
     m_stream << val;
     if (m_isErr) { this->flush(); }
     return *this;
 }
-
 
 ChuckOutStream& ChuckOutStream::operator<<( const unsigned long val )
 {
@@ -1041,14 +1238,12 @@ ChuckOutStream& ChuckOutStream::operator<<( const unsigned long val )
     return *this;
 }
 
-
 ChuckOutStream& ChuckOutStream::operator<<( const long val )
 {
     m_stream << val;
     if (m_isErr) { this->flush(); }
     return *this;
 }
-
 
 ChuckOutStream& ChuckOutStream::operator<<( const unsigned int val )
 {
@@ -1057,14 +1252,12 @@ ChuckOutStream& ChuckOutStream::operator<<( const unsigned int val )
     return *this;
 }
 
-
 ChuckOutStream& ChuckOutStream::operator<<( const int val )
 {
     m_stream << val;
     if (m_isErr) { this->flush(); }
     return *this;
 }
-
 
 ChuckOutStream& ChuckOutStream::operator<<( const bool val )
 {
@@ -1073,12 +1266,10 @@ ChuckOutStream& ChuckOutStream::operator<<( const bool val )
     return *this;
 }
 
-
 void ChuckOutStream::set_callback( void (*callback)( const char * ) )
 {
     m_callback = callback;
 }
-
 
 void ChuckOutStream::flush()
 {
@@ -1106,7 +1297,6 @@ void ChuckOutStream::flush()
     // clear buffer
     m_stream.str( std::string() );
 }
-
 
 ChuckOutStream g_ck_stdoutstream( FALSE );
 ChuckOutStream g_ck_stderrstream( TRUE );

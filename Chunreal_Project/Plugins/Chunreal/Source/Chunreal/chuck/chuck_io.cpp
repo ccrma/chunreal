@@ -34,6 +34,7 @@
 #include "chuck_instr.h"
 #include "chuck_type.h"
 #include "chuck_vm.h"
+#include "util_platforms.h"
 
 #ifndef __DISABLE_HID__
 #include "hidio_sdl.h"
@@ -57,6 +58,7 @@
 #endif // __PLATFORM_WIN32__
 #include <fcntl.h>
 #include <math.h>
+#include <stdint.h> // 1.5.0.5
 
 #include <iomanip>
 #include <sstream>
@@ -75,9 +77,6 @@ typedef DWORD uint32_t;
 #endif
 #endif
 
-#ifdef __PLATFORM_LINUX__
-#include <stdint.h>
-#endif
 
 // global
 static Chuck_String * g_newline = new Chuck_String();
@@ -2996,17 +2995,17 @@ Chuck_IO_Serial::~Chuck_IO_Serial()
 {
     m_do_read_thread = FALSE;
     m_do_write_thread = FALSE;
-    SAFE_DELETE(m_read_thread);
+    CK_SAFE_DELETE(m_read_thread);
     if( m_event_buffer )
         m_vmRef->destroy_event_buffer( m_event_buffer );
 
     close();
 
-    SAFE_DELETE(m_io_buf);
+    CK_SAFE_DELETE(m_io_buf);
     m_io_buf_max = 0;
     m_io_buf_pos = m_io_buf_available = 0;
 
-    SAFE_DELETE(m_tmp_buf);
+    CK_SAFE_DELETE(m_tmp_buf);
     m_tmp_buf_max = 0;
 
     s_serials.remove(this);
@@ -4079,7 +4078,7 @@ t_CKBOOL Chuck_IO_Serial::handle_float_ascii(Chuck_IO_Serial::Request & r)
     return TRUE;
 
 error:
-    SAFE_DELETE(array);
+    CK_SAFE_DELETE(array);
     r.m_val = 0;
     r.m_status = Chuck_IO_Serial::Request::RQ_STATUS_FAILURE;
 
@@ -4130,7 +4129,7 @@ t_CKBOOL Chuck_IO_Serial::handle_int_ascii(Chuck_IO_Serial::Request & r)
     return TRUE;
 
 error:
-    SAFE_DELETE(array);
+    CK_SAFE_DELETE(array);
     r.m_val = 0;
     r.m_status = Chuck_IO_Serial::Request::RQ_STATUS_FAILURE;
 
@@ -4341,7 +4340,7 @@ void Chuck_IO_Serial::read_cb()
         if(m_asyncResponses.numElements() > 0)
             queue_broadcast(m_event_buffer);
 
-        usleep(100);
+        ck_usleep(100);
     }
 
     m_write_thread->wait(-1);
@@ -4383,7 +4382,7 @@ void Chuck_IO_Serial::write_cb()
         }
 
         // todo: replace with semaphore?
-        usleep(100);
+        ck_usleep(100);
     }
 
     delete[] tmp_writethread_buf;

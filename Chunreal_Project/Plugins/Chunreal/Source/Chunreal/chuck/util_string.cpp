@@ -46,6 +46,8 @@
 #include <time.h>
 #include <limits.h>
 #include <stdio.h>
+
+#include <algorithm>
 using namespace std;
 
 
@@ -53,7 +55,7 @@ using namespace std;
 
 //-----------------------------------------------------------------------------
 // name: itoa()
-// desc: ...
+// desc: int to ascii
 //-----------------------------------------------------------------------------
 string itoa( t_CKINT val )
 {
@@ -68,9 +70,10 @@ string itoa( t_CKINT val )
 
 
 
+
 //-----------------------------------------------------------------------------
 // name: ftoa()
-// desc: ...
+// desc: float to ascii
 //-----------------------------------------------------------------------------
 string ftoa( t_CKFLOAT val, t_CKUINT precision )
 {
@@ -79,6 +82,20 @@ string ftoa( t_CKFLOAT val, t_CKUINT precision )
     if( precision > 32 ) precision = 32;
     snprintf( str, 32, "%%.%lif", (long)precision );
     snprintf( buffer, 128, str, val );
+    return string(buffer);
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ptoa()
+// desc: pointer to ascii
+//-----------------------------------------------------------------------------
+string ptoa( void * val )
+{
+    char buffer[128];
+    snprintf( buffer, 128, "%p", val );
     return string(buffer);
 }
 
@@ -145,7 +162,7 @@ string capitalize( const string & s )
 
 //-----------------------------------------------------------------------------
 // name: trim()
-// desc: ...
+// desc: return a whitespace (spaces and tabs)-trimmed string
 //-----------------------------------------------------------------------------
 string trim( const string & val )
 {
@@ -154,7 +171,7 @@ string trim( const string & val )
     t_CKINT end = val.length() - 1;
 
     // left trim
-    for( start = 0; start < end; start++ )
+    for( start = 0; start <= end; start++ )
     {
         // non-white space
         if( val[start] != ' ' && val[start] != '\t' )
@@ -181,9 +198,10 @@ string trim( const string & val )
 
 
 
+
 //-----------------------------------------------------------------------------
 // name: ltrim()
-// desc: ...
+// desc: left trim
 //-----------------------------------------------------------------------------
 string ltrim( const string & val )
 {
@@ -211,7 +229,7 @@ string ltrim( const string & val )
 
 //-----------------------------------------------------------------------------
 // name: rtrim()
-// desc: ...
+// desc: right trim
 //-----------------------------------------------------------------------------
 string rtrim( const string & val )
 {
@@ -232,6 +250,70 @@ string rtrim( const string & val )
 
     // return
     return val.substr( start, end - start + 1 );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: replace_tabs()
+// desc: replace each tab in a string
+//-----------------------------------------------------------------------------
+std::string replace_tabs( const std::string & s, char replaceEachTabWithThis )
+{
+    string str = s;
+    std::replace( str.begin(), str.end(), '\t', replaceEachTabWithThis );
+    return str;
+}
+
+
+
+#include <iostream>
+//-----------------------------------------------------------------------------
+// name: snippet()
+// desc: snippet a string around an offset; useful for displaying
+// long line of test with caret ^ offset
+//-----------------------------------------------------------------------------
+std::string snippet( const std::string & str, t_CKINT desiredLength,
+                     t_CKINT desiredLeftPadding, t_CKINT & targetPosition,
+                     t_CKINT * pLeftTrimmed, t_CKINT * pRightTrimmed )
+{
+    // zero out optional fields
+    if( pLeftTrimmed ) *pLeftTrimmed = 0;
+    if( pRightTrimmed ) *pRightTrimmed = 0;
+
+    // check: str already within desired length
+    if( str.length() < desiredLength ) return str;
+    // check: targetPosition out of bounds
+    if( targetPosition < 0 || targetPosition >= str.length() ) return str;
+
+    // ensure
+    if( desiredLeftPadding > desiredLength )
+        desiredLeftPadding = desiredLength;
+
+    // where to start the snippet
+    t_CKINT left = 0;
+
+    // if target beyond left padding
+    if( targetPosition > desiredLeftPadding )
+    {
+        // where to start
+        left += (targetPosition-desiredLeftPadding);
+        // report back
+        targetPosition = desiredLeftPadding;
+        // optional info (how much was trimmed on the left)
+        if( pLeftTrimmed ) *pLeftTrimmed = left;
+    }
+
+    // optional info (how much was trimmed on the right)
+    if( pRightTrimmed )
+    {
+        t_CKINT rtrim = (str.length()-left) - desiredLength;
+        if( rtrim > 0 ) *pRightTrimmed = rtrim;
+    }
+
+    // start from left, ensure no greater than desiredLength
+    return str.substr( left, desiredLength );
 }
 
 
@@ -380,7 +462,7 @@ t_CKBOOL extract_args( const string & token,
 
 done:
     // reclaim
-    SAFE_DELETE_ARRAY( mask );
+    CK_SAFE_DELETE_ARRAY( mask );
 
     return ret;
 }
@@ -511,7 +593,7 @@ std::string getUserNameWindows()
     // check if succeeded
     if( retval ) result = buf;
     // clean up
-    SAFE_DELETE_ARRAY( buf );
+    CK_SAFE_DELETE_ARRAY( buf );
     // return
     return result;
 }
@@ -922,7 +1004,7 @@ std::string timestamp_formatted()
     if( !timestr ) return "[unable to determine/format time]";
 
     // copy formatted date; ctime() always returns fixed length
-    // e.g., "Sat Jun 24 04:18:42 2023" -- 24 characters... okay
+    // e.g., "Sat Jun 24 04:18:42 2023" -- 24 characters...okay
     // what happens when the year becomes 5 or more digits?
     // in the year 10000...
     // will there still be computers? or humans? computer music?!?

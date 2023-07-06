@@ -44,8 +44,8 @@
 #include <vector> // 1.5.0.0 (ge) | added
 
 
-static double g_pi = ONE_PI;
-static double g_twopi = TWO_PI;
+static double g_pi = CK_ONE_PI;
+static double g_twopi = CK_TWO_PI;
 static double g_e = ::exp( 1.0 );
 static t_CKFLOAT g_floatMax = CK_FLT_MAX;
 static t_CKFLOAT g_floatMin = CK_FLT_MIN;
@@ -453,10 +453,10 @@ DLL_QUERY libmath_query( Chuck_DL_Query * QUERY )
     QUERY->doc_var( QUERY, "An approximation of pi. (Same as global keyword 'pi'.)" );
 
     // twopi
-    QUERY->add_svar( QUERY, "float", "TWO_PI", TRUE, &g_twopi );
+    QUERY->add_svar( QUERY, "float", "two_pi", TRUE, &g_twopi );
     QUERY->doc_var( QUERY, "An approximation of 2*pi" );
     // twopi
-    QUERY->add_svar( QUERY, "float", "two_pi", TRUE, &g_twopi );
+    QUERY->add_svar( QUERY, "float", "TWO_PI", TRUE, &g_twopi );
     QUERY->doc_var( QUERY, "An approximation of 2*pi" );
 
     // e
@@ -829,7 +829,7 @@ CK_DLL_SFUN( rtop_impl )
     if( !from || !to )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.rtop( ... ) was given one or more NULL arrays..." );
+        EM_log( CK_LOG_WARNING, "Math.rtop(...) was given one or more NULL arrays..." );
         return;
     }
 
@@ -868,7 +868,7 @@ CK_DLL_SFUN( ptor_impl )
     if( !from || !to )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.ptor( ... ) was given one or more NULL arrays..." );
+        EM_log( CK_LOG_WARNING, "Math.ptor(...) was given one or more NULL arrays..." );
         return;
     }
 
@@ -975,7 +975,7 @@ CK_DLL_SFUN( gauss_impl )
     t_CKFLOAT sd = GET_NEXT_FLOAT(ARGS);
 
     // compute gaussian
-    RETURN->v_float = (1.0 / (sd*::sqrt(TWO_PI))) * ::exp( -(x-mu)*(x-mu) / (2*sd*sd) );
+    RETURN->v_float = (1.0 / (sd*::sqrt(CK_TWO_PI))) * ::exp( -(x-mu)*(x-mu) / (2*sd*sd) );
 }
 
 
@@ -993,7 +993,7 @@ CK_DLL_SFUN( cossim_impl )
     if( a == NULL || b == NULL )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.cossim( ... ) was given one or more NULL arrays..." );
+        EM_log( CK_LOG_WARNING, "Math.cossim(...) was given one or more NULL arrays..." );
         // error out
         return;
     }
@@ -1004,7 +1004,7 @@ CK_DLL_SFUN( cossim_impl )
     if( size == 0 )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.cossim( ... ) was given one or more 0-length arrays..." );
+        EM_log( CK_LOG_WARNING, "Math.cossim(...) was given one or more 0-length arrays..." );
         // error out
         return;
     }
@@ -1054,7 +1054,7 @@ CK_DLL_SFUN( cossim3d_impl )
     if( norm1 == 0 || norm2 == 0 )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.cossim( ... ) zero in denominator..." );
+        EM_log( CK_LOG_WARNING, "Math.cossim(...) zero in denominator..." );
         // error out
         return;
     }
@@ -1096,7 +1096,7 @@ CK_DLL_SFUN( cossim4d_impl )
     if( norm1 == 0 || norm2 == 0 )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.cossim( ... ) zero in denominator..." );
+        EM_log( CK_LOG_WARNING, "Math.cossim(...) zero in denominator..." );
         // error out
         return;
     }
@@ -1121,7 +1121,7 @@ CK_DLL_SFUN( euclidean_impl )
     if( a == NULL || b == NULL )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.cossim( ... ) was given one or more NULL arrays..." );
+        EM_log( CK_LOG_WARNING, "Math.cossim(...) was given one or more NULL arrays..." );
         // error out
         return;
     }
@@ -1132,7 +1132,7 @@ CK_DLL_SFUN( euclidean_impl )
     if( size == 0 )
     {
         // log
-        EM_log( CK_LOG_WARNING, "Math.cossim( ... ) was given one or more 0-length arrays..." );
+        EM_log( CK_LOG_WARNING, "Math.cossim(...) was given one or more 0-length arrays..." );
         // error out
         return;
     }

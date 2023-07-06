@@ -39,22 +39,37 @@
 #include <list>
 
 
-// itoa
+// int to ascii
 std::string itoa( t_CKINT val );
-// ftoa
+// float to ascii
 std::string ftoa( t_CKFLOAT val, t_CKUINT precision );
-// tolower
+// pointer to ascii
+std::string ptoa( void * val );
+// lower-case string
 std::string tolower( const std::string & val );
-// toupper
+// upper-case string
 std::string toupper( const std::string & val );
-// trim
+// trim a string
 std::string trim( const std::string & val );
-// ltrim
+// left trim
 std::string ltrim( const std::string & val );
-// rtrim
+// right trim
 std::string rtrim( const std::string & val );
+
 // return capitalized copy of a string
 std::string capitalize( const std::string & s );
+
+// replace tabs
+std::string replace_tabs( const std::string & s,
+                          char replaceEachTabWithThis );
+
+// snippet a string around an offset; useful for displaying
+// long line of test with caret ^ offset; returns result and
+// potentially modifies targetPositionMutable argument
+std::string snippet( const std::string & str, t_CKINT desiredLength,
+                     t_CKINT desiredLeftPadding, t_CKINT & targetPositionMutable,
+                     t_CKINT * optionalLeftTrimmed = NULL,
+                     t_CKINT * optionalRightTrimmed = NULL );
 
 // argument extraction
 t_CKBOOL extract_args( const std::string & token,
@@ -126,10 +141,11 @@ void tokenize( const std::string & str, std::vector<std::string> & tokens, const
 //
 //       calling TC::globalDisableOverride( false ) is not recommended!
 //
-// FYI nifty tool: https://michurin.github.io/xterm256-color-picker/
 // (still working on making TC more flexible!) more resources:
+// https://stackoverflow.com/questions/4842424/list-of-ansi-color-escape-sequences
 // https://stackoverflow.com/questions/2616906/how-do-i-output-coloured-text-to-a-linux-terminal
 // https://cplusplus.com/forum/general/18200/
+// FYI nifty tool: https://michurin.github.io/xterm256-color-picker/
 //-----------------------------------------------------------------------------
 class TC
 {
