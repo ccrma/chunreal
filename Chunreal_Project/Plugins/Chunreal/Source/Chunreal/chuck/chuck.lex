@@ -1,5 +1,4 @@
 
-
 D           [0-9]
 L           [a-zA-Z_]
 H           [a-fA-F0-9]
@@ -7,8 +6,8 @@ E           [Ee][+-]?{D}+
 FS          (f|F|l|L)
 IS          (u|U|l|L)*
 
-
 %{
+
 /*----------------------------------------------------------------------------
     ChucK Concurrent, On-the-fly Audio Programming Language
       Compiler and Virtual Machine
@@ -45,22 +44,19 @@ IS          (u|U|l|L)*
 //
 // date: Summer 2002
 //-----------------------------------------------------------------------------
-
-#include <stdlib.h>
-#include <string.h>
-#ifndef __PLATFORM_WIN32__
-#include <unistd.h>
-#endif
-#include "chuck_utils.h"
 #include "chuck_absyn.h"
 #include "chuck_errmsg.h"
 
-#if !defined(__PLATFORM_WIN32__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
-  #include "chuck.tab.h"
-#else
-  #include "chuck_yacc.h"
-#endif
+#include <stdlib.h>
+#include <string.h>
 
+// check platforms
+#if !defined(__PLATFORM_WINDOWS__) && !defined(__ANDROID__) && !defined(__EMSCRIPTEN__)
+#include "chuck.tab.h" // use fresh bison/flex-generated header
+#else
+#include "chuck_yacc.h" // use pre-generated header (no bison/flex needed)
+                        // created by `make chuck_yacc.h` and `make chuck_yacc.c` in core/
+#endif
 
 // globals
 extern YYSTYPE yylval;
@@ -238,7 +234,19 @@ long htol( c_str str )
 
 %}
 
+/* generate line number */
 %option yylineno
+
+/* 1.5.0.7 (ge) added to remove dependecy on isatty() and unistd.h
+ without the above option, flex/bison will check isatty() to determine
+ whether it's getting its input from a TTY terminal input OR file/pipe,
+ and chooses a corresponding caching scheme. since chuck is passing
+ data to the parser either as a file or through a string buffer using
+ yy_scan_string(), chuck is never using using the parser for direct
+ TTY input. (FYI the opposite of this option is `%option interactive`
+ if neither `never-interactive` nor `interactive` is specified, bison
+ will test using isatty()) */
+%option never-interactive
 
 /* float exponent | 1.5.0.5 (ge) */
 EXP ([Ee][-+]?[0-9]+)

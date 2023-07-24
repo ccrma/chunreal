@@ -36,18 +36,12 @@
 //
 // date: Summer 2002
 //-----------------------------------------------------------------------------
+#include "chuck_absyn.h"
+#include "chuck_errmsg.h"
+
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
-#ifndef __PLATFORM_WIN32__
-#include <unistd.h>
-#else
-#define YY_NO_UNISTD_H 1
-#include <io.h>
-#endif
-#include "chuck_utils.h"
-#include "chuck_errmsg.h"
-#include "chuck_absyn.h"
 
 // function
 int yylex( void );
