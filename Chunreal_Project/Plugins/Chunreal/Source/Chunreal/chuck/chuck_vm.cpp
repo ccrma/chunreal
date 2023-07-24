@@ -170,7 +170,6 @@ Chuck_VM::Chuck_VM()
     m_carrier = NULL;
 
     // data
-    m_shreds = NULL;
     m_num_shreds = 0;
     m_shreduler = NULL;
     m_num_dumped_shreds = 0;
@@ -368,6 +367,11 @@ t_CKBOOL Chuck_VM::shutdown()
     CK_SAFE_DELETE( m_globals_manager );
 
     // log
+    EM_log( CK_LOG_SEVERE, "removing shreds..." );
+    // removal all | 1.5.0.8 (ge) updated from previously non-functioning code
+    this->removeAll();
+
+    // log
     EM_log( CK_LOG_SYSTEM, "freeing shreduler..." );
     // free the shreduler
     CK_SAFE_DELETE( m_shreduler );
@@ -392,20 +396,6 @@ t_CKBOOL Chuck_VM::shutdown()
     CK_SAFE_DELETE( m_reply_buffer );
     // free the event buffer
     CK_SAFE_DELETE( m_event_buffer );
-
-    // log
-    EM_log( CK_LOG_SEVERE, "clearing shreds..." );
-    // terminate shreds
-    Chuck_VM_Shred * curr = m_shreds, * prev = NULL;
-    while( curr )
-    {
-        prev = curr;
-        curr = curr->next;
-        // release shred
-        prev->release();
-    }
-    m_shreds = NULL;
-    m_num_shreds = 0;
 
     // log
     EM_pushlog();
@@ -461,7 +451,7 @@ t_CKBOOL Chuck_VM::start()
 // name: running()
 // desc: get run state
 //-----------------------------------------------------------------------------
-t_CKBOOL Chuck_VM::running()
+t_CKBOOL Chuck_VM::running() const
 {
     return m_is_running;
 }
@@ -621,8 +611,11 @@ vm_stop:
     // after the initial stoppage; calling stop after resets m_is_running
     if( m_is_running ) EM_log( CK_LOG_SYSTEM, "stopping virtual machine..." );
 
-    // stop, 1.3.5.3
+    // stop | 1.3.5.3
     this->stop();
+
+    // clear | 1.5.0.8
+    m_input_ref = NULL; m_output_ref = NULL;
 
     return TRUE;
 }
@@ -656,7 +649,7 @@ void Chuck_VM::gc( )
 // name: queue_msg()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKBOOL Chuck_VM::queue_msg( Chuck_Msg * msg, int count )
+t_CKBOOL Chuck_VM::queue_msg( Chuck_Msg * msg, t_CKINT count )
 {
     assert( count == 1 );
     m_msg_buffer->put( &msg, count );
@@ -670,7 +663,7 @@ t_CKBOOL Chuck_VM::queue_msg( Chuck_Msg * msg, int count )
 // name: queue_event()
 // desc: since 1.3.0.0 a buffer is passed in associated with each thread
 //-----------------------------------------------------------------------------
-t_CKBOOL Chuck_VM::queue_event( Chuck_Event * event, int count,
+t_CKBOOL Chuck_VM::queue_event( Chuck_Event * event, t_CKINT count,
                                 CBufferSimple * buffer )
 {
     // sanity
@@ -737,14 +730,16 @@ Chuck_Msg * Chuck_VM::get_reply()
 
 //-----------------------------------------------------------------------------
 // name: process_msg()
-// desc: ...
+// desc: process a VM message; NOTE: assumes msg is dynamically allocated...
+//       and msg will be cleaned up by the VM
 // TODO: make thread safe for multiple consumers
 //-----------------------------------------------------------------------------
 t_CKUINT Chuck_VM::process_msg( Chuck_Msg * msg )
 {
     t_CKUINT retval = 0xfffffff0;
 
-    if( msg->type == MSG_REPLACE )
+    // check message type
+    if( msg->type == CK_MSG_REPLACE )
     {
         Chuck_VM_Shred * out = m_shreduler->lookup( msg->param );
         if( !out )
@@ -799,7 +794,7 @@ t_CKUINT Chuck_VM::process_msg( Chuck_Msg * msg )
             goto done;
         }
     }
-    else if( msg->type == MSG_REMOVE )
+    else if( msg->type == CK_MSG_REMOVE )
     {
         if( msg->param == CK_NO_VALUE )
         {
@@ -848,14 +843,14 @@ t_CKUINT Chuck_VM::process_msg( Chuck_Msg * msg )
             retval = msg->param;
         }
     }
-    else if( msg->type == MSG_REMOVEALL )
+    else if( msg->type == CK_MSG_REMOVEALL )
     {
         // print
         EM_print2magenta( "(VM) removing all (%i) shreds...", m_num_shreds );
         // remove all shreds
         this->removeAll();
     }
-    else if( msg->type == MSG_CLEARVM ) // added 1.3.2.0
+    else if( msg->type == CK_MSG_CLEARVM ) // added 1.3.2.0
     {
         // print
         EM_print2magenta( "(VM) removing all shreds and resetting type system" );
@@ -866,12 +861,12 @@ t_CKUINT Chuck_VM::process_msg( Chuck_Msg * msg )
         // 1.4.1.0 (jack): also clear any global variables
         m_globals_manager->cleanup_global_variables();
     }
-    else if( msg->type == MSG_CLEARGLOBALS ) // added chunity
+    else if( msg->type == CK_MSG_CLEARGLOBALS ) // added chunity
     {
         // clean up global variables without clearing the whole VM
         m_globals_manager->cleanup_global_variables();
     }
-    else if( msg->type == MSG_ADD )
+    else if( msg->type == CK_MSG_ADD )
     {
         t_CKUINT xid = 0;
         Chuck_VM_Shred * shred = NULL;
@@ -885,7 +880,7 @@ t_CKUINT Chuck_VM::process_msg( Chuck_Msg * msg )
         retval = xid;
         goto done;
     }
-    else if( msg->type == MSG_EXIT )
+    else if( msg->type == CK_MSG_EXIT )
     {
         EM_print2magenta( "(VM) EXIT received...." );
         // close file handles and clean up
@@ -898,48 +893,58 @@ t_CKUINT Chuck_VM::process_msg( Chuck_Msg * msg )
         // come again
         exit( 1 );
     }
-    else if( msg->type == MSG_STATUS )
+    else if( msg->type == CK_MSG_STATUS )
     {
         // fill in structure
-        if( msg->user && msg->reply )
+        if( msg->status )
         {
-            // cast
-            Chuck_VM_Status * status = (Chuck_VM_Status *)msg->user;
             // get it
-            m_shreduler->status( status );
+            m_shreduler->status( msg->status );
         }
         else
         {
             m_shreduler->status();
         }
     }
-    else if( msg->type == MSG_TIME )
+    else if( msg->type == CK_MSG_TIME )
     {
         float srate = m_srate; // 1.3.5.3; was: (float)Digitalio::sampling_rate();
-        EM_print2magenta  ( "(VM) earth time: %s", timestamp_formatted().c_str() );
-        EM_print2magenta  ( "(VM) chuck time: %.0f::samp (now)", m_shreduler->now_system );
+        EM_print2magenta( "(VM) earth time: %s", timestamp_formatted().c_str() );
+        EM_print2magenta( "(VM) chuck time: %.0f::samp (now)", m_shreduler->now_system );
         EM_print2vanilla( "%22.6f::second since VM start", m_shreduler->now_system / srate );
         EM_print2vanilla( "%22.6f::minute", m_shreduler->now_system / srate / 60.0f );
         EM_print2vanilla( "%22.6f::hour", m_shreduler->now_system / srate / 60.0f / 60.0f );
         EM_print2vanilla( "%22.6f::day", m_shreduler->now_system / srate / 60.0f / 60.0f / 24.0f );
         EM_print2vanilla( "%22.6f::week", m_shreduler->now_system / srate / 60.0f / 60.0f / 24.0f / 7.0f );
     }
-    else if( msg->type == MSG_RESET_ID )
+    else if( msg->type == CK_MSG_RESET_ID )
     {
-        t_CKUINT n = m_shreduler->highest();
-        m_shred_id = n;
-        EM_print2blue( "(VM) -- resetting shred id to %lu...", m_shred_id + 1 );
+        // reset ID to currently active shred ID + 1
+        // could be helpful to keep shred ID #'s low, especially after a lot of sporks
+        EM_print2magenta( "(VM) resetting shred id to %lu...", this->reset_id() );
     }
 
 done:
 
-    if( msg->reply )
+    // set return value
+    msg->replyA = retval;
+
+    // check reponse method
+    if( msg->reply_cb ) // 1.5.0.8 (ge) added
     {
-        msg->replyA = retval;
+        // call the callback
+        msg->reply_cb( msg );
+    }
+    else if( msg->reply_queue )
+    {
+        // put on reply queue
         m_reply_buffer->put( &msg, 1 );
     }
     else
+    {
+        // nothing further to be done; delete msg
         CK_SAFE_DELETE(msg);
+    }
 
     return retval;
 }
@@ -963,9 +968,24 @@ t_CKUINT Chuck_VM::next_id( )
 // name: last_id()
 // desc: returns the last used shred id
 //-----------------------------------------------------------------------------
-t_CKUINT Chuck_VM::last_id( )
+t_CKUINT Chuck_VM::last_id( ) const
 {
     return m_shred_id;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: reset_id() | 1.5.0.8 (ge) re-factored from code in process_msg
+// desc: reset ID to lowest current ID + 1; returns what next ID would be
+//-----------------------------------------------------------------------------
+t_CKUINT Chuck_VM::reset_id()
+{
+    // set shred_id to the current highest; will be incremented on next_id()
+    m_shred_id = m_shreduler->highest();
+
+    return m_shred_id + 1;
 }
 
 
@@ -996,6 +1016,18 @@ t_CKUINT Chuck_VM::srate() const
 
 
 //-----------------------------------------------------------------------------
+// name: now() | 1.5.0.8 (ge) added
+// desc: get the current chuck time
+//-----------------------------------------------------------------------------
+t_CKTIME Chuck_VM::now() const
+{
+    return m_shreduler ? m_shreduler->now_system : 0;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: spork()
 // desc: spork shred from compiled VM code
 //-----------------------------------------------------------------------------
@@ -1015,12 +1047,24 @@ Chuck_VM_Shred * Chuck_VM::spork( Chuck_VM_Code * code, Chuck_VM_Shred * parent,
     // set the base ref for global
     if( parent ) shred->base_ref = shred->parent->base_ref;
     else shred->base_ref = shred->mem;
+
+    // get shred ID | 1.5.0.8 (ge) moved here so all shreds have IDs earlier
+    // previously: only immediate-mode shreds were assigned IDs in this method
+    // (via the other spork() function) and non-immediate shreds were returned
+    // with ID 0 (their ID assignment would have been deferred)
+    // presently: the shred created and returned by this function will be
+    // assigned an ID regardless of the immediate flag
+    shred->xid = next_id();
+
+    // check whether to start running immediately at current time step
+    // (this is more timely, but should be only used if called on same
+    // thread as VM compute() / the audio thread)
     if( immediate )
     {
         // spork it
         this->spork( shred );
     }
-    else
+    else // or be sporked later (by compute() on the next time step)
     {
         // spork it later
         Chuck_Global_Request spork_request;
@@ -1049,8 +1093,8 @@ Chuck_VM_Shred * Chuck_VM::spork( Chuck_VM_Shred * shred )
     shred->start = m_shreduler->now_system;
     // set the now
     shred->now = shred->wake_time = m_shreduler->now_system;
-    // set the id
-    shred->xid = next_id();
+    // set the id, if one hasn't been assigned yet | 1.5.0.8 (ge) add check
+    if( !shred->xid ) shred->xid = next_id();
     // add ref
     shred->add_ref();
     // add it to the parent
@@ -1077,7 +1121,10 @@ void Chuck_VM::removeAll()
     std::vector<Chuck_VM_Shred *> shreds;
 
     // get list from shreduler
-    m_shreduler->get_active_shreds( shreds );
+    m_shreduler->get_all_shreds( shreds );
+
+    // before 1.5.0.8, was:
+    // m_shreduler->get_ready_shreds( shreds );
 
     // sort in descending ID order
     SortByID_GT byid;
@@ -1629,7 +1676,7 @@ t_CKBOOL Chuck_VM_Shred::run( Chuck_VM * vm )
     instr = code->instr;
     is_running = TRUE;
     // pointer to running state
-    t_CKBOOL * loop_running = &(vm_ref->runningState());
+    const t_CKBOOL * loop_running = &(vm_ref->runningState());
 
     // go!
     while( is_running && *loop_running && !is_abort )
@@ -2175,38 +2222,47 @@ void Chuck_VM_Shreduler::advance( t_CKINT N )
 //-----------------------------------------------------------------------------
 // name: get()
 // desc: get the next shred shreduled to run 'now'
+//       NOTE if a shred is ready to run, it is taken off the ready-to-run list
 //-----------------------------------------------------------------------------
 Chuck_VM_Shred * Chuck_VM_Shreduler::get( )
 {
+    // shreduler's wait to run list
     Chuck_VM_Shred * shred = shred_list;
 
-    // list empty
+    // check if list empty
     if( !shred )
     {
+        // if empty we are done
         m_samps_until_next = -1;
         return NULL;
     }
 
-    // TODO: should this be <=?
+    // check the front of the shred wait-to-run list; ready to run?
     if( shred->wake_time <= ( this->now_system + .5 ) )
     {
-        // if( shred->wake_time < this->now_system )
-        //    assert( false );
-
+        // set beginning of list to next
         shred_list = shred->next;
+
+        // sever links of ready-to-run shred
         shred->next = NULL;
         shred->prev = NULL;
 
+        // if shred list is non-empty
         if( shred_list )
         {
+            // set list head's prev pointer to NULL
             shred_list->prev = NULL;
+            // compute new samps until next
             m_samps_until_next = shred_list->wake_time - this->now_system;
+            // clamp to 0
             if( m_samps_until_next < 0 ) m_samps_until_next = 0;
         }
 
+        // return
         return shred;
     }
 
+    // nothing is ready to run 'now'
     return NULL;
 }
 
@@ -2215,24 +2271,23 @@ Chuck_VM_Shred * Chuck_VM_Shreduler::get( )
 
 //-----------------------------------------------------------------------------
 // name: highest()
-// desc: get the ID of the shred with the highst shred ID
+// desc: get ID of shred currently with the highest ID
 //-----------------------------------------------------------------------------
-t_CKUINT Chuck_VM_Shreduler::highest( )
+t_CKUINT Chuck_VM_Shreduler::highest() const
 {
-    Chuck_VM_Shred * shred = shred_list;
+    // vessel for shred pointers
+    std::vector<Chuck_VM_Shred *> shreds;
+    // highest so far
     t_CKUINT n = 0;
 
-    while( shred )
-    {
-        if( shred->xid > n ) n = shred->xid;
-        shred = shred->next;
-    }
+    // get all shreds
+    get_all_shreds( shreds );
 
-    std::map<Chuck_VM_Shred *, Chuck_VM_Shred *>::iterator iter;
-    for( iter = blocked.begin(); iter != blocked.end(); iter++ )
+    // loop
+    for( t_CKUINT i = 0; i < shreds.size(); i++ )
     {
-        shred = (*iter).second;
-        if( shred->xid > n ) n = shred->xid;
+        // compare
+        if( shreds[i]->get_id() > n ) n = shreds[i]->get_id();
     }
 
     return n;
@@ -2313,7 +2368,7 @@ t_CKBOOL Chuck_VM_Shreduler::remove( Chuck_VM_Shred * out )
 // name: lookup()
 // desc: look up a shred by ID
 //-----------------------------------------------------------------------------
-Chuck_VM_Shred * Chuck_VM_Shreduler::lookup( t_CKUINT xid )
+Chuck_VM_Shred * Chuck_VM_Shreduler::lookup( t_CKUINT xid ) const
 {
     Chuck_VM_Shred * shred = shred_list;
 
@@ -2331,7 +2386,7 @@ Chuck_VM_Shred * Chuck_VM_Shreduler::lookup( t_CKUINT xid )
     }
 
     // blocked?
-    std::map<Chuck_VM_Shred *, Chuck_VM_Shred *>::iterator iter;
+    std::map<Chuck_VM_Shred *, Chuck_VM_Shred *>::const_iterator iter;
     for( iter = blocked.begin(); iter != blocked.end(); iter++ )
     {
         shred = (*iter).second;
@@ -2346,13 +2401,22 @@ Chuck_VM_Shred * Chuck_VM_Shreduler::lookup( t_CKUINT xid )
 
 
 //-----------------------------------------------------------------------------
-// name: get_active_shreds()
-// desc: retrieve list of active shreds
+// name: get_ready_shreds()
+// desc: retrieve the ready list of shreds in the shreduler
+//
+// NOTE shreds on the shreduler's ready list are sorted by
+//      wake-up time (e.g., as specifiedy by `second => now`)
+// NOTE the ready list DO NOT include shreds waiting on Events
+//      waiting shreds are on the shreduler's blocked list
+// NOTE the ready list does not include the shred currently
+//      executing in the VM
 //-----------------------------------------------------------------------------
-void Chuck_VM_Shreduler::get_active_shreds( std::vector<Chuck_VM_Shred *> & shreds )
+void Chuck_VM_Shreduler::get_ready_shreds( std::vector<Chuck_VM_Shred *> & shreds,
+                                           t_CKBOOL clearVector ) const
 {
-    // clear
-    shreds.clear();
+    // clear; if not clear, then will append to existing contents
+    if( clearVector ) shreds.clear();
+
     // shred pointer
     Chuck_VM_Shred * shred = shred_list;
 
@@ -2370,13 +2434,160 @@ void Chuck_VM_Shreduler::get_active_shreds( std::vector<Chuck_VM_Shred *> & shre
 
 
 //-----------------------------------------------------------------------------
+// name: get_ready_shred_ids() | 1.5.0.8 (ge) added
+// desc: retrieve list of ready shred IDs
+//-----------------------------------------------------------------------------
+void Chuck_VM_Shreduler::get_ready_shred_ids( std::vector<t_CKUINT> & shredIDs,
+                                              t_CKBOOL clearVector ) const
+{
+    // clear; if not clear, then will append to existing contents
+    if( clearVector ) shredIDs.clear();
+
+    // list for shreds
+    std::vector<Chuck_VM_Shred *> shreds;
+    // get shreds
+    get_ready_shreds( shreds );
+
+    // traverse shred list
+    for( t_CKUINT i = 0; i < shreds.size(); i++ )
+    {
+        // append id
+        shredIDs.push_back( shreds[i]->xid );
+    }
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: get_blocked_shreds() | 1.5.0.8 (ge) added
+// desc: retrieve the list of active shreds in the shreduler
+//
+// NOTE active shreds are on the shreduler's ready list, sorted by
+//      wake-up time (e.g., as specifiedy by `second => now`)
+// NOTE active shreds list DO NOT include shreds waiting on Events
+//      such shreds are on the shreduler's blocked list
+//-----------------------------------------------------------------------------
+void Chuck_VM_Shreduler::get_blocked_shreds( std::vector<Chuck_VM_Shred *> & shreds,
+                                             t_CKBOOL clearVector ) const
+{
+    // clear; if not clear, then will append to existing contents
+    if( clearVector ) shreds.clear();
+
+    // iterate through blocked list
+    std::map<Chuck_VM_Shred *, Chuck_VM_Shred *>::const_iterator iter;
+    for( iter = blocked.begin(); iter != blocked.end(); iter++ )
+    {
+        // append the shred pointer
+        shreds.push_back( (*iter).second );
+    }
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: get_blocked_shred_ids() | 1.5.0.8 (ge) added
+// desc: retrieve list of active shred IDs
+//-----------------------------------------------------------------------------
+void Chuck_VM_Shreduler::get_blocked_shred_ids( std::vector<t_CKUINT> & shredIDs,
+                                                t_CKBOOL clearVector ) const
+{
+    // clear; if not clear, then will append to existing contents
+    if( clearVector ) shredIDs.clear();
+
+    // list for shreds
+    std::vector<Chuck_VM_Shred *> shreds;
+    // get shreds
+    get_blocked_shreds( shreds );
+
+    // traverse shred list
+    for( t_CKUINT i = 0; i < shreds.size(); i++ )
+    {
+        // append id
+        shredIDs.push_back( shreds[i]->xid );
+    }
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: get_current_shred()
+// desc: get currently executing shred
+//       NOTE this can only be non-NULL during a Chuck_VM::compute() cycle
+//-----------------------------------------------------------------------------
+Chuck_VM_Shred * Chuck_VM_Shreduler::get_current_shred() const
+{
+    return m_current_shred;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: get_active_get_all_shredsshreds() | 1.5.0.8 (ge) added
+// desc: retrieve the list of active shreds in the shreduler
+//
+// NOTE active shreds are on the shreduler's ready list, sorted by
+//      wake-up time (e.g., as specifiedy by `second => now`)
+// NOTE active shreds list DO NOT include shreds waiting on Events
+//      such shreds are on the shreduler's blocked list
+//-----------------------------------------------------------------------------
+void Chuck_VM_Shreduler::get_all_shreds( std::vector<Chuck_VM_Shred *> & shreds,
+                                         t_CKBOOL clearVector ) const
+{
+    // clear; if not clear, then will append to existing contents
+    if( clearVector ) shreds.clear();
+
+    // get ready list (FALSE == don't clear vector)
+    get_ready_shreds( shreds, FALSE );
+
+    // get blocked list (FALSE == don't clear vector)
+    get_blocked_shreds( shreds, FALSE );
+
+    // add currently executing shred, if not NULL
+    // (if not NULL, implies this is called from within VM.compute())
+    Chuck_VM_Shred * shred = get_current_shred();
+    if( shred ) shreds.push_back( shred );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: get_all_shred_ids() | 1.5.0.8 (ge) added
+// desc: retrieve list of active shred IDs
+//-----------------------------------------------------------------------------
+void Chuck_VM_Shreduler::get_all_shred_ids( std::vector<t_CKUINT> & shredIDs,
+                                            t_CKBOOL clearVector ) const
+{
+    // clear; if not clear, then will append to existing contents
+    if( clearVector ) shredIDs.clear();
+
+    // list for shreds
+    std::vector<Chuck_VM_Shred *> shreds;
+    // get shreds
+    get_all_shreds( shreds );
+
+    // traverse shred list
+    for( t_CKUINT i = 0; i < shreds.size(); i++ )
+    {
+        // append id
+        shredIDs.push_back( shreds[i]->xid );
+    }
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: status()
 // desc: get VM shreduler status
 //-----------------------------------------------------------------------------
 void Chuck_VM_Shreduler::status( Chuck_VM_Status * status )
 {
     Chuck_VM_Shred * shred = shred_list;
-    Chuck_VM_Shred * temp = NULL;
 
     t_CKUINT srate = vm_ref->srate(); // 1.3.5.3; was: Digitalio::sampling_rate();
     t_CKUINT s = (t_CKUINT)now_system;
@@ -2394,25 +2605,10 @@ void Chuck_VM_Shreduler::status( Chuck_VM_Status * status )
     status->t_minute = m;
     status->t_hour = h;
 
-    // get list of shreds
+    // a vessel for shred pointers
     vector<Chuck_VM_Shred *> list;
-    while( shred )
-    {
-        list.push_back( shred );
-        shred = shred->next;
-    }
-
-    // get blocked
-    std::map<Chuck_VM_Shred *, Chuck_VM_Shred *>::iterator iter;
-    for( iter = blocked.begin(); iter != blocked.end(); iter++ )
-    {
-        shred = (*iter).second;
-        list.push_back( shred );
-    }
-
-    // get current shred
-    temp = m_current_shred;
-    if( temp ) list.push_back( temp );
+    // get all shreds
+    get_all_shreds( list );
 
     // sort the list
     SortByID_LT byid;
@@ -2444,21 +2640,21 @@ void Chuck_VM_Shreduler::status()
     t_CKUINT m = m_status.t_minute;
     t_CKUINT sec = m_status.t_second;
     EM_print2magenta( "(VM) status | # of shreds in VM: %ld", m_status.list.size() );
-    EM_print2vanilla( "             earth time: %s", timestamp_formatted().c_str() );
-    EM_print2vanilla( "             chuck time: %.0f::samp (%ldh%ldm%lds)", m_status.now_system, h, m, sec );
+    EM_print2vanilla( "chuck time: %.0f::samp (%ldh%ldm%lds)", m_status.now_system, h, m, sec );
+    EM_print2vanilla( "earth time: %s", timestamp_formatted().c_str() );
 
     // print status
-    if( m_status.list.size() ) EM_print2vanilla( "             --------" );
+    if( m_status.list.size() ) EM_print2vanilla( "--------" );
     for( t_CKUINT i = 0; i < m_status.list.size(); i++ )
     {
         shred = m_status.list[i];
         EM_print2vanilla(
-            "    [shred id]: %ld [source]: %s [spork time]: %.2fs ago%s",
+            "[shred id]: %ld [source]: %s [spork time]: %.2fs ago%s",
             shred->xid, mini( shred->name.c_str() ),
             (m_status.now_system - shred->start) / m_status.srate,
             shred->has_event ? " (blocked)" : "" );
     }
-    if( m_status.list.size() ) EM_print2vanilla( "             --------" );
+    if( m_status.list.size() ) EM_print2vanilla( "--------" );
 }
 
 

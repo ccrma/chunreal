@@ -24,15 +24,25 @@
 
 //-----------------------------------------------------------------------------
 // file: chuck.cpp
-// desc: chuck engine chasis; VM + compiler + state; independent of audio I/O
-//       REFACTOR-2017
+// desc: interface for ChucK core: compiler + virtual machine + synthesis
+//       |- possible to instantiate multiple ChucK instances
+//       |- each ChucK instance contains a fully functioning ChucK runtime
+//       |- the ChucK class interface is primary point of integration between
+//          ChucK core and ChucK hosts (e.g., command-line ChucK,
+//          miniAudicle, WebChucK, Chunity, Chunreal, and any C++ program
+//          using ChucK core as a component).
+//       |- see src/host-examples/ for sample integration code for ChucK core
+//       |- see chuck, miniAudicle, WebChucK, Chunity etc. for their
+//          respective integration of ChucK core
 //
 // author: Ge Wang (https://ccrma.stanford.edu/~ge/)
-// date: fall 2017
+//   date: fall 2017
 //
 // additional authors:
 //       Jack Atherton (lja@ccrma.stanford.edu)
 //       Spencer Salazar (spencer@ccrma.stanford.edu)
+//
+// (part of The Big Refactor of 2017; codename `numchucks`; #REFACTOR-2017)
 //-----------------------------------------------------------------------------
 #include "chuck.h"
 #include "chuck_errmsg.h"
@@ -76,7 +86,7 @@
 #define CHUCK_PARAM_DEPRECATE_LEVEL_DEFAULT        "1"
 #define CHUCK_PARAM_WORKING_DIRECTORY_DEFAULT      ""
 #define CHUCK_PARAM_CHUGIN_ENABLE_DEFAULT          "1"
-#define CHUCK_PARAM_HINT_IS_REALTIME_AUDIO_DEFAULT "0"
+#define CHUCK_PARAM_IS_REALTIME_AUDIO_HINT_DEFAULT "0"
 #ifndef __PLATFORM_WINDOWS__
 // 1.4.1.0 (ge) changed to ""; was "/usr/local/lib/chuck"
 // redundant with g_default_chugin_path, which already contains
@@ -173,73 +183,104 @@ ChucK::~ChucK()
 
 
 
-// REFACTOR-2017: TODO Ge: Implementation of this?
-//-----------------------------------------------------------------------------
-// name: ck_param_type
-// desc: enum for type of param (int, float, string)
-//-----------------------------------------------------------------------------
-enum ck_param_type
-{
-    ck_param_int, ck_param_float, ck_param_string, ck_param_string_list
-};
-
-
-
-
-//-----------------------------------------------------------------------------
-// name: ck_param_types
-// desc: storage for types of param (int, float, string)
-//-----------------------------------------------------------------------------
-std::map< std::string, ck_param_type> ck_param_types;
-
-
-
-
 //-----------------------------------------------------------------------------
 // name: initDefaultParams()
 // desc: initialize default params
 //-----------------------------------------------------------------------------
 void ChucK::initDefaultParams()
 {
-    m_params[CHUCK_PARAM_SAMPLE_RATE] = CHUCK_PARAM_SAMPLE_RATE_DEFAULT;
-    m_params[CHUCK_PARAM_INPUT_CHANNELS] = CHUCK_PARAM_INPUT_CHANNELS_DEFAULT;
-    m_params[CHUCK_PARAM_OUTPUT_CHANNELS] = CHUCK_PARAM_OUTPUT_CHANNELS_DEFAULT;
-    m_params[CHUCK_PARAM_VM_ADAPTIVE] = CHUCK_PARAM_VM_ADAPTIVE_DEFAULT;
-    m_params[CHUCK_PARAM_VM_HALT] = CHUCK_PARAM_VM_HALT_DEFAULT;
-    m_params[CHUCK_PARAM_OTF_ENABLE] = CHUCK_PARAM_OTF_ENABLE_DEFAULT;
-    m_params[CHUCK_PARAM_OTF_PORT] = CHUCK_PARAM_OTF_PORT_DEFAULT;
-    m_params[CHUCK_PARAM_DUMP_INSTRUCTIONS] = CHUCK_PARAM_DUMP_INSTRUCTIONS_DEFAULT;
-    m_params[CHUCK_PARAM_AUTO_DEPEND] = CHUCK_PARAM_AUTO_DEPEND_DEFAULT;
-    m_params[CHUCK_PARAM_DEPRECATE_LEVEL] = CHUCK_PARAM_DEPRECATE_LEVEL_DEFAULT;
-    m_params[CHUCK_PARAM_WORKING_DIRECTORY] = CHUCK_PARAM_WORKING_DIRECTORY_DEFAULT;
-    m_params[CHUCK_PARAM_CHUGIN_DIRECTORY] = CHUCK_PARAM_CHUGIN_DIRECTORY_DEFAULT;
-    m_params[CHUCK_PARAM_CHUGIN_ENABLE] = CHUCK_PARAM_CHUGIN_ENABLE_DEFAULT;
-    m_listParams[CHUCK_PARAM_USER_CHUGINS] = CHUCK_PARAM_USER_CHUGINS_DEFAULT;
-    m_listParams[CHUCK_PARAM_USER_CHUGIN_DIRECTORIES] = CHUCK_PARAM_USER_CHUGIN_DIRECTORIES_DEFAULT;
-    m_params[CHUCK_PARAM_HINT_IS_REALTIME_AUDIO] = CHUCK_PARAM_HINT_IS_REALTIME_AUDIO_DEFAULT;
-    m_params[CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR] = CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR_DEFAULT;
-    m_params[CHUCK_PARAM_TTY_COLOR] = CHUCK_PARAM_TTY_COLOR_DEFAULT;
-    m_params[CHUCK_PARAM_TTY_WIDTH_HINT] = CHUCK_PARAM_TTY_WIDTH_HINT_DEFAULT;
+    initParam( CHUCK_PARAM_VERSION, CHUCK_VERSION_STRING, ck_param_string, TRUE );
+    initParam( CHUCK_PARAM_SAMPLE_RATE, CHUCK_PARAM_SAMPLE_RATE_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_INPUT_CHANNELS, CHUCK_PARAM_INPUT_CHANNELS_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_OUTPUT_CHANNELS, CHUCK_PARAM_OUTPUT_CHANNELS_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_VM_ADAPTIVE, CHUCK_PARAM_VM_ADAPTIVE_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_VM_HALT, CHUCK_PARAM_VM_HALT_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_OTF_ENABLE, CHUCK_PARAM_OTF_ENABLE_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_OTF_PORT, CHUCK_PARAM_OTF_PORT_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_DUMP_INSTRUCTIONS, CHUCK_PARAM_DUMP_INSTRUCTIONS_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_AUTO_DEPEND, CHUCK_PARAM_AUTO_DEPEND_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_DEPRECATE_LEVEL, CHUCK_PARAM_DEPRECATE_LEVEL_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_WORKING_DIRECTORY, CHUCK_PARAM_WORKING_DIRECTORY_DEFAULT, ck_param_string );
+    initParam( CHUCK_PARAM_CHUGIN_DIRECTORY, CHUCK_PARAM_CHUGIN_DIRECTORY_DEFAULT, ck_param_string );
+    initParam( CHUCK_PARAM_CHUGIN_ENABLE, CHUCK_PARAM_CHUGIN_ENABLE_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_IS_REALTIME_AUDIO_HINT, CHUCK_PARAM_IS_REALTIME_AUDIO_HINT_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR, CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_TTY_COLOR, CHUCK_PARAM_TTY_COLOR_DEFAULT, ck_param_int );
+    initParam( CHUCK_PARAM_TTY_WIDTH_HINT, CHUCK_PARAM_TTY_WIDTH_HINT_DEFAULT, ck_param_int );
 
-    ck_param_types[CHUCK_PARAM_SAMPLE_RATE]              = ck_param_int;
-    ck_param_types[CHUCK_PARAM_INPUT_CHANNELS]           = ck_param_int;
-    ck_param_types[CHUCK_PARAM_OUTPUT_CHANNELS]          = ck_param_int;
-    ck_param_types[CHUCK_PARAM_VM_ADAPTIVE]              = ck_param_int;
-    ck_param_types[CHUCK_PARAM_VM_HALT]                  = ck_param_int;
-    ck_param_types[CHUCK_PARAM_OTF_ENABLE]               = ck_param_int;
-    ck_param_types[CHUCK_PARAM_OTF_PORT]                 = ck_param_int;
-    ck_param_types[CHUCK_PARAM_DUMP_INSTRUCTIONS]        = ck_param_int;
-    ck_param_types[CHUCK_PARAM_AUTO_DEPEND]              = ck_param_int;
-    ck_param_types[CHUCK_PARAM_DEPRECATE_LEVEL]          = ck_param_int;
-    ck_param_types[CHUCK_PARAM_WORKING_DIRECTORY]        = ck_param_string;
-    ck_param_types[CHUCK_PARAM_CHUGIN_DIRECTORY]         = ck_param_string;
-    ck_param_types[CHUCK_PARAM_CHUGIN_ENABLE]            = ck_param_int;
-    ck_param_types[CHUCK_PARAM_USER_CHUGINS]             = ck_param_string_list;
-    ck_param_types[CHUCK_PARAM_USER_CHUGIN_DIRECTORIES]  = ck_param_string_list;
-    ck_param_types[CHUCK_PARAM_HINT_IS_REALTIME_AUDIO]   = ck_param_int;
-    ck_param_types[CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR] = ck_param_int;
-    ck_param_types[CHUCK_PARAM_TTY_COLOR]                = ck_param_int;
-    ck_param_types[CHUCK_PARAM_TTY_WIDTH_HINT]           = ck_param_int;
+    // initialize list params manually (take care to use tolower())
+    m_listParams[tolower(CHUCK_PARAM_USER_CHUGINS)]             = CHUCK_PARAM_USER_CHUGINS_DEFAULT;
+    m_param_types[tolower(CHUCK_PARAM_USER_CHUGINS)]            = ck_param_string_list;
+    m_listParams[tolower(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES)]  = CHUCK_PARAM_USER_CHUGIN_DIRECTORIES_DEFAULT;
+    m_param_types[tolower(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES)] = ck_param_string_list;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: initParam()
+// desc: internal helper -- initialize a param
+//-----------------------------------------------------------------------------
+void ChucK::initParam( const std::string & name, const std::string & value,
+                       ck_param_type typeEnum, t_CKBOOL isReadOnly )
+{
+    // get lowercase version
+    std::string n = tolower(name);
+    // insert into map
+    m_params[n] = value;
+    // remember type
+    m_param_types[n] = typeEnum;
+    // read only?
+    if( isReadOnly ) m_readOnly[n] = isReadOnly;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: readOnlyParam()
+// desc: internal helper -- check read-only
+//-----------------------------------------------------------------------------
+t_CKBOOL ChucK::readOnlyParam( const std::string & name )
+{
+    // check
+    return m_readOnly.find(tolower(name)) != m_readOnly.end();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: matchParam()
+// desc: internal helper -- match parameter name (case-insensitive)
+//-----------------------------------------------------------------------------
+t_CKBOOL ChucK::matchParam( const std::string & lhs, const std::string & rhs )
+{
+    // return lower-case equal
+    return tolower(lhs) == tolower(rhs);
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: enactParam()
+// desc: enact processing, as needed, for certain params
+//-----------------------------------------------------------------------------
+void ChucK::enactParam( const std::string & name, t_CKINT value )
+{
+    // check and set
+    if( matchParam(name,CHUCK_PARAM_TTY_COLOR) )
+    {
+        // set the global override switch
+        TC::globalDisableOverride( !value );
+    }
+    else if( matchParam(name,CHUCK_PARAM_TTY_WIDTH_HINT) )
+    {
+        // set default
+        ck_ttywidth_setdefault( value );
+    }
 }
 
 
@@ -251,24 +292,17 @@ void ChucK::initDefaultParams()
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::setParam( const std::string & name, t_CKINT value )
 {
-    if( m_params.count( name ) > 0 && ck_param_types[name] == ck_param_int )
+    // lower case for consistency
+    std::string key = tolower(name);
+    // check read-only
+    if( readOnlyParam(key) ) return FALSE;
+    // check key
+    if( m_params.count(key) > 0 && m_param_types[key] == ck_param_int )
     {
-        // check and set
-        if( name == CHUCK_PARAM_TTY_COLOR )
-        {
-            // set the global override switch
-            TC::globalDisableOverride( !value );
-        }
-        else if( name == CHUCK_PARAM_TTY_WIDTH_HINT )
-        {
-            // set default
-            ck_ttywidth_setdefault( value );
-        }
-
+        // enact processing, as needed
+        enactParam( key, value );
         // insert into map
-        std::ostringstream s;
-        s << value;
-        m_params[name] = s.str();
+        m_params[key] = itoa(value);
         return TRUE;
     }
     else
@@ -286,11 +320,15 @@ t_CKBOOL ChucK::setParam( const std::string & name, t_CKINT value )
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::setParamFloat( const std::string & name, t_CKFLOAT value )
 {
-    if( m_params.count( name ) > 0 && ck_param_types[name] == ck_param_float )
+    // lower case for consistency
+    std::string key = tolower(name);
+    // check read-only
+    if( readOnlyParam(key) ) return FALSE;
+    // check
+    if( m_params.count( key ) > 0 && m_param_types[key] == ck_param_float )
     {
-        std::ostringstream s;
-        s << value;
-        m_params[name] = s.str();
+        // insert into map
+        m_params[key] = ftoa( value, 32 );
         return TRUE;
     }
     else
@@ -308,9 +346,14 @@ t_CKBOOL ChucK::setParamFloat( const std::string & name, t_CKFLOAT value )
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::setParam( const std::string & name, const std::string & value )
 {
-    if( m_params.count( name ) > 0 && ck_param_types[name] == ck_param_string )
+    // lower case for consistency
+    std::string key = tolower(name);
+    // check read-only
+    if( readOnlyParam(key) ) return FALSE;
+    // check
+    if( m_params.count(key) > 0 && m_param_types[key] == ck_param_string )
     {
-        m_params[name] = value;
+        m_params[key] = value;
         return TRUE;
     }
     else
@@ -328,10 +371,15 @@ t_CKBOOL ChucK::setParam( const std::string & name, const std::string & value )
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::setParam( const std::string & name, const std::list< std::string > & value )
 {
-    if( m_listParams.count( name ) > 0 &&
-        ck_param_types[name] == ck_param_string_list )
+    // lower case for consistency
+    std::string key = tolower(name);
+    // check read-only
+    if( readOnlyParam(key) ) return FALSE;
+    // check
+    if( m_listParams.count( key ) > 0 &&
+        m_param_types[key] == ck_param_string_list )
     {
-        m_listParams[name] = value;
+        m_listParams[key] = value;
         return TRUE;
     }
     else
@@ -347,10 +395,13 @@ t_CKBOOL ChucK::setParam( const std::string & name, const std::list< std::string
 // name: getParamInt()
 // desc: get an int param
 //-----------------------------------------------------------------------------
-t_CKINT ChucK::getParamInt( const std::string & key )
+t_CKINT ChucK::getParamInt( const std::string & name )
 {
+    // lower case for consistency
+    std::string key = tolower(name);
     t_CKINT result = 0;
-    if( m_params.count( key ) > 0 && ck_param_types[key] == ck_param_int )
+    // check
+    if( m_params.count( key ) > 0 && m_param_types[key] == ck_param_int )
     {
         std::istringstream s( m_params[key] );
         s >> result;
@@ -365,10 +416,13 @@ t_CKINT ChucK::getParamInt( const std::string & key )
 // name: getParamFloat()
 // desc: get a float param
 //-----------------------------------------------------------------------------
-t_CKFLOAT ChucK::getParamFloat( const std::string & key )
+t_CKFLOAT ChucK::getParamFloat( const std::string & name )
 {
+    // lower case for consistency
+    std::string key = tolower(name);
     t_CKFLOAT result = 0;
-    if( m_params.count( key ) > 0 && ck_param_types[key] == ck_param_float )
+    // check
+    if( m_params.count( key ) > 0 && m_param_types[key] == ck_param_float )
     {
         std::istringstream s( m_params[key] );
         s >> result;
@@ -383,9 +437,12 @@ t_CKFLOAT ChucK::getParamFloat( const std::string & key )
 // name: getParamString()
 // desc: get a string param
 //-----------------------------------------------------------------------------
-std::string ChucK::getParamString( const std::string & key )
+std::string ChucK::getParamString( const std::string & name )
 {
-    if( m_params.count( key ) > 0 && ck_param_types[key] == ck_param_string )
+    // lower case for consistency
+    std::string key = tolower(name);
+    // check
+    if( m_params.count( key ) > 0 && m_param_types[key] == ck_param_string )
     {
         return m_params[key];
     }
@@ -402,10 +459,13 @@ std::string ChucK::getParamString( const std::string & key )
 // name: getParamStringList()
 // desc: get a string param
 //-----------------------------------------------------------------------------
-std::list< std::string > ChucK::getParamStringList( const std::string & key )
+std::list< std::string > ChucK::getParamStringList( const std::string & name )
 {
+    // lower case for consistency
+    std::string key = tolower(name);
+    // check
     if( m_listParams.count( key ) > 0 &&
-        ck_param_types[key] == ck_param_string_list )
+        m_param_types[key] == ck_param_string_list )
     {
         return m_listParams[key];
     }
@@ -664,8 +724,6 @@ t_CKBOOL ChucK::initChugins()
         // load external libs | 1.5.0.4 (ge) enabled recursive search
         if( !compiler()->load_external_modules( ".chug", dl_search_path, named_dls, TRUE ) )
         {
-            // pop indent level
-            EM_poplog();
             // clean up
             goto error;
         }
@@ -964,18 +1022,32 @@ t_CKBOOL ChucK::shutdown()
 
 //-----------------------------------------------------------------------------
 // name: compileFile()
-// desc: compile a file (can be called anytime)
+// desc: compile a file -> chuck bytecode -> spork as new shred
+//       `argsTogether` is appended to `path` as additional arguments
+//       the format of `argsTogether` is ':'-separated items e.g., "1:foo:5"
+//       NOTE: `path` could have arguments already, e.g., "program.ck:5.5:bar"
+//       if `immediate` == TRUE, the new shred(s) is shreduled immediately
+//           (on the calling thread)
+//       if `immediate` == FALSE, the new shreds(s) is queued and shreduled on
+//           the next time step (by the VM compute/audio thread)
+//       `count` specifies how many instances of the new shred to spork
+//       returns TRUE if compilation successful (even if count == 0)
+//       returns FALSE if compilation unsuccessful
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::compileFile( const std::string & path,
                              const std::string & argsTogether,
-                             t_CKINT count )
+                             t_CKUINT count, t_CKBOOL immediate,
+                             std::vector<t_CKUINT> * shredIDs)
 {
+    // clear | 1.5.0.8
+    if( shredIDs ) shredIDs->clear();
+
     // sanity check
     if( !m_carrier->compiler )
     {
         // error
         EM_error2( 0, "compileFile() invoked before initialization..." );
-        return false;
+        return FALSE;
     }
 
     std::string filename;
@@ -1048,36 +1120,36 @@ t_CKBOOL ChucK::compileFile( const std::string & path,
            count == 1 ? "instance" : "instances" );
 
     // spork it
-    while( count > 0 ) // 1.5.0.0 (ge) | added changed to check for > 0, in case of negative count
+    while( count > 0 )
     {
-        #ifndef __EMSCRIPTEN__
-        // spork (for now, spork_immediate arg is always false)
-        shred = m_carrier->vm->spork( code, NULL, FALSE );
-        #else
-        // spork (in emscripten, need to spork immediately so can get shred id)
-        shred = m_carrier->vm->spork( code, NULL, TRUE );
-        #endif
+        // spork shred from code; shredule immediately or deferred;
+        // as of 1.5.0.8, spork allocates the shred ID regardless...
+        // previously for emscripten `immediate` => TRUE; this is no longer necessary
+        shred = m_carrier->vm->spork( code, NULL, immediate );
 
         // add args
         shred->args = args;
+        // append the new ID | 1.5.0.8
+        if( shredIDs ) shredIDs->push_back( shred->xid );
         // decrement count
         count--;
     }
 
     // pop indent
     EM_poplog();
-
     // unset origin hint | 1.5.0.0 (ge) added
     m_carrier->compiler->m_originHint = te_originUnknown;
 
-    return true;
+    return TRUE;
 
 error: // 1.5.0.0 (ge) added
 
+    // pop indent
+    EM_poplog();
     // unset origin hint | 1.5.0.0 (ge) added
     m_carrier->compiler->m_originHint = te_originUnknown;
 
-    return false;
+    return FALSE;
 }
 
 
@@ -1085,18 +1157,30 @@ error: // 1.5.0.0 (ge) added
 
 //-----------------------------------------------------------------------------
 // name: compileCode()
-// desc: compile code directly
+// desc: compile code/text -> chuck bytecode -> spork as new shred
+//       `argsTogether` is appended to `path` as arguments
+//       the format of `argsTogether` is ':'-separated items e.g., "1:foo:5"
+//       if `immediate` == TRUE, the new shred(s) is shreduled immediately
+//           (on the calling thread)
+//       if `immediate` == FALSE, the new shreds(s) is queued and shreduled on
+//           the next time step (on the VM compute/audio thread)
+//       returns TRUE if compilation successful (even if count == 0)
+//       returns FALSE if compilation unsuccessful
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::compileCode( const std::string & code,
                              const std::string & argsTogether,
-                             t_CKINT count, t_CKBOOL immediate )
+                             t_CKUINT count, t_CKBOOL immediate,
+                             std::vector<t_CKUINT> * shredIDs )
 {
+    // clear | 1.5.0.8
+    if( shredIDs ) shredIDs->clear();
+
     // sanity check
     if( !m_carrier->compiler )
     {
         // error
         EM_error2( 0, "compileCode() invoked before initialization..." );
-        return false;
+        return FALSE;
     }
 
     std::vector<std::string> args;
@@ -1150,34 +1234,36 @@ t_CKBOOL ChucK::compileCode( const std::string & code,
             count == 1 ? "instance" : "instances" );
 
     // spork it
-    while( count-- )
+    while( count > 0 )
     {
-#ifndef __EMSCRIPTEN__
-        // spork | 1.5.0.5 (ge) added immediate arg defaulting to TRUE
-        // previously the immediate flag was always FALSE
+        // spork shred from code; shredule immediately or deferred;
+        // as of 1.5.0.8, spork allocates the shred ID regardless...
+        // previously for emscripten `immediate` => TRUE; this is no longer necessary
         shred = m_carrier->vm->spork( vm_code, NULL, immediate );
-#else
-        // spork (in emscripten, need to spork immediately so can get shred id)
-        shred = m_carrier->vm->spork( vm_code, NULL, TRUE );
-#endif
+
         // add args
         shred->args = args;
+        // append the new ID | 1.5.0.8
+        if( shredIDs ) shredIDs->push_back( shred->xid );
+        // decrement count
+        count--;
     }
 
     // pop indent
     EM_poplog();
-
     // unset origin hint | 1.5.0.0 (ge) added
     m_carrier->compiler->m_originHint = te_originUnknown;
 
-    return true;
+    return TRUE;
 
 error: // 1.5.0.0 (ge) added
 
+    // pop indent
+    EM_poplog();
     // unset origin hint | 1.5.0.0 (ge) added
     m_carrier->compiler->m_originHint = te_originUnknown;
 
-    return false;
+    return FALSE;
 }
 
 

@@ -700,6 +700,12 @@ DLL_QUERY xxx_query( Chuck_DL_Query * QUERY )
         return FALSE;
 
     if( !type_engine_import_add_ex( env, "basic/sndbuf.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "basic/doh.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "basic/valueat.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "otf_01.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "otf_02.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "otf_03.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "otf_04.ck" ) ) goto error;
 
     // add member variable
     sndbuf_offset_data = type_engine_import_mvar( env, "int", "@sndbuf_data", FALSE );
@@ -3423,7 +3429,7 @@ CK_DLL_CTRL( sndbuf_ctrl_read )
         else if( strstr(filename, "special:britestk") ) {
             rawsize = britestk_size; rawdata = britestk_data;
         }
-        else if( strstr(filename, "special:dope") ) {
+        else if( strstr(filename, "special:doh") || strstr(filename, "special:dope") ) {
             rawsize = dope_size; rawdata = dope_data;
         }
         else if( strstr(filename, "special:eee") ) {

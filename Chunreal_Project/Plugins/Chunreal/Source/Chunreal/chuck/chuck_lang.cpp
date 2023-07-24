@@ -420,6 +420,7 @@ t_CKBOOL init_class_event( Chuck_Env * env, Chuck_Type * type )
     if( !type_engine_import_add_ex( env, "event/signal.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "event/signal4.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "event/event-extend.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "event/event-extend2.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "event/event-x-bpm-1.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "event/event-x-bpm-2.ck" ) ) goto error;
 
@@ -2205,13 +2206,13 @@ CK_DLL_MFUN( shred_id )
 
 CK_DLL_MFUN( shred_yield )
 {
+    // get this shred pointer
     Chuck_VM_Shred * derhs = (Chuck_VM_Shred *)SELF;
-    Chuck_VM * vm = derhs->vm_ref;
-
     // yield the shred in question | 1.5.0.5 (ge) refactored to call yield()
     derhs->yield();
 
     // WAS:
+    // Chuck_VM * vm = derhs->vm_ref;
     // suspend
     // derhs->is_running = FALSE;
     // reshredule
