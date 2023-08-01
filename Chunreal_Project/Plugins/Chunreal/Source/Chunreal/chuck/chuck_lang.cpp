@@ -978,15 +978,52 @@ t_CKBOOL init_class_array( Chuck_Env * env, Chuck_Type * type )
     func->doc = "reset array size to 0, set capacity to (at least) 8.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
+//    // add insert()
+//    func = make_new_mfun( "void", "insert", array_insert );
+//    func->add_arg( "int", "position" );
+//    func->add_arg( "auto", "value" );
+//    func->doc = "insert value before the specific position.";
+//    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+//    // add pushBack()
+//    func = make_new_mfun( "void", "pushBack", array_push_back );
+//    func->add_arg( "auto", "value" );
+//    func->doc = "append value to array.";
+//    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+//    // add pushFront()
+//    func = make_new_mfun( "void", "pushFront", array_push_front );
+//    func->add_arg( "auto", "value" );
+//    func->doc = "prepend value to array.";
+//    if( !type_engine_import_mfun( env, func ) ) goto error;
+
     // add popBack()
     func = make_new_mfun( "void", "popBack", array_pop_back );
-    func->doc = "remove the last item of the array.";
+    func->doc = "remove the last element of the array.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add popFront()
+    func = make_new_mfun( "void", "popFront", array_pop_front );
+    func->doc = "remove the first element of the array.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add popOut()
-    func = make_new_mfun( "void", "popOut", array_pop_out );
+    func = make_new_mfun( "void", "popOut", array_erase );
     func->add_arg( "int", "position" );
-    func->doc = "removes the item with position from the array";
+    func->doc = "remove the element at 'position' from the array (same as erase(int)).";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add erase()
+    func = make_new_mfun( "int", "erase", array_erase );
+    func->add_arg( "int", "position" );
+    func->doc = "remove element at 'position' from the array (same as popOut(int)).";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add erase()
+    func = make_new_mfun( "int", "erase", array_erase2 );
+    func->add_arg( "int", "begin" );
+    func->add_arg( "int", "end" );
+    func->doc = "remove element(s) in the range [begin,end).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add size()
@@ -1022,14 +1059,14 @@ t_CKBOOL init_class_array( Chuck_Env * env, Chuck_Type * type )
     func->doc = "get current capacity of the array (number of addressable elements).";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
-    // add find()
-    func = make_new_mfun( "int", "find", array_find );
+    // add isInMap() | 1.5.0.8 previously was find()
+    func = make_new_mfun( "int", "isInMap", array_map_find );
     func->add_arg( "string", "key" );
-    func->doc = "(map only) Get number of elements with the specified key.";
+    func->doc = "(map only) test if 'key' is in the map; (historical) this was renamed from .find() to avoid confusion with the vector part of array.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add erase()
-    func = make_new_mfun( "int", "erase", array_erase );
+    func = make_new_mfun( "int", "erase", array_map_erase );
     func->add_arg( "string", "key" );
     func->doc = "(map only) Erase all elements with the specified key.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
@@ -1045,11 +1082,14 @@ t_CKBOOL init_class_array( Chuck_Env * env, Chuck_Type * type )
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add examples
+    if( !type_engine_import_add_ex( env, "array/array_append.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_argument.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_assign.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_associative.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_capacity.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_dynamic.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "array/array_erase.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "array/array_erase2.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_mdim.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_mmixed.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "array/array_negative.ck" ) ) goto error;
@@ -2808,19 +2848,19 @@ CK_DLL_MFUN( array_get_capacity )
 }
 
 // array.find()
-CK_DLL_MFUN( array_find )
+CK_DLL_MFUN( array_map_find )
 {
     Chuck_Array * array = (Chuck_Array *)SELF;
     Chuck_String * name = GET_NEXT_STRING( ARGS );
-    RETURN->v_int = array->find( name->str() );
+    RETURN->v_int = array->map_find( name->str() );
 }
 
 // array.erase()
-CK_DLL_MFUN( array_erase )
+CK_DLL_MFUN( array_map_erase )
 {
     Chuck_Array * array = (Chuck_Array *)SELF;
     Chuck_String * name = GET_NEXT_STRING( ARGS );
-    RETURN->v_int = array->erase( name->str() );
+    RETURN->v_int = array->map_erase( name->str() );
 }
 
 // array.shuffle()
@@ -2829,7 +2869,6 @@ CK_DLL_MFUN( array_shuffle )
     Chuck_Array * array = (Chuck_Array *)SELF;
     array->shuffle();
 }
-
 
 // array.push_back()
 CK_DLL_MFUN( array_push_back )
@@ -2842,39 +2881,85 @@ CK_DLL_MFUN( array_push_back )
         RETURN->v_int = ((Chuck_Array8 *)array)->push_back( GET_NEXT_FLOAT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
         RETURN->v_int = ((Chuck_Array16 *)array)->push_back( GET_NEXT_COMPLEX( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
+        RETURN->v_int = ((Chuck_Array24 *)array)->push_back( GET_NEXT_VEC3( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
+        RETURN->v_int = ((Chuck_Array32 *)array)->push_back( GET_NEXT_VEC4( ARGS ) );
     else
         assert( FALSE );
 }
+
+
+// array.insert()
+CK_DLL_MFUN( array_insert )
+{
+    Chuck_Array * array = (Chuck_Array *)SELF;
+    t_CKINT position = GET_NEXT_INT( ARGS );
+
+    // ISSUE: 64-bit (fixed 1.3.1.0 using data kind)
+    if( array->data_type_kind() == CHUCK_ARRAY4_DATAKIND )
+        RETURN->v_int = ((Chuck_Array4 *)array)->insert( position, GET_NEXT_UINT( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY8_DATAKIND )
+        RETURN->v_int = ((Chuck_Array8 *)array)->insert( position, GET_NEXT_FLOAT( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
+        RETURN->v_int = ((Chuck_Array16 *)array)->insert( position, GET_NEXT_COMPLEX( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
+        RETURN->v_int = ((Chuck_Array24 *)array)->insert( position, GET_NEXT_VEC3( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
+        RETURN->v_int = ((Chuck_Array32 *)array)->insert( position, GET_NEXT_VEC4( ARGS ) );
+    else
+        assert( FALSE );
+}
+
 
 // array.pop_back()
 CK_DLL_MFUN( array_pop_back )
 {
     Chuck_Array * array = (Chuck_Array *)SELF;
+    RETURN->v_int = array->pop_back();
+}
+
+// array.push_front()
+CK_DLL_MFUN( array_push_front )
+{
+    Chuck_Array * array = (Chuck_Array *)SELF;
     // ISSUE: 64-bit (fixed 1.3.1.0 using data kind)
     if( array->data_type_kind() == CHUCK_ARRAY4_DATAKIND )
-        RETURN->v_int = ((Chuck_Array4 *)array)->pop_back( );
+        RETURN->v_int = ((Chuck_Array4 *)array)->push_front( GET_NEXT_UINT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY8_DATAKIND )
-        RETURN->v_int = ((Chuck_Array8 *)array)->pop_back( );
+        RETURN->v_int = ((Chuck_Array8 *)array)->push_front( GET_NEXT_FLOAT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->pop_back( );
+        RETURN->v_int = ((Chuck_Array16 *)array)->push_front( GET_NEXT_COMPLEX( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
+        RETURN->v_int = ((Chuck_Array24 *)array)->push_front( GET_NEXT_VEC3( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
+        RETURN->v_int = ((Chuck_Array32 *)array)->push_front( GET_NEXT_VEC4( ARGS ) );
     else
         assert( FALSE );
 }
 
-// array.pop_out
-CK_DLL_MFUN( array_pop_out )
+// array.pop_front()
+CK_DLL_MFUN( array_pop_front )
+{
+    Chuck_Array * array = (Chuck_Array *)SELF;
+    RETURN->v_int = array->pop_front();
+}
+
+// array.erase
+CK_DLL_MFUN( array_erase )
 {
     Chuck_Array * array = (Chuck_Array *)SELF;
     t_CKINT position = GET_NEXT_INT(ARGS);
-    if( array->data_type_kind() == CHUCK_ARRAY4_DATAKIND)
-        RETURN->v_int = ((Chuck_Array4 *)array)->pop_out(position);
-    else if( array->data_type_kind() == CHUCK_ARRAY8_DATAKIND )
-        RETURN->v_int = ((Chuck_Array8 *)array)->pop_out(position);
-    else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->pop_out(position);
-    else
-        assert( FALSE );
+    RETURN->v_int = array->erase( position );
+}
 
+// array.erase
+CK_DLL_MFUN( array_erase2 )
+{
+    Chuck_Array * array = (Chuck_Array *)SELF;
+    t_CKINT begin = GET_NEXT_INT(ARGS);
+    t_CKINT end = GET_NEXT_INT(ARGS);
+    RETURN->v_int = array->erase( begin, end );
 }
 
 // 1.4.1.1 nshaheed (added) array.getKeys()
@@ -2932,7 +3017,7 @@ static void typeGetTypes(
     for( t_CKINT i = 0; i < types.size(); i++ )
     {
         // check special
-        t_CKBOOL special = (types[i]->name.length()>0 && types[i]->name[0] == '@');
+        t_CKBOOL special = (types[i]->base_name.length()>0 && types[i]->base_name[0] == '@');
         // if not requesting special types
         if( !isSpecial && (special == TRUE) ) continue;
         // check origin
@@ -3023,7 +3108,7 @@ CK_DLL_MFUN( type_basename )
     // new it
     Chuck_String * str = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
     // set
-    str->set( type->name );
+    str->set( type->base_name );
     // return
     RETURN->v_object = str;
 }
@@ -3035,7 +3120,7 @@ CK_DLL_MFUN( type_name )
     // new it
     Chuck_String * str = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
     // construct the full type name (arrays included)
-    string name = type->name;
+    string name = type->base_name;
     // append array depth
     for( t_CKINT i = 0; i < type->array_depth; i++ ) name += "[]";
     // set
@@ -3057,7 +3142,7 @@ CK_DLL_MFUN( type_children )
     // get me
     Chuck_Type * me = (Chuck_Type *)SELF;
     // name
-    string name = me->name;
+    string name = me->base_name;
 
     // instantiate
     Chuck_Array4 * ret = new Chuck_Array4( TRUE );

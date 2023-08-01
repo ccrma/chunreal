@@ -52,6 +52,7 @@ t_CKBOOL emit_engine_emit_stmt_list( Chuck_Emitter * emit, a_Stmt_List list );
 t_CKBOOL emit_engine_emit_stmt( Chuck_Emitter * emit, a_Stmt stmt, t_CKBOOL pop = TRUE );
 t_CKBOOL emit_engine_emit_if( Chuck_Emitter * emit, a_Stmt_If stmt );
 t_CKBOOL emit_engine_emit_for( Chuck_Emitter * emit, a_Stmt_For stmt );
+t_CKBOOL emit_engine_emit_foreach( Chuck_Emitter * emit, a_Stmt_ForEach stmt );
 t_CKBOOL emit_engine_emit_while( Chuck_Emitter * emit, a_Stmt_While stmt );
 t_CKBOOL emit_engine_emit_do_while( Chuck_Emitter * emit, a_Stmt_While stmt );
 t_CKBOOL emit_engine_emit_until( Chuck_Emitter * emit, a_Stmt_Until stmt );
@@ -229,6 +230,9 @@ Chuck_VM_Code * emit_engine_emit_prog( Chuck_Emitter * emit, a_Program prog,
             break;
         }
 
+        // check success code
+        if( !ret ) break;
+
         // the next
         prog = prog->next;
     }
@@ -249,6 +253,7 @@ Chuck_VM_Code * emit_engine_emit_prog( Chuck_Emitter * emit, a_Program prog,
         // Chuck_Instr_Reg_Push_Global)
     }
 
+    // check success code
     if( ret )
     {
         // pop global scope (added 1.3.0.0)
@@ -262,10 +267,27 @@ Chuck_VM_Code * emit_engine_emit_prog( Chuck_Emitter * emit, a_Program prog,
         // add reference
         emit->context->nspc->pre_ctor->add_ref();
     }
+    else // error | 1.5.0.8 (ge) added in case emit errors out
+    {
+        // clear the code stack
+        Chuck_Code * code = NULL;
+        // while stack not empty
+        while( emit->stack.size() )
+        {
+            // get the top of the stack
+            code = emit->stack.back();
+            // manually delete the instructions
+            for( t_CKUINT i = 0; i < code->code.size(); i++ )
+            { CK_SAFE_DELETE( code->code[i] ); }
+            // delete the code
+            CK_SAFE_DELETE( code );
+            // pop the stack
+            emit->stack.pop_back();
+        }
+    }
 
     // clear the code
-    delete emit->code;
-    emit->code = NULL;
+    CK_SAFE_DELETE( emit->code );
 
     // pop indent
     EM_poplog();
@@ -321,15 +343,33 @@ Chuck_VM_Code * emit_to_code( Chuck_Code * in,
         EM_print2vanilla( "-------" );
         for( t_CKUINT i = 0; i < code->num_instr; i++ )
         {
-            // check code str | 1.5.0.0 (ge) added
-            if( code->instr[i]->m_codestr )
+            // check code str (PRE) | 1.5.0.0 (ge) added
+            if( code->instr[i]->m_codestr_pre )
             {
-                // print the reconstructed code str
-                EM_print2blue( "%s", code->instr[i]->m_codestr->c_str() );
+                const vector<string> & codestr = *(code->instr[i]->m_codestr_pre);
+                // loop
+                for( t_CKINT c = 0; c < codestr.size(); c++ )
+                {
+                    // print the reconstructed code str
+                    EM_print2blue( "%s", codestr[c].c_str() );
+                }
             }
+
             // print the instruction
             EM_print2vanilla( "[%i] %s( %s )", i,
                               code->instr[i]->name(), code->instr[i]->params() );
+
+            // check code str (POST) | 1.5.0.8 (ge) added
+            if( code->instr[i]->m_codestr_post )
+            {
+                const vector<string> & codestr = *(code->instr[i]->m_codestr_post);
+                // loop
+                for( t_CKINT c = 0; c < codestr.size(); c++ )
+                {
+                    // print the reconstructed code str
+                    EM_print2blue( "%s", codestr[c].c_str() );
+                }
+            }
         }
         EM_print2vanilla( "-------\n" );
     }
@@ -382,7 +422,7 @@ t_CKBOOL emit_engine_emit_stmt_list( Chuck_Emitter * emit, a_Stmt_List list )
 
 //-----------------------------------------------------------------------------
 // name: emit_engine_emit_stmt()
-// desc: ...
+// desc: emit a statement
 //-----------------------------------------------------------------------------
 t_CKBOOL emit_engine_emit_stmt( Chuck_Emitter * emit, a_Stmt stmt, t_CKBOOL pop )
 {
@@ -396,16 +436,23 @@ t_CKBOOL emit_engine_emit_stmt( Chuck_Emitter * emit, a_Stmt stmt, t_CKBOOL pop 
     t_CKUINT nextIndex = 0;
     // expression string
     string codestr;
+    // closing codestr, as applicable
+    string codestr_close;
+    // codestr prefix, e.g., (/** loop conditional **/) for code dump
+    string codestr_prefix = emit->codestr_context_top();
+    t_CKBOOL hasPrefix = codestr_prefix.length() > 0;
+
+    // get str
+    codestr = absyn2str( stmt );
+    // prefix?
+    if( hasPrefix ) codestr = codestr_prefix + " " + codestr;
+    // get next index | 1.5.0.0 (ge) added
+    nextIndex = emit->next_index();
 
     // loop over statements
     switch( stmt->s_type )
     {
         case ae_stmt_exp:  // expression statement
-            // get str
-            codestr = absyn2str( stmt->stmt_exp );
-            // get next index | 1.5.0.0 (ge) added
-            nextIndex = emit->next_index();
-
             // emit it
             ret = emit_engine_emit_exp( emit, stmt->stmt_exp );
             if( !ret )
@@ -471,51 +518,66 @@ t_CKBOOL emit_engine_emit_stmt( Chuck_Emitter * emit, a_Stmt stmt, t_CKBOOL pop 
                 }
             }
 
-            // see if we added at least one instruction
-            if( nextIndex < emit->next_index() )
-            {
-                // set codestr (for instruction dump)
-                emit->code->code[nextIndex]->set_codestr( codestr );
-            }
+            // add semicolon to code str
+            codestr += ";";
             break;
 
         case ae_stmt_if:  // if statement
             ret = emit_engine_emit_if( emit, &stmt->stmt_if );
+            codestr_close = "} /** " + codestr + " **/";
+            codestr += " {";
             break;
 
         case ae_stmt_for:  // for statement
             ret = emit_engine_emit_for( emit, &stmt->stmt_for );
+            codestr_close = "} /** " + codestr + " **/";
+            codestr += " {";
+            break;
+
+        case ae_stmt_foreach:  // for statement
+            ret = emit_engine_emit_foreach( emit, &stmt->stmt_foreach );
+            codestr_close = "} /** " + codestr + " **/";
+            codestr += " {";
             break;
 
         case ae_stmt_while:  // while statement
             if( stmt->stmt_while.is_do )
+            {
                 ret = emit_engine_emit_do_while( emit, &stmt->stmt_while );
+                codestr_close = "} " + codestr + ";";
+                codestr = "do { /** " + codestr + " **/";
+            }
             else
+            {
                 ret = emit_engine_emit_while( emit, &stmt->stmt_while );
+                codestr_close = "} /** " + codestr + " **/";
+                codestr += " {";
+            }
             break;
 
         case ae_stmt_until:  // until statement
             if( stmt->stmt_until.is_do )
+            {
                 ret = emit_engine_emit_do_until( emit, &stmt->stmt_until );
+                codestr_close = "} " + codestr + ";";
+                codestr = "do { /** " + codestr + " **/";
+            }
             else
+            {
                 ret = emit_engine_emit_until( emit, &stmt->stmt_until );
+                codestr_close = "} /** " + codestr + " **/";
+                codestr += " {";
+            }
             break;
 
         case ae_stmt_loop:  // loop statement
             ret = emit_engine_emit_loop( emit, &stmt->stmt_loop );
-            break;
-
-        case ae_stmt_switch:  // switch statement
-            // not implemented
-            ret = FALSE;
+            codestr += " {";
+            codestr_close = "}";
             break;
 
         case ae_stmt_break:  // break statement
             ret = emit_engine_emit_break( emit, &stmt->stmt_break );
-            break;
-
-        case ae_stmt_code:  // code segment
-            ret = emit_engine_emit_code_segment( emit, &stmt->stmt_code );
             break;
 
         case ae_stmt_continue:  // continue statement
@@ -524,6 +586,15 @@ t_CKBOOL emit_engine_emit_stmt( Chuck_Emitter * emit, a_Stmt stmt, t_CKBOOL pop 
 
         case ae_stmt_return:  // return statement
             ret = emit_engine_emit_return( emit, &stmt->stmt_return );
+            break;
+
+        case ae_stmt_code:  // code segment
+            ret = emit_engine_emit_code_segment( emit, &stmt->stmt_code );
+            break;
+
+        case ae_stmt_switch:  // switch statement
+            // not implemented
+            ret = FALSE;
             break;
 
         case ae_stmt_case:  // case statement
@@ -543,6 +614,20 @@ t_CKBOOL emit_engine_emit_stmt( Chuck_Emitter * emit, a_Stmt stmt, t_CKBOOL pop 
                  "(emit): internal error: unhandled statement type '%i'...",
                  stmt->s_type );
             break;
+    }
+
+    // see if we added at least one instruction
+    if( codestr != "" && nextIndex < emit->next_index() )
+    {
+        // PREPEND codestr (for instruction dump)
+        emit->code->code[nextIndex]->prepend_codestr( codestr );
+    }
+
+    // see if need to add closing
+    if( codestr_close != "" && nextIndex < emit->next_index()-1 )
+    {
+        // APPPEND closing
+        emit->code->code[emit->next_index()-1]->append_codestr( codestr_close );
     }
 
     return ret;
@@ -596,7 +681,7 @@ t_CKBOOL emit_engine_emit_if( Chuck_Emitter * emit, a_Stmt_If stmt )
 
         EM_error2( stmt->cond->where,
             "(emit): internal error: unhandled type '%s' in if condition",
-            stmt->cond->type->name.c_str() );
+            stmt->cond->type->base_name.c_str() );
         return FALSE;
     }
 
@@ -649,20 +734,27 @@ t_CKBOOL emit_engine_emit_if( Chuck_Emitter * emit, a_Stmt_If stmt )
 
 //-----------------------------------------------------------------------------
 // name: emit_engine_emit_for()
-// desc: ...
+// desc: for( C1; C2; C3 ) { BODY }
 //-----------------------------------------------------------------------------
 t_CKBOOL emit_engine_emit_for( Chuck_Emitter * emit, a_Stmt_For stmt )
 {
     t_CKBOOL ret = TRUE;
     Chuck_Instr_Branch_Op * op = NULL;
+    // codestr prefix for better description
+    string codestr_prefix = "/** loop conditional **/";
+    // codestr push the context for instruction description / dump
+    emit->codestr_context_push( codestr_prefix );
 
     // push the stack
     emit->push_scope();
 
-    // emit the cond
-    ret = emit_engine_emit_stmt( emit, stmt->c1 );
-    if( !ret )
-        return FALSE;
+    // C1 could be empty
+    if( stmt->c1 )
+    {
+        // emit the cond
+        ret = emit_engine_emit_stmt( emit, stmt->c1 );
+        if( !ret ) return FALSE;
+    }
 
     // the start index
     t_CKUINT start_index = emit->next_index();
@@ -672,10 +764,12 @@ t_CKBOOL emit_engine_emit_for( Chuck_Emitter * emit, a_Stmt_For stmt )
     // mark the stack of break
     emit->code->stack_break.push_back( NULL );
 
-    // emit the cond - keep the result on the stack
-    emit_engine_emit_stmt( emit, stmt->c2, FALSE );
+    // emit the cond (C2) -- keep the result on the stack
+    ret = emit_engine_emit_stmt( emit, stmt->c2, FALSE );
+    if( !ret ) return FALSE;
 
-    // could be NULL
+    // should not be NULL; in chuck C2 is not optional
+    // (enforced earlier in the compilation)
     if( stmt->c2 )
     {
         switch( stmt->c2->stmt_exp->type->xid )
@@ -705,7 +799,7 @@ t_CKBOOL emit_engine_emit_for( Chuck_Emitter * emit, a_Stmt_For stmt )
 
             EM_error2( stmt->c2->stmt_exp->where,
                 "(emit): internal error: unhandled type '%s' in for conditional",
-                stmt->c2->stmt_exp->type->name.c_str() );
+                stmt->c2->stmt_exp->type->base_name.c_str() );
             return FALSE;
         }
         // append the op
@@ -715,10 +809,12 @@ t_CKBOOL emit_engine_emit_for( Chuck_Emitter * emit, a_Stmt_For stmt )
     // added 1.3.1.1: new scope just for loop body
     emit->push_scope();
 
+    // pop the codestr context
+    emit->codestr_context_pop();
+
     // emit the body
     ret = emit_engine_emit_stmt( emit, stmt->body );
-    if( !ret )
-        return FALSE;
+    if( !ret ) return FALSE;
 
     // added 1.3.1.1: pop scope for loop body
     emit->pop_scope();
@@ -726,12 +822,18 @@ t_CKBOOL emit_engine_emit_for( Chuck_Emitter * emit, a_Stmt_For stmt )
     // continue here
     cont_index = emit->next_index();
 
-    // emit the action
+    // emit the action (C3)
     if( stmt->c3 )
     {
+        // get the code str
+        string codestr = absyn2str( stmt->c3 );
+        // get the index
+        t_CKUINT c3_index = emit->next_index();
+        // emit the expression
         ret = emit_engine_emit_exp( emit, stmt->c3 );
-        if( !ret )
-            return FALSE;
+        if( !ret ) return FALSE;
+        // add code str
+        emit->code->code[c3_index]->prepend_codestr( codestr_prefix + " " + codestr );
 
         // HACK!
         // count the number of words to pop
@@ -797,13 +899,210 @@ t_CKBOOL emit_engine_emit_for( Chuck_Emitter * emit, a_Stmt_For stmt )
 
 
 //-----------------------------------------------------------------------------
+// name: emit_engine_emit_foreach() | 1.5.0.8 (ge) added
+// desc: emit instructions for( VAR : ARRAY )
+//-----------------------------------------------------------------------------
+t_CKBOOL emit_engine_emit_foreach( Chuck_Emitter * emit, a_Stmt_ForEach stmt )
+{
+    Chuck_Instr_ForEach_Inc_And_Branch * op = NULL;
+    t_CKUINT num_words = 0;
+    t_CKBOOL ret = TRUE;
+    // codestr prefix for better description | 1.5.0.8
+    string codestr_prefix = "/** loop control **/";
+    string codestr;
+    t_CKUINT cond_index = 0;
+
+    // push the stack
+    emit->push_scope();
+
+    //-------------------------------------------------------------------------
+    // emit VAR
+    //-------------------------------------------------------------------------
+    // get the code str | 1.5.0.8
+    codestr = absyn2str( stmt->theIter );
+    // get the index
+    cond_index = emit->next_index();
+    // emit the iter part
+    ret = emit_engine_emit_exp( emit, stmt->theIter );
+    if( !ret ) return FALSE;
+    // add code str | 1.5.0.8
+    emit->code->code[cond_index]->prepend_codestr( codestr_prefix + " " + codestr );
+
+    // check everything is in place
+    if( stmt->theIter->s_type != ae_exp_decl ||
+        !stmt->theIter->decl.var_decl_list ||
+        !stmt->theIter->decl.var_decl_list->var_decl ||
+        !stmt->theIter->decl.var_decl_list->var_decl->value )
+    {
+        EM_error2( stmt->theIter->where,
+                   "(emit): internal error: cannot accessing foreach ITER value..." );
+        return FALSE;
+    }
+
+    // get the iter
+    Chuck_Value * theIter = stmt->theIter->decl.var_decl_list->var_decl->value;
+
+    //-------------------------------------------------------------------------
+    // emit ARRAY
+    //------------------------------------------------------------------------
+    // get the code str | 1.5.0.8
+    codestr = absyn2str( stmt->theArray );
+    // get the index
+    cond_index = emit->next_index();
+    // emit the array part
+    ret = emit_engine_emit_exp( emit, stmt->theArray );
+    if( !ret ) return FALSE;
+    // add code str | 1.5.0.8
+    emit->code->code[cond_index]->prepend_codestr( codestr_prefix + " " + codestr );
+
+    //-------------------------------------------------------------------------
+    // emit implicit ARRAY REF
+    //-------------------------------------------------------------------------
+    // allocate a local variable to hold the array pointer
+    Chuck_Local * localArray = emit->alloc_local( emit->env->t_int->size, "@foreach_array",
+                                                  TRUE, TRUE, FALSE );
+    // check
+    if( !localArray )
+    {
+        EM_error2( stmt->theArray->where,
+                   "(emit): internal error: cannot allocate local @foreach_array..." );
+        return FALSE;
+    }
+    // emit our local array reference
+    emit->append( new Chuck_Instr_Alloc_Word( localArray->offset, TRUE ) );
+    // copy object
+    emit->append( new Chuck_Instr_Assign_Object() );
+
+    //-------------------------------------------------------------------------
+    // emit implicit iter COUNTER
+    //-------------------------------------------------------------------------
+    // allocate a local variable to hold the iterator
+    Chuck_Local * localCounter = emit->alloc_local( emit->env->t_int->size, "@foreach_counter",
+                                                    FALSE, FALSE, FALSE );
+    // check
+    if( !localCounter )
+    {
+        EM_error2( stmt->where,
+                   "(emit): internal error: cannot allocate local @foreach_counter..." );
+        return FALSE;
+    }
+    // emit our local counter; borrow theIter's is_context_global
+    emit->append( new Chuck_Instr_Alloc_Word( localCounter->offset, FALSE ) );
+
+    //-------------------------------------------------------------------------
+    // emit conditional foreach BRANCH instruction
+    //-------------------------------------------------------------------------
+    // the start index
+    t_CKUINT start_index = emit->next_index();
+
+    // get data kind and size relevant to array
+    t_CKUINT dataKind = getkindof( emit->env, stmt->theIter->type);
+    t_CKUINT dataSize = stmt->theIter->type->size;
+    // compare branch condition and increment loop counter
+    op = new Chuck_Instr_ForEach_Inc_And_Branch( dataKind, dataSize );
+    // emit the instruction
+    emit->append( op );
+
+    //-------------------------------------------------------------------------
+    // add STACK markers
+    //-------------------------------------------------------------------------
+    t_CKUINT cont_index = 0;
+    // mark the stack of continue
+    emit->code->stack_cont.push_back( NULL );
+    // mark the stack of break
+    emit->code->stack_break.push_back( NULL );
+
+    //-------------------------------------------------------------------------
+    // emit BODY
+    //-------------------------------------------------------------------------
+    // added 1.3.1.1: new scope just for loop body
+    emit->push_scope();
+
+    // emit the body
+    ret = emit_engine_emit_stmt( emit, stmt->body );
+    if( !ret )
+        return FALSE;
+
+    // added 1.3.1.1: pop scope for loop body
+    emit->pop_scope();
+
+    //-------------------------------------------------------------------------
+    // mark CONTINUE point
+    //-------------------------------------------------------------------------
+    // continue here
+    cont_index = emit->next_index();
+
+    //-------------------------------------------------------------------------
+    // emit foreach ARRAY and ITER state
+    //-------------------------------------------------------------------------
+    // emit our local iter VAR
+    emit->append( new Chuck_Instr_Reg_Push_Mem_Addr( theIter->offset, theIter->is_context_global ) );
+    // emit our local array reference; borrow theIter's is_context_global
+    emit->append( new Chuck_Instr_Reg_Push_Mem( localArray->offset, theIter->is_context_global ) );
+    // emit our local counter; borry theIter's is_context_global
+    emit->append( new Chuck_Instr_Reg_Push_Mem_Addr( localCounter->offset, theIter->is_context_global ) );
+
+    // mark it in the instruction description
+    emit->code->code[cont_index]->prepend_codestr( codestr_prefix );
+
+    //-------------------------------------------------------------------------
+    // emit GOTO
+    //-------------------------------------------------------------------------
+    // go back to do check the condition
+    emit->append( new Chuck_Instr_Goto( start_index ) );
+
+    //-------------------------------------------------------------------------
+    // immediately AFTER loop
+    //-------------------------------------------------------------------------
+    // set the op's target
+    op->set( emit->next_index() );
+
+    //-------------------------------------------------------------------------
+    // deal with CONTINUEs
+    //-------------------------------------------------------------------------
+    // stack of continue
+    while( emit->code->stack_cont.size() && emit->code->stack_cont.back() )
+    {
+        emit->code->stack_cont.back()->set( cont_index );
+        emit->code->stack_cont.pop_back();
+    }
+
+    //-------------------------------------------------------------------------
+    // deal with BREAKs
+    //-------------------------------------------------------------------------
+    // stack of break
+    while( emit->code->stack_break.size() && emit->code->stack_break.back() )
+    {
+        emit->code->stack_break.back()->set( emit->next_index() );
+        emit->code->stack_break.pop_back();
+    }
+
+    //-------------------------------------------------------------------------
+    // end of SCOPE
+    //-------------------------------------------------------------------------
+    // pop stack
+    emit->pop_scope();
+    // pop continue stack
+    emit->code->stack_cont.pop_back();
+    // pop break stack
+    emit->code->stack_break.pop_back();
+
+    return ret;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: emit_engine_emit_while()
-// desc: ...
+// desc: while( COND ) { BODY }
 //-----------------------------------------------------------------------------
 t_CKBOOL emit_engine_emit_while( Chuck_Emitter * emit, a_Stmt_While stmt )
 {
     t_CKBOOL ret = TRUE;
     Chuck_Instr_Branch_Op * op = NULL;
+    // codestr prefix for better description | 1.5.0.8
+    string codestr_prefix = "/** loop conditional **/";
 
     // push stack
     emit->push_scope();
@@ -815,10 +1114,17 @@ t_CKBOOL emit_engine_emit_while( Chuck_Emitter * emit, a_Stmt_While stmt )
     // mark the stack of break
     emit->code->stack_break.push_back( NULL );
 
+    // get the code str | 1.5.0.8
+    string codestr = absyn2str( stmt->cond );
+    // get the index
+    t_CKUINT cond_index = emit->next_index();
+
     // emit the cond
     ret = emit_engine_emit_exp( emit, stmt->cond );
-    if( !ret )
-        return FALSE;
+    if( !ret ) return FALSE;
+
+    // add code str | 1.5.0.8
+    emit->code->code[cond_index]->prepend_codestr( codestr_prefix + " " + codestr );
 
     // the condition
     switch( stmt->cond->type->xid )
@@ -848,7 +1154,7 @@ t_CKBOOL emit_engine_emit_while( Chuck_Emitter * emit, a_Stmt_While stmt )
 
         EM_error2( stmt->cond->where,
             "(emit): internal error: unhandled type '%s' in while conditional",
-            stmt->cond->type->name.c_str() );
+            stmt->cond->type->base_name.c_str() );
         return FALSE;
     }
 
@@ -908,6 +1214,8 @@ t_CKBOOL emit_engine_emit_do_while( Chuck_Emitter * emit, a_Stmt_While stmt )
     t_CKBOOL ret = TRUE;
     Chuck_Instr_Branch_Op * op = NULL;
     t_CKUINT start_index = emit->next_index();
+    // codestr prefix for better description | 1.5.0.8
+    string codestr_prefix = "/** loop conditional **/";
 
     // push stack
     emit->push_scope();
@@ -928,10 +1236,17 @@ t_CKBOOL emit_engine_emit_do_while( Chuck_Emitter * emit, a_Stmt_While stmt )
     // added 1.3.1.1: pop scope for loop body
     emit->pop_scope();
 
+    // get the code str | 1.5.0.8
+    string codestr = absyn2str( stmt->cond );
+    // get the index
+    t_CKUINT cond_index = emit->next_index();
+
     // emit the cond
     ret = emit_engine_emit_exp( emit, stmt->cond );
-    if( !ret )
-        return FALSE;
+    if( !ret ) return FALSE;
+
+    // add code str | 1.5.0.8
+    emit->code->code[cond_index]->prepend_codestr( codestr_prefix + " " + codestr );
 
     // the condition
     switch( stmt->cond->type->xid )
@@ -1006,6 +1321,8 @@ t_CKBOOL emit_engine_emit_until( Chuck_Emitter * emit, a_Stmt_Until stmt )
 {
     t_CKBOOL ret = TRUE;
     Chuck_Instr_Branch_Op * op = NULL;
+    // codestr prefix for better description | 1.5.0.8
+    string codestr_prefix = "/** loop conditional **/";
 
     // push stack
     emit->push_scope();
@@ -1017,10 +1334,17 @@ t_CKBOOL emit_engine_emit_until( Chuck_Emitter * emit, a_Stmt_Until stmt )
     // mark the stack of break
     emit->code->stack_break.push_back( NULL );
 
+    // get the code str | 1.5.0.8
+    string codestr = absyn2str( stmt->cond );
+    // get the index
+    t_CKUINT cond_index = emit->next_index();
+
     // emit the cond
     ret = emit_engine_emit_exp( emit, stmt->cond );
-    if( !ret )
-        return FALSE;
+    if( !ret ) return FALSE;
+
+    // add code str | 1.5.0.8
+    emit->code->code[cond_index]->prepend_codestr( codestr_prefix + " " + codestr );
 
     // condition
     switch( stmt->cond->type->xid )
@@ -1050,7 +1374,7 @@ t_CKBOOL emit_engine_emit_until( Chuck_Emitter * emit, a_Stmt_Until stmt )
 
         EM_error2( stmt->cond->where,
             "(emit): internal error: unhandled type '%s' in until conditional",
-            stmt->cond->type->name.c_str() );
+            stmt->cond->type->base_name.c_str() );
         return FALSE;
     }
 
@@ -1107,6 +1431,8 @@ t_CKBOOL emit_engine_emit_do_until( Chuck_Emitter * emit, a_Stmt_Until stmt )
 {
     t_CKBOOL ret = TRUE;
     Chuck_Instr_Branch_Op * op = NULL;
+    // codestr prefix for better description | 1.5.0.8
+    string codestr_prefix = "/** loop conditional **/";
 
     // push stack
     emit->push_scope();
@@ -1129,10 +1455,17 @@ t_CKBOOL emit_engine_emit_do_until( Chuck_Emitter * emit, a_Stmt_Until stmt )
     // added 1.3.1.1: pop scope for loop body
     emit->pop_scope();
 
+    // get the code str | 1.5.0.8
+    string codestr = absyn2str( stmt->cond );
+    // get the index
+    t_CKUINT cond_index = emit->next_index();
+
     // emit the cond
     ret = emit_engine_emit_exp( emit, stmt->cond );
-    if( !ret )
-        return FALSE;
+    if( !ret ) return FALSE;
+
+    // add code str | 1.5.0.8
+    emit->code->code[cond_index]->prepend_codestr( codestr_prefix + " " + codestr );
 
     // condition
     switch( stmt->cond->type->xid )
@@ -1153,7 +1486,7 @@ t_CKBOOL emit_engine_emit_do_until( Chuck_Emitter * emit, a_Stmt_Until stmt )
     default:
         EM_error2( stmt->cond->where,
              "(emit): internal error: unhandled type '%s' in do/until conditional",
-             stmt->cond->type->name.c_str() );
+             stmt->cond->type->base_name.c_str() );
         return FALSE;
     }
 
@@ -1198,16 +1531,25 @@ t_CKBOOL emit_engine_emit_loop( Chuck_Emitter * emit, a_Stmt_Loop stmt )
 {
     t_CKBOOL ret = TRUE;
     Chuck_Instr_Branch_Op * op = NULL;
+    // codestr prefix for better description | 1.5.0.8
+    string codestr_prefix = "/** loop conditional **/";
 
     Chuck_Instr * instr = NULL;
 
     // push stack
     emit->push_scope();
 
+    // get the code str | 1.5.0.8
+    string codestr = absyn2str( stmt->cond );
+    // get the index
+    t_CKUINT cond_index = emit->next_index();
+
     // emit the cond
     ret = emit_engine_emit_exp( emit, stmt->cond );
-    if( !ret )
-        return FALSE;
+    if( !ret ) return FALSE;
+
+    // add code str | 1.5.0.8
+    emit->code->code[cond_index]->prepend_codestr( codestr_prefix + " " + codestr );
 
     // initialize our loop counter (1.3.5.3)
     emit->append( new Chuck_Instr_Init_Loop_Counter() );
@@ -1238,7 +1580,7 @@ t_CKBOOL emit_engine_emit_loop( Chuck_Emitter * emit, a_Stmt_Loop stmt )
     default:
         EM_error2( stmt->cond->where,
             "(emit): internal error: unhandled type '%s' in while conditional",
-            type->name.c_str() );
+            type->base_name.c_str() );
 
         return FALSE;
     }
@@ -2900,6 +3242,31 @@ t_CKBOOL emit_engine_emit_exp_unary( Chuck_Emitter * emit, a_Exp_Unary unary )
         // if this is an object
         if( isobj( emit->env, t ) )
         {
+            // only check dependency violations if we are at a context-top-level
+            // or class-top-level scope, i.e., not in a function definition
+            if( !emit->env->func )
+            {
+                // dependency tracking: ensure object instantiation (e.g., Foo foo;) is not invoked
+                // before dependencies are met | 1.5.0.8 (ge) added
+                const Chuck_Value_Dependency * unfulfilled = t->depends.locate( unary->where );
+                // at least one unfulfilled
+                if( unfulfilled )
+                {
+                    EM_error2( unary->type->where,
+                              "'%s' instantiation at this point skips initialization of a needed variable:",
+                              t->c_name() );
+                    EM_error2( unfulfilled->where,
+                              "...(note: this skipped variable initialization is needed by class '%s')",
+                              t->c_name() );
+                    EM_error2( unfulfilled->use_where,
+                              "...(note: this is where the variable is used within class '%s')",
+                              t->c_name() );
+                    EM_error2( 0,
+                              "...(hint: try instantiating '%s' after the variable initialization)", t->c_name() );
+                    return FALSE;
+                }
+            }
+
             // should always be false; can't 'new int[]'...
             t_CKBOOL is_array_ref = FALSE;
             // instantiate object, including array
@@ -3473,13 +3840,37 @@ t_CKBOOL emit_engine_emit_exp_func_call( Chuck_Emitter * emit,
     // is a member?
     t_CKBOOL is_member = func->is_member;
 
+    // only check dependency violations if we are at a context-top-level
+    // or class-top-level scope, i.e., not in a function definition
+    // also, once sporked,  it will be up the programmer to ensure intention
+    if( !emit->env->func && !spork )
+    {
+        // dependency tracking: check if we invoke func before all its deps are initialized | 1.5.0.8 (ge) added
+        const Chuck_Value_Dependency * unfulfilled = func->depends.locate( where, emit->env->class_def != NULL );
+        // at least one unfulfilled dependency
+        if( unfulfilled )
+        {
+            EM_error2( where,
+                      "calling '%s()' at this point skips initialization of a needed variable:",
+                      func->base_name.c_str() );
+            EM_error2( unfulfilled->where,
+                      "...(note: this skipped variable initialization is needed by '%s')",
+                      func->signature().c_str() );
+            EM_error2( unfulfilled->use_where,
+                      "...(note: this is where the variable is used within '%s' or its subsidiaries)",
+                      func->signature().c_str() );
+            EM_error2( 0,
+                      "...(hint: try calling '%s()' after the variable initialization)", func->base_name.c_str() );
+            return FALSE;
+        }
+    }
+
     // translate to code
     emit->append( new Chuck_Instr_Func_To_Code );
     // emit->append( new Chuck_Instr_Reg_Push_Imm( (t_CKUINT)func->code ) );
     // push the local stack depth - local variables
     emit->append( new Chuck_Instr_Reg_Push_Imm( emit->code->frame->curr_offset ) );
 
-    // TODO: member functions and static functions
     // call the function
     t_CKUINT size = type->size;
     t_CKUINT kind = getkindof( emit->env, type ); // added 1.3.1.0
@@ -3542,7 +3933,7 @@ t_CKBOOL emit_engine_emit_func_args( Chuck_Emitter * emit,
 
 //-----------------------------------------------------------------------------
 // name: emit_engine_emit_exp_func_call()
-// desc: ...
+// desc: emit function call from a_Exp_Func_Call
 //-----------------------------------------------------------------------------
 t_CKBOOL emit_engine_emit_exp_func_call( Chuck_Emitter * emit,
                                          a_Exp_Func_Call func_call,
@@ -3566,10 +3957,19 @@ t_CKBOOL emit_engine_emit_exp_func_call( Chuck_Emitter * emit,
         return FALSE;
     }
 
+    // line and pos
+    t_CKUINT line = func_call->line;
+    t_CKUINT where = func_call->where;
+    // if possible, get more accurate code position
+    if( func_call->func->s_type == ae_exp_dot_member )
+    {
+        line = func_call->func->dot_member.line;
+        where = func_call->func->dot_member.where;
+    }
+
     // the rest
-    return emit_engine_emit_exp_func_call( emit, func_call->ck_func,
-                                           func_call->ret_type,
-                                           func_call->line, func_call->where, spork );
+    return emit_engine_emit_exp_func_call( emit, func_call->ck_func, func_call->ret_type,
+                                           line, where, spork );
 }
 
 
@@ -3959,7 +4359,7 @@ t_CKBOOL emit_engine_emit_exp_if( Chuck_Emitter * emit, a_Exp_If exp_if )
     default:
         EM_error2( exp_if->cond->where,
             "(emit): internal error: unhandled type '%s' in if condition",
-            exp_if->cond->type->name.c_str() );
+            exp_if->cond->type->base_name.c_str() );
         return FALSE;
     }
 
@@ -4158,8 +4558,8 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
         else
         {
             // fail if type unsupported
-            EM_error2( decl->where, (std::string("unsupported type for global keyword: ") + t->name).c_str() );
-            EM_error2( decl->where, "...(supported types: int, float, string, Event, UGen, Object)" );
+            EM_error2( decl->type->where, (std::string("unsupported type for global keyword: ") + t->base_name).c_str() );
+            EM_error2( 0, "(supported types: int, float, string, Event, UGen, Object)" );
             return FALSE;
         }
     }
@@ -4176,7 +4576,7 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
         // is the variable a reference
         is_obj = isobj( emit->env, type );
         // do alloc or not
-        is_ref = decl->type->ref;
+        is_ref = var_decl->force_ref || decl->type->ref; // 1.5.0.8 (ge) added force_ref for foreach
         // not init
         is_init = FALSE;
         // is array
@@ -4197,6 +4597,33 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
                 // avoid doing this if the array is global?
                 if( !is_array_ref )
                 {
+                    // only check dependency violations if we are at a context-top-level
+                    // or class-top-level scope, i.e., not in a function definition
+                    if( !emit->env->func )
+                    {
+                        // look at the array/actual type
+                        Chuck_Type * actual_type = type->actual_type;
+                        // dependency tracking: ensure object instantiation (e.g., Foo foo;) is not invoked
+                        // before dependencies are met | 1.5.0.8 (ge) added
+                        const Chuck_Value_Dependency * unfulfilled = actual_type->depends.locate( decl->type->where );
+                        // at least one unfulfilled dependency
+                        if( unfulfilled )
+                        {
+                            EM_error2( decl->type->where,
+                                      "'%s' instantiation at this point skips initialization of a needed variable:",
+                                      actual_type->c_name() );
+                            EM_error2( unfulfilled->where,
+                                      "...(note: this skipped variable initialization is needed by class '%s')",
+                                      actual_type->c_name() );
+                            EM_error2( unfulfilled->use_where,
+                                      "...(note: this is where the variable is used within class '%s')",
+                                      actual_type->c_name() );
+                            EM_error2( 0,
+                                      "...(hint: try instantiating '%s' after the variable initialization)", actual_type->c_name() );
+                            return FALSE;
+                        }
+                    }
+
                     // set
                     is_init = TRUE;
                     // instantiate object, including array
@@ -4206,6 +4633,31 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
             }
             else if( !is_ref )
             {
+                // only check dependency violations if we are at a context-top-level
+                // or class-top-level scope, i.e., not in a function definition
+                if( !emit->env->func )
+                {
+                    // dependency tracking: ensure object instantiation (e.g., Foo foo;) is not invoked
+                    // before dependencies are met | 1.5.0.8 (ge) added
+                    const Chuck_Value_Dependency * unfulfilled = type->depends.locate( var_decl->where );
+                    // at least one unfulfilled
+                    if( unfulfilled )
+                    {
+                        EM_error2( var_decl->where,
+                                  "'%s' instantiation at this point skips initialization of needed variable:",
+                                  type->c_name() );
+                        EM_error2( unfulfilled->where,
+                                  "...(note: this skipped variable initialization is needed by class '%s')",
+                                  type->c_name() );
+                        EM_error2( unfulfilled->use_where,
+                                  "...(note: this is where the variable is used within class '%s')",
+                                  type->c_name() );
+                        EM_error2( 0,
+                                  "...(hint: try instantiating '%s' after the variable initialization)", type->c_name() );
+                        return FALSE;
+                    }
+                }
+
                 // REFACTOR-2017: don't emit instructions to instantiate
                 // non-array global variables -- they are init/instantiated
                 // during emit (see below in this function)
@@ -4312,7 +4764,7 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
                             // if the type doesn't exactly match (different kinds of Event), then fail.
                             EM_error2( decl->where,
                                 "global Event '%s' has different type '%s' than already existing global Event of the same name",
-                                value->name.c_str(), t->name.c_str() );
+                                value->name.c_str(), t->base_name.c_str() );
                             return FALSE;
                         }
                     }
@@ -4325,7 +4777,7 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
                             // if the type doesn't exactly match (different kinds of UGen), then fail.
                             EM_error2( decl->where,
                                 "global UGen '%s' has different type '%s' than already existing global UGen of the same name",
-                                value->name.c_str(), t->name.c_str() );
+                                value->name.c_str(), t->base_name.c_str() );
                             return FALSE;
                         }
                     }
@@ -4338,7 +4790,7 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
                             // if the type doesn't exactly match (different types), then fail.
                             EM_error2( decl->where,
                                       "global Object '%s' has different type '%s' than already existing global Object of the same name",
-                                      value->name.c_str(), t->name.c_str() );
+                                      value->name.c_str(), t->base_name.c_str() );
                             return FALSE;
                         }
                     }
@@ -4545,7 +4997,7 @@ t_CKBOOL emit_engine_emit_func_def( Chuck_Emitter * emit, a_Func_Def func_def )
     // make a new one
     emit->code = new Chuck_Code;
     // name the code
-    emit->code->name = emit->env->class_def ? emit->env->class_def->name + "." : "";
+    emit->code->name = emit->env->class_def ? emit->env->class_def->base_name + "." : "";
     emit->code->name += func->name + "(...)";
     // set whether need this
     emit->code->need_this = func->is_member;
@@ -4699,7 +5151,7 @@ t_CKBOOL emit_engine_emit_class_def( Chuck_Emitter * emit, a_Class_Def class_def
     {
         EM_error2( class_def->where,
             "(emit): class '%s' already emitted...",
-            type->name.c_str() );
+            type->base_name.c_str() );
         return FALSE;
     }
 
@@ -4719,7 +5171,7 @@ t_CKBOOL emit_engine_emit_class_def( Chuck_Emitter * emit, a_Class_Def class_def
     // make a new one
     emit->code = new Chuck_Code;
     // name the code
-    emit->code->name = string("class ") + type->name;
+    emit->code->name = string("class ") + type->base_name;
     // whether code needs this
     emit->code->need_this = TRUE;
     // if has constructor
@@ -5030,7 +5482,7 @@ t_CKBOOL emit_engine_emit_symbol( Chuck_Emitter * emit, S_Symbol symbol,
             // internal error
             EM_error2( where,
                 "(emit): internal error: unknown global type '%s'...",
-                v->type->name.c_str() );
+                v->type->base_name.c_str() );
             return FALSE;
         }
     }

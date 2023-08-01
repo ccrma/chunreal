@@ -58,7 +58,21 @@ Chuck_Instr::Chuck_Instr()
     // set linepos to 0 so we can tell later whether it has been set properly
     m_linepos = 0;
     // default codestr
-    m_codestr = NULL;
+    m_codestr_pre = NULL;
+    m_codestr_post = NULL;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ~Chuck_Instr()
+// desc: destructor
+//-----------------------------------------------------------------------------
+Chuck_Instr::~Chuck_Instr()
+{
+    CK_SAFE_DELETE( m_codestr_pre );
+    CK_SAFE_DELETE( m_codestr_post );
 }
 
 
@@ -83,16 +97,32 @@ const char * Chuck_Instr::name() const
 
 
 //-----------------------------------------------------------------------------
-// name: set_codestr()
-// desc: set codestr associated with this instruction
+// name: prepend_codestr()
+// desc: prepend codestr associated with this instruction
 //       only certain instructions (e.g., start of stmts) have this
 //-----------------------------------------------------------------------------
-void Chuck_Instr::set_codestr( const string & str )
+void Chuck_Instr::prepend_codestr( const string & str )
 {
-    // cleanup
-    CK_SAFE_DELETE( m_codestr );
-    // allocate
-    m_codestr = new string( str );
+    // alloc if needed
+    if( !m_codestr_pre ) m_codestr_pre = new vector<string>();
+    // prepend to pre
+    m_codestr_pre->insert( m_codestr_pre->begin(), str );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: append_codestr()
+// desc: append codestr associated with this instruction
+//       only certain instructions (e.g., start of stmts) have this
+//-----------------------------------------------------------------------------
+void Chuck_Instr::append_codestr( const string & str )
+{
+    // alloc if needed
+    if( !m_codestr_post ) m_codestr_post = new vector<string>();
+    // append to post
+    m_codestr_post->push_back( str );
 }
 
 
@@ -4013,7 +4043,7 @@ Chuck_Object * instantiate_and_initialize_object( Chuck_Type * type, Chuck_VM_Sh
             ((Chuck_VM_Shred * )object)->vm_ref = vm; // REFACTOR-2017
         }
         // 1.5.0.0 (ge) added -- here my feeble brain starts leaking out of my eyeballs
-        else if( isa( type, vm->env()->t_class ) ) object = new Chuck_Type( vm->env(), te_class, type->name, type, type->size );
+        else if( isa( type, vm->env()->t_class ) ) object = new Chuck_Type( vm->env(), te_class, type->base_name, type, type->size );
         // TODO: is this ok?
         else object = new Chuck_Object;
     }
@@ -7451,6 +7481,120 @@ void Chuck_Instr_Pop_Loop_Counter::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
 {
     // pop counter
     shred->popLoopCounter();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_ForEach_Inc_And_Branch
+// desc: for( VAR : ARRAY ) increment VAR, test against ARRAY size; branch
+//
+// pre-condition: expects three items on reg stack (see below)
+// post-condition: leaves no values on reg stack
+//-----------------------------------------------------------------------------
+void Chuck_Instr_ForEach_Inc_And_Branch::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
+
+    // --------
+    // output of VAR alloc (e.g., int or float or other)
+    // ARRAY to iterate over
+    // implicit loop counter
+    // --------
+    // ^ assume three things on the reg stack
+
+    // compute stack offset
+    t_CKUINT offset = (m_dataSize + sz_INT + sz_INT) / sz_INT;
+
+    // pop
+    pop_( reg_sp, offset );
+    // set
+    t_CKUINT *& sp = reg_sp;
+
+    // get var address
+    t_CKUINT * pVar = (t_CKUINT *)(*sp);
+    // get array pointer
+    Chuck_Array * array = (Chuck_Array *)(*(sp+1));
+    // loop counter pointer
+    t_CKINT ** pCounter = (t_CKINT **)(sp+2);
+    // counter
+    t_CKINT * counter = *(pCounter);
+
+    // branch if either NULL array, or counter reached array size
+    if( !array || val_(counter) >= array->size() )
+    {
+        shred->next_pc = m_jmp;
+    }
+    else
+    {
+        // set pVar to current element
+        switch( m_dataKind )
+        {
+            case kindof_INT:
+            {
+                // cast to specific array type
+                Chuck_Array4 * arr = (Chuck_Array4 *)array;
+                // is object RELEASE
+                if( arr->contains_objects() && *pVar)
+                {
+                    // release ref, since for-each loops don't auto-release every iteration
+                    // (only at the end or if return encountered)
+                    ((Chuck_VM_Object *)(*pVar))->release();
+                }
+                // get element
+                arr->get( *counter, pVar );
+                // is object ADD_REF
+                if( arr->contains_objects() && *pVar)
+                {
+                    // add ref, as this will be cleaned up at end of scope, hopefully
+                    ((Chuck_VM_Object *)(*pVar))->add_ref(); 
+                }
+                break;
+            }
+            case kindof_FLOAT:
+            {
+                // cast to specific array type
+                Chuck_Array8 * arr = (Chuck_Array8 *) array;
+                // get element
+                arr->get( *counter, (t_CKFLOAT *)pVar );
+                break;
+            }
+            case kindof_COMPLEX:
+            {
+                // cast to specific array type
+                Chuck_Array16 * arr = (Chuck_Array16 *) array;
+                // get element
+                arr->get( *counter, (t_CKCOMPLEX *)pVar );
+                break;
+            }
+            case kindof_VEC3:
+            {
+                // cast to specific array type
+                Chuck_Array24 * arr = (Chuck_Array24 *) array;
+                // get element
+                arr->get( *counter, (t_CKVEC3 *)pVar );
+                break;
+            }
+            case kindof_VEC4:
+            {
+                // cast to specific array type
+                Chuck_Array32 * arr = (Chuck_Array32 *) array;
+                // get element
+                arr->get( *counter, (t_CKVEC4 *)pVar );
+                break;
+            }
+            default:
+            {
+                // shouldn't get here
+                assert( FALSE );
+                break;
+            }
+        }
+
+        // increment counter
+        (*(*pCounter))++;
+    }
 }
 
 
