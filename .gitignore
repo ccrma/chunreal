@@ -33,6 +33,3 @@
 */*.VC.db
 */*.VC.opendb
 */*.vsconfig
-
-# Ignore shell scripts
-*/*.sh
