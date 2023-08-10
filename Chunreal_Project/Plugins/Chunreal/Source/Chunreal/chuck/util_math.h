@@ -80,21 +80,32 @@ void ck_randomize();
 
 
 // mtof
-double mtof( double f );
+double ck_mtof( double f );
 // ftom
-double ftom( double f );
+double ck_ftom( double f );
 // powtodb
-double powtodb( double f );
+double ck_powtodb( double f );
 // rmstodb
-double rmstodb( double f );
+double ck_rmstodb( double f );
 // dbtopow
-double dbtopow( double f );
+double ck_dbtopow( double f );
 // dbtorms
-double dbtorms( double f );
+double ck_dbtorms( double f );
 // nextpow2
-unsigned long nextpow2( unsigned long i );
+unsigned long ck_nextpow2( unsigned long i );
 // ensurepow2
-unsigned long ensurepow2( unsigned long i );
+unsigned long ck_ensurepow2( unsigned long i );
+
+// magnitude of complex number
+t_CKFLOAT ck_complex_magnitude( const t_CKCOMPLEX & cmp );
+// phase of complex number
+t_CKFLOAT ck_complex_phase( const t_CKCOMPLEX & cmp );
+// magnitude of vec3
+t_CKFLOAT ck_vec3_magnitude( const t_CKVEC3 & v );
+// magnitude of vec4
+t_CKFLOAT ck_vec4_magnitude( const t_CKVEC4 & v );
+
+
 
 #if defined (__cplusplus) || defined(_cplusplus)
 }

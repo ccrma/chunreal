@@ -259,8 +259,13 @@ DLL_QUERY libstd_query( Chuck_DL_Query * QUERY )
 
     // add getenv
     QUERY->add_sfun( QUERY, getenv_impl, "string", "getenv" ); //! fetch environment variable
-    QUERY->add_arg( QUERY, "string", "value" );
+    QUERY->add_arg( QUERY, "string", "key" );
     QUERY->doc_func( QUERY, "get the value of an environment variable (e.g., PATH)." );
+
+    QUERY->add_sfun( QUERY, getenv2_impl, "string", "getenv" );//! fetch environment variable with default
+    QUERY->add_arg( QUERY, "string", "key" );
+    QUERY->add_arg( QUERY, "string", "default" );
+    QUERY->doc_func( QUERY, "get the value of an environment variable, returning the provided default if unset." );
 
     // add setenv
     QUERY->add_sfun( QUERY, setenv_impl, "int", "setenv" ); //! set environment variable
@@ -773,7 +778,7 @@ CK_DLL_SFUN( itoa_impl )
 {
     t_CKINT i = GET_CK_INT(ARGS);
     // TODO: memory leak, please fix.  Thanks.
-    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
+    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
     a->set( itoa( i ) );
     RETURN->v_string = a;
 }
@@ -783,7 +788,7 @@ CK_DLL_SFUN( ftoa_impl )
 {
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     t_CKINT p = GET_NEXT_INT(ARGS);
-    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
+    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
     a->set( ftoa( f, (t_CKUINT)p ) );
     RETURN->v_string = a;
 }
@@ -796,14 +801,55 @@ CK_DLL_SFUN( ftoi_impl )
 }
 
 // getenv
-// static Chuck_String g_str; // PROBLEM: not thread friendly
 CK_DLL_SFUN( getenv_impl )
 {
-    const char * v = GET_CK_STRING(ARGS)->str().c_str();
+    // get chuck string key
+    Chuck_String * ckstr_key = GET_NEXT_STRING(ARGS);
+    // check for null
+    if( !ckstr_key )
+    {
+        // instantiate
+        Chuck_String * empty = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
+        // return value
+        RETURN->v_string = empty;
+        // return out of this function
+        return;
+    }
+
+    const char * v = ckstr_key->str().c_str();
     const char * s = getenv( v );
-    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
+    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
     a->set( s ? s : "" );
     RETURN->v_string = a;
+}
+
+// getenv with default value fallback | 1.5.0.8 (@ynohtna) added
+CK_DLL_SFUN( getenv2_impl )
+{
+    // get chuck string key and default
+    Chuck_String * ckstr_key = GET_NEXT_STRING(ARGS);
+    Chuck_String * ckstr_default = GET_NEXT_STRING(ARGS);
+    // check for null
+    if( !ckstr_key )
+    {
+        // return default
+        RETURN->v_string = ckstr_default;
+        // return out of this function
+        return;
+    }
+
+    // get key as c str
+    const char * k = ckstr_key->str().c_str();
+    // get env value
+    const char * v = getenv( k );
+    if( v ) {
+        Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
+        a->set( v ? v : "" );
+        RETURN->v_string = a;
+    } else {
+        Chuck_String * d = ckstr_default;
+        RETURN->v_string = d;
+    }
 }
 
 // setenv
@@ -814,47 +860,46 @@ CK_DLL_SFUN( setenv_impl )
     RETURN->v_int = setenv( v1, v2, 1 );
 }
 
-
 // mtof
 CK_DLL_SFUN( mtof_impl )
 {
     t_CKFLOAT v = GET_CK_FLOAT(ARGS);
-    RETURN->v_float = mtof(v);
+    RETURN->v_float = ck_mtof(v);
 }
 
 // ftom
 CK_DLL_SFUN( ftom_impl )
 {
     t_CKFLOAT v = GET_CK_FLOAT(ARGS);
-    RETURN->v_float = ftom(v);
+    RETURN->v_float = ck_ftom(v);
 }
 
 // powtodb
 CK_DLL_SFUN( powtodb_impl )
 {
     t_CKFLOAT v = GET_CK_FLOAT(ARGS);
-    RETURN->v_float = powtodb(v);
+    RETURN->v_float = ck_powtodb(v);
 }
 
 // rmstodb
 CK_DLL_SFUN( rmstodb_impl )
 {
     t_CKFLOAT v = GET_CK_FLOAT(ARGS);
-    RETURN->v_float = rmstodb(v);
+    RETURN->v_float = ck_rmstodb(v);
 }
 
 // dbtopow
 CK_DLL_SFUN( dbtopow_impl )
 {
     t_CKFLOAT v = GET_CK_FLOAT(ARGS);
-    RETURN->v_float = dbtopow(v);
+    RETURN->v_float = ck_dbtopow(v);
 }
 
 // dbtorms
 CK_DLL_SFUN( dbtorms_impl )
 {
     t_CKFLOAT v = GET_CK_FLOAT(ARGS);
-    RETURN->v_float = dbtorms(v);
+    RETURN->v_float = ck_dbtorms(v);
 }
 
 CK_DLL_SFUN( dbtolin_impl )
@@ -1394,7 +1439,7 @@ CK_DLL_MFUN( Skot_getLine )
 {
     LineEvent * le = (LineEvent *)OBJ_MEMBER_INT(SELF, Skot_offset_data);
     // TODO: memory leak
-    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
+    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
     a->set( le->getLine() );
     RETURN->v_string = a;
 }
@@ -1517,7 +1562,7 @@ CK_DLL_MFUN( StrTok_more )
 CK_DLL_MFUN( StrTok_next )
 {
     StrTok * tokens = (StrTok *)OBJ_MEMBER_INT(SELF, StrTok_offset_data);
-    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
+    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
     a->set( tokens->next() );
     RETURN->v_string = a;
 }
@@ -1535,7 +1580,7 @@ CK_DLL_MFUN( StrTok_get )
 {
     StrTok * tokens = (StrTok *)OBJ_MEMBER_INT(SELF, StrTok_offset_data);
     t_CKINT index = GET_NEXT_INT(ARGS);
-    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->t_string, SHRED );
+    Chuck_String * a = (Chuck_String *)instantiate_and_initialize_object( SHRED->vm_ref->env()->ckt_string, SHRED );
     string s = tokens->get( index );
     a->set( s );
     RETURN->v_string = a;
