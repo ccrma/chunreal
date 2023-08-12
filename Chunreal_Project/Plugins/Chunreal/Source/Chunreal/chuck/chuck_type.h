@@ -508,38 +508,37 @@ public:
     // level - 0:stop, 1:warn, 2:ignore
     t_CKINT deprecate_level;
 
-
 public:
     // REFACTOR-2017: public types
-    Chuck_Type * t_void;
-    Chuck_Type * t_auto; // 1.5.0.8
-    Chuck_Type * t_int;
-    Chuck_Type * t_float;
-    Chuck_Type * t_time;
-    Chuck_Type * t_dur;
-    Chuck_Type * t_complex;
-    Chuck_Type * t_polar;
-    Chuck_Type * t_vec3;
-    Chuck_Type * t_vec4;
-    Chuck_Type * t_null;
-    Chuck_Type * t_function;
-    Chuck_Type * t_object;
-    Chuck_Type * t_array;
-    Chuck_Type * t_string;
-    Chuck_Type * t_event;
-    Chuck_Type * t_ugen;
-    Chuck_Type * t_uana;
-    Chuck_Type * t_uanablob;
-    Chuck_Type * t_shred;
-    Chuck_Type * t_io;
-    Chuck_Type * t_fileio;
-    Chuck_Type * t_chout;
-    Chuck_Type * t_cherr;
-    Chuck_Type * t_class;
-    Chuck_Type * t_dac;
-    Chuck_Type * t_adc;
+    Chuck_Type * ckt_void;
+    Chuck_Type * ckt_auto; // 1.5.0.8
+    Chuck_Type * ckt_int;
+    Chuck_Type * ckt_float;
+    Chuck_Type * ckt_time;
+    Chuck_Type * ckt_dur;
+    Chuck_Type * ckt_complex;
+    Chuck_Type * ckt_polar;
+    Chuck_Type * ckt_vec3;
+    Chuck_Type * ckt_vec4;
+    Chuck_Type * ckt_null;
+    Chuck_Type * ckt_function;
+    Chuck_Type * ckt_object;
+    Chuck_Type * ckt_array;
+    Chuck_Type * ckt_string;
+    Chuck_Type * ckt_event;
+    Chuck_Type * ckt_ugen;
+    Chuck_Type * ckt_uana;
+    Chuck_Type * ckt_uanablob;
+    Chuck_Type * ckt_shred;
+    Chuck_Type * ckt_io;
+    Chuck_Type * ckt_fileio;
+    Chuck_Type * ckt_chout;
+    Chuck_Type * ckt_cherr;
+    Chuck_Type * ckt_class;
+    Chuck_Type * ckt_dac;
+    Chuck_Type * ckt_adc;
 
-    // Chuck_Type * t_thread;
+    // Chuck_Type * ckt_thread;
 };
 
 
@@ -830,7 +829,7 @@ struct Chuck_Func : public Chuck_VM_Object
     // base name (without the designation, e.g., "dump"); 1.4.1.0
     std::string base_name;
     // human readable function signature: e.g., void Object.func( int foo, float bar[] );
-    std::string signature() const;
+    std::string signature( t_CKBOOL incFunDef = TRUE, t_CKBOOL incRetType = TRUE ) const;
     // code (included imported)
     Chuck_VM_Code * code;
     // imported code
@@ -1049,39 +1048,6 @@ t_CKINT str2char( const char * char_lit, int linepos );
 t_CKBOOL same_arg_lists( a_Arg_List lhs, a_Arg_List rhs );
 // generate a string from an argument list (types only)
 std::string arglist2string( a_Arg_List list );
-
-
-
-
-//-----------------------------------------------------------------------------
-// REFACTOR-2017: exile! these default types now stored in env
-//-----------------------------------------------------------------------------
-//extern Chuck_Type t_void;
-//extern Chuck_Type t_int;
-//extern Chuck_Type t_float;
-//extern Chuck_Type t_time;
-//extern Chuck_Type t_dur;
-//extern Chuck_Type t_complex;
-//extern Chuck_Type t_polar;
-//extern Chuck_Type t_vec3; // ge: added 1.3.5.3
-//extern Chuck_Type t_vec4; // ge: added 1.3.5.3
-//extern Chuck_Type t_vector;
-//extern Chuck_Type t_object;
-//extern Chuck_Type t_null;
-//extern Chuck_Type t_string;
-//extern Chuck_Type t_array;
-//extern Chuck_Type t_shred;
-//extern Chuck_Type t_thread;
-//extern Chuck_Type t_function;
-//extern Chuck_Type t_class;
-//extern Chuck_Type t_event;
-//extern Chuck_Type t_io;
-//extern Chuck_Type t_fileio;
-//extern Chuck_Type t_chout;
-//extern Chuck_Type t_cherr;
-//extern Chuck_Type t_ugen;
-//extern Chuck_Type t_uana;
-//extern Chuck_Type t_uanablob;
 
 
 
