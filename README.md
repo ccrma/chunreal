@@ -12,6 +12,7 @@ This git repository hosts a template Unreal Engine 5.2 project that includes exa
 If this is your first time compiling a Unreal Engine project, set up your IDE by following these tutorials:
 
 https://docs.unrealengine.com/5.2/en-US/setting-up-visual-studio-development-environment-for-cplusplus-projects-in-unreal-engine/
+
 https://docs.unrealengine.com/5.2/en-US/how-to-generate-unreal-engine-project-files-for-your-ide/
 
 ### Try Example Scenes!
