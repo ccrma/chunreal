@@ -456,7 +456,7 @@ t_CKBOOL type_engine_init_special( Chuck_Env * env, Chuck_Type * objT )
 // name: type_engine_init()
 // desc: initialize a type engine
 //-----------------------------------------------------------------------------
-Chuck_Env * type_engine_init( Chuck_Carrier * carrier )
+t_CKBOOL type_engine_init( Chuck_Carrier * carrier )
 {
     // log
     EM_log( CK_LOG_SEVERE, "initializing type checker..." );
@@ -472,6 +472,8 @@ Chuck_Env * type_engine_init( Chuck_Carrier * carrier )
 
     // REFACTOR-2017: store env in carrier
     carrier->env = env;
+    // add reference
+    CK_SAFE_ADD_REF( carrier->env );
     // and store carrier in env
     env->set_carrier( carrier );
 
@@ -670,22 +672,22 @@ Chuck_Env * type_engine_init( Chuck_Carrier * carrier )
     // pop indent level
     EM_poplog();
 
-    return env;
+    return TRUE;
 }
 
 
 
 //-----------------------------------------------------------------------------
 // name: type_engine_shutdown()
-// desc: ...
+// desc: shut down the type engine instance
 //-----------------------------------------------------------------------------
-void type_engine_shutdown( Chuck_Env * env )
+void type_engine_shutdown( Chuck_Carrier * carrier )
 {
     // log
     EM_log( CK_LOG_SEVERE, "shutting down type checker..." );
 
-    // shut it down
-    CK_SAFE_DELETE( env );
+    // shut it down; this is system cleanup -- delete instead of release
+    CK_SAFE_DELETE( carrier->env );
 
     // log
     EM_log( CK_LOG_SEVERE, "type checker shutdown complete." );
@@ -773,11 +775,13 @@ Chuck_Context * type_engine_make_context( a_Program prog, const string & filenam
     EM_pushlog();
 
     // each parse tree corresponds to a chuck context
-    Chuck_Context * context = new Chuck_Context;
+    Chuck_Context * context = new Chuck_Context();
     // save a reference to the parse tree
     context->parse_tree = prog;
     // set name
     context->filename = filename;
+    // set namespace to same name | 1.5.1.1
+    context->nspc->name = filename;
 
     // pop indent
     EM_poplog();
@@ -857,6 +861,7 @@ t_CKBOOL type_engine_check_context( Chuck_Env * env,
             break;
         }
 
+        // next section
         prog = prog->next;
     }
 
@@ -958,7 +963,7 @@ t_CKBOOL type_engine_unload_context( Chuck_Env * env )
     // pop the namespace stack
     env->nspc_stack.pop_back();
     // release the context
-    env->context->release();
+    CK_SAFE_RELEASE( env->context );
     // restore context
     env->context = env->contexts.back();
     // pop the context
@@ -3175,30 +3180,6 @@ t_CKTYPE type_engine_check_exp_array_lit( Chuck_Env * env, a_Exp_Primary exp )
         env->curr  // the owner namespace
     );
 
-    /*
-    // create the new type
-    t = env->context->new_Chuck_Type();
-    // set the xid
-    t->xid = te_array;
-    // set the name
-    t->base_name = type->base_name;
-    // set the parent
-    t->parent = env->ckt_array;
-    // is a ref
-    t->size = t_array.size;
-    // set the array depth
-    t->array_depth = type->array_depth + 1;
-    // set the base type
-    t->array_type = type->array_depth ? type->array_type : type;
-    // TODO: verify the following is correct
-    // set namespace
-    t->info = t_array->info;
-    // add reference
-    t->info->add_ref();
-    // set owner
-    t->owner = env->curr;
-    */
-
     return t;
 }
 
@@ -3628,175 +3609,14 @@ t_CKBOOL type_engine_check_array_subscripts( Chuck_Env * env, a_Exp exp_list )
 
 //-----------------------------------------------------------------------------
 // name: type_engine_check_exp_decl_part1()
-// desc: deferred from type_engine_scan2b_exp_decl()
+// desc: deferred from type_engine_scan2_exp_decl()
 //       reason: 'auto' needs more context before it can processed | 1.5.0.8 (ge)
 //-----------------------------------------------------------------------------
 t_CKBOOL type_engine_check_exp_decl_part1( Chuck_Env * env, a_Exp_Decl decl )
 {
-    a_Var_Decl_List list = decl->var_decl_list;
-    a_Var_Decl var_decl = NULL;
-    Chuck_Type * type = NULL;
-    Chuck_Value * value = NULL;
-    t_CKBOOL do_alloc = TRUE;
-    t_CKBOOL is_first_in_list = TRUE;
-
-    // check to see if Part 1 was already processed | 1.5.1.0 (ge)
-    // NOTE Part 1 (migrated here from scan2b_exp_decl() in 1.5.0.8 to support
-    // 'auto', can only be run once as it creates and adds values into the
-    // current scope; yet a decl expression could be checked more than once
-    // due to chained chuck statements like: `440 => float f => osc.freq;`
-    if( list && list->var_decl && list->var_decl->value )
-        return TRUE;
-
-    // retrieve the type
-    type = decl->ck_type;
-    // make sure it's not NULL
-    assert( type != NULL );
-
-    // check to see type is not void
-    if( type->size == 0 )
-    {
-        // see if auto was declared
-        if( isa( type, env->ckt_auto ) )
-        {
-            EM_error2( decl->where,
-                "cannot use 'auto' type variable declaration here..." );
-            EM_error2( 0, "(hint: 'auto' requires either initialization or specific contexts)" );
-        }
-        else
-        {
-            EM_error2( decl->where,
-                "cannot declare variables of size '0' (i.e. 'void')..." );
-        }
-        return FALSE;
-    }
-
-    // T @ foo?
-    do_alloc = !decl->type->ref;
-
-    // make sure complete
-    if( /*!t->is_complete &&*/ do_alloc )
-    {
-        // check to see if class inside itself
-        if( env->class_def && equals( type, env->class_def ) && env->class_scope == 0 )
-        {
-            EM_error2( decl->where,
-                "...(note: object of type '%s' declared inside itself)",
-                type->c_name() );
-            return FALSE;
-        }
-    }
-
-    // primitive
-    if( (isprim( env, type ) || isa( type, env->ckt_string )) && decl->type->ref )  // TODO: string
-    {
-        EM_error2( decl->where,
-            "cannot declare references (@) of primitive type '%s'...",
-            type->c_name() );
-        EM_error2( decl->where,
-            "...(primitive types: 'int', 'float', 'time', 'dur')" );
-        return FALSE;
-    }
-
-    // loop through the variables
-    while( list )
-    {
-        // 1.4.2.0 (ge) | reset the type variable to the lead type in the decl
-        // e.g., for cases like int x[2], y;
-        // ...this is so y would not be associated with x's array type
-        type = decl->ck_type;
-
-        // get the decl
-        var_decl = list->var_decl;
-        // 1.4.2.0 (ge) | by default, copy the decl type reference bit
-        // this could be overwritten later as appropriate, e.g., by array vars
-        var_decl->ref = decl->type->ref;
-
-        // check if reserved
-        if( type_engine_check_reserved( env, var_decl->xid, var_decl->where ) )
-        {
-            EM_error2( var_decl->where,
-                "...in variable declaration", S_name(var_decl->xid) );
-            return FALSE;
-        }
-
-        // check if locally defined
-        if( env->curr->lookup_value( var_decl->xid, FALSE ) )
-        {
-            EM_error2( var_decl->where,
-                "'%s' has already been defined in the same scope",
-                S_name(var_decl->xid) );
-            return FALSE;
-        }
-
-        // check if array
-        if( var_decl->array != NULL )
-        {
-            // 1.4.2.0 (ge) was: decl->type->ref;
-            var_decl->ref = ( var_decl->array->exp_list == NULL );
-            // the declaration type | 1.4.2.0 (ge) fixed for multiple decl (e.g., int x[1], y[2];)
-            Chuck_Type * t2 = decl->ck_type; // was: type, which won't work if more than one var declared
-
-            // create the new array type
-            type = new_array_type(
-                env,  // the env
-                env->ckt_array,  // the array base class
-                var_decl->array->depth,  // the depth of the new type
-                t2,  // the 'array_type'
-                env->curr  // the owner namespace
-            );
-
-            // 1.4.2.0 (ge) | assign new array type to current var decl
-            // for handling the following kind of multi-var declarations
-            //   int x[1], y[2];
-            //   int x, y[1];
-            // set reference : var_decl->ck_type = type;
-            CK_SAFE_REF_ASSIGN( var_decl->ck_type, type );
-
-            // 1.4.2.0 (ge) | if one and only one variable, then update decl->ck_type
-            // otherwise, the variables could have different array depths, and therefore different types
-            // also note: cannot => to a multi-variable declaration (e.g., 5 => int x, y;)
-            // this is to support array initialization (e.g., [ [1,2], [3,4] ] @=> int x[][];)
-            if( is_first_in_list && list->next == NULL )
-            {
-                // set reference : var_decl->ck_type = type;
-                CK_SAFE_REF_ASSIGN( decl->ck_type, type );
-            }
-        }
-
-        // enter into value binding
-        env->curr->value.add( var_decl->xid,
-            value = env->context->new_Chuck_Value( type, S_name(var_decl->xid) ) );
-
-        // remember the owner
-        value->owner = env->curr;
-        value->owner_class = env->func ? NULL : env->class_def;
-        value->is_member = ( env->class_def != NULL &&
-                             env->class_scope == 0 &&
-                             env->func == NULL && !decl->is_static );
-        value->is_context_global = ( env->class_def == NULL && env->func == NULL );
-        value->addr = var_decl->addr;
-        // flag it until the decl is checked
-        value->is_decl_checked = FALSE;
-
-        // flag as global
-        value->is_global = decl->is_global;
-
-        // dependency tracking: remember the code position of the DECL | 1.5.0.8
-        // do only if file-top-level or class-top-level, but not global
-        if( (value->is_member || value->is_context_global) && !value->is_global )
-            value->depend_init_where = var_decl->where;
-
-        // remember the value
-        var_decl->value = value;
-
-        // the next var decl
-        list = list->next;
-        // 1.4.2.0 (ge) | added
-        is_first_in_list = FALSE;
-    }
-
-    return TRUE;
+    // try to create the decl (this should return if decl already created, or
+    // produce error if decl type is auto and is still not resolved)
+    return type_engine_scan2_exp_decl_create( env, decl );
 }
 
 
@@ -4549,8 +4369,8 @@ t_CKTYPE type_engine_check_exp_array( Chuck_Env * env, a_Exp_Array array )
     }
     else
     {
-        // partial
-        t = array->base->type->copy( env );
+        // partial; context added in 1.5.1.1
+        t = array->base->type->copy( env, env->context );
         // remainder
         t->array_depth -= depth;
     }
@@ -4587,7 +4407,7 @@ t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def )
             t_parent = type_engine_find_type( env, class_def->ext->extend_id );
             if( !t_parent )
             {
-                EM_error2( class_def->ext->where,
+                EM_error2( class_def->ext->extend_id->where,
                     "undefined super class '%s' in definition of class '%s'",
                     type_path(class_def->ext->extend_id), S_name(class_def->name->xid) );
                 return FALSE;
@@ -4692,7 +4512,7 @@ t_CKBOOL type_engine_check_class_def( Chuck_Env * env, a_Class_Def class_def )
         // set complete
         the_class->is_complete = TRUE;
     }
-    if( !ret )
+    else // if not ok | if( !ret )
     {
         // delete the class definition
         CK_SAFE_RELEASE( class_def->type );
@@ -5215,7 +5035,7 @@ t_CKBOOL operator !=( const Chuck_Type & lhs, const Chuck_Type & rhs )
 
 //-----------------------------------------------------------------------------
 // name: equals()
-// desc: ...
+// desc: type equivalence test
 //-----------------------------------------------------------------------------
 t_CKBOOL equals( Chuck_Type * lhs, Chuck_Type * rhs ) { return (*lhs) == (*rhs); }
 
@@ -5224,7 +5044,7 @@ t_CKBOOL equals( Chuck_Type * lhs, Chuck_Type * rhs ) { return (*lhs) == (*rhs);
 
 //-----------------------------------------------------------------------------
 // name: operator <=
-// desc: ...
+// desc: type equivalence and inheritance test; e.g., is LHS a kind of RHS?
 //-----------------------------------------------------------------------------
 t_CKBOOL operator <=( const Chuck_Type & lhs, const Chuck_Type & rhs )
 {
@@ -5250,9 +5070,28 @@ t_CKBOOL operator <=( const Chuck_Type & lhs, const Chuck_Type & rhs )
 
 //-----------------------------------------------------------------------------
 // name: isa()
-// desc: ...
+// desc: is LHS a kind of RHS?
 //-----------------------------------------------------------------------------
 t_CKBOOL isa( Chuck_Type * lhs, Chuck_Type * rhs ) { return (*lhs) <= (*rhs); }
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: cleanup_objs_vec()
+// desc: clean up a VM object vector, releasing references and clearing the vec
+//-----------------------------------------------------------------------------
+void cleanup_objs_vec( std::vector<Chuck_VM_Object *> & v )
+{
+    // loop over
+    for( t_CKUINT i = 0; i < v.size(); i++ )
+    {
+        // release the object
+        CK_SAFE_RELEASE( v[i] );
+    }
+    // clear the vector
+    v.clear();
+}
 
 
 
@@ -5267,15 +5106,36 @@ Chuck_Context::~Chuck_Context()
     // the type system, since many things have been added to it
     if( has_error )
     {
-        CK_SAFE_DELETE( nspc );
-
-        // delete the types - can't do this since the type system and vm still use
-        // for( t_CKINT i = 0; i < new_types.size(); i++ )
-        //    new_types[i]->release();
-
-        // clear it
-        new_types.clear();
+        // release
+        CK_SAFE_RELEASE( this->nspc );
+        // done
+        goto done;
     }
+
+    // loop over types created in compiling this context | 1.5.1.1
+    for( t_CKUINT i = 0; i < new_types.size(); i++ )
+    {
+        // cast, slightly sus
+        Chuck_Type * t = (Chuck_Type *)new_types[i];
+        // clear within-context value dependencies for new types
+        t->depends.clear();
+    }
+
+    // loop over functions created in compiling this context | 1.5.1.1
+    for( t_CKUINT i = 0; i < new_funcs.size(); i++ )
+    {
+        // cast, slightly sus
+        Chuck_Func * f = (Chuck_Func *)new_funcs[i];
+        // clear within-context value dependencies for new funcs
+        f->depends.clear();
+    }
+
+done:
+    // delete the new types, values, funcs, and nspc | 1.5.1.1
+    cleanup_objs_vec( new_types );
+    cleanup_objs_vec( new_values );
+    cleanup_objs_vec( new_funcs );
+    cleanup_objs_vec( new_nspc );
 }
 
 
@@ -5910,9 +5770,7 @@ Chuck_Type * type_engine_import_class_begin( Chuck_Env * env, Chuck_Type * type,
     }
 
     // set the owner namespace
-    type->owner = where;
-    // add reference
-    CK_SAFE_ADD_REF(type->owner);
+    type->owner = where; CK_SAFE_ADD_REF(type->owner);
     // check if primitive
     if( !isprim( env, type ) ) // 1.3.5.3 (primitives already have size!)
     {
@@ -5922,14 +5780,14 @@ Chuck_Type * type_engine_import_class_begin( Chuck_Env * env, Chuck_Type * type,
 
     // flag as complete
     type->is_complete = TRUE;
-    // make type
-    type_type = env->ckt_class->copy( env );
+    // make type; context added in 1.5.1.1
+    type_type = env->ckt_class->copy( env, env->context );
     type_type->actual_type = type;
     // CK_SAFE_REF_ASSIGN( type_type->actual_type, type );
 
     // make value
     value = new Chuck_Value( type_type, type->base_name );
-    value->owner = where;
+    value->owner = where; CK_SAFE_ADD_REF( value->owner );
     // CK_SAFE_REF_ASSIGN( value->owner, where );
     value->is_const = TRUE;
     value->is_member = FALSE;
@@ -6445,34 +6303,17 @@ t_CKBOOL type_engine_register_deprecate( Chuck_Env * env,
 
 
 //-----------------------------------------------------------------------------
-// name: init_special()
-// desc: ...
-//-----------------------------------------------------------------------------
-void init_special( Chuck_VM_Object * obj )
-{
-    // reference - this is done when the reference is assigned
-    // obj->add_ref();
-
-    // add to vector
-    if( obj->m_v_ref ) obj->m_v_ref->push_back( obj );
-}
-
-
-
-
-//-----------------------------------------------------------------------------
 // name: new_Chuck_Type()
 // desc: instantiate new chuck type
 //-----------------------------------------------------------------------------
 Chuck_Type * Chuck_Context::new_Chuck_Type( Chuck_Env * env )
 {
     // allocate
-    Chuck_Type * type = new Chuck_Type( env );
-    if( !type ) return NULL;
-    // set v ref
-    type->m_v_ref = &new_types;
-    // initialize it
-    init_special( type );
+    Chuck_Type * theType = new Chuck_Type( env );
+    if( !theType ) return NULL;
+
+    // remember in context | 1.5.1.1
+    this->new_types.push_back( theType ); CK_SAFE_ADD_REF( theType );
 
     // check if t_class has itself been initialized
     // this is only for types created before Type (t_class) initialized,
@@ -6482,10 +6323,10 @@ Chuck_Type * Chuck_Context::new_Chuck_Type( Chuck_Env * env )
     if( env->ckt_class->info != NULL )
     {
         // initialize it as Type object | 1.5.0.0 (ge) added
-        initialize_object( type, env->ckt_class );
+        initialize_object( theType, env->ckt_class );
     }
 
-    return type;
+    return theType;
 }
 
 
@@ -6499,14 +6340,13 @@ Chuck_Value * Chuck_Context::new_Chuck_Value( Chuck_Type * t,
                                               const string & name )
 {
     // allocate
-    Chuck_Value * value = new Chuck_Value( t, name );
-    if( !value ) return NULL;
-    // set v ref
-    value->m_v_ref = &new_values;
-    // initialize it
-    init_special( value );
+    Chuck_Value * theValue = new Chuck_Value( t, name );
+    if( !theValue ) return NULL;
 
-    return value;
+    // remember in context | 1.5.1.1
+    this->new_values.push_back( theValue ); CK_SAFE_ADD_REF( theValue );
+
+    return theValue;
 }
 
 
@@ -6521,10 +6361,8 @@ Chuck_Func * Chuck_Context::new_Chuck_Func()
     // allocate
     Chuck_Func * theFunc = new Chuck_Func;
     if( !theFunc ) return NULL;
-    // set v ref
-    theFunc->m_v_ref = &new_funcs;
-    // initialize it
-    init_special( theFunc );
+    // remember in context | 1.5.1.1
+    this->new_funcs.push_back( theFunc ); CK_SAFE_ADD_REF( theFunc );
 
     return theFunc;
 }
@@ -6539,14 +6377,12 @@ Chuck_Func * Chuck_Context::new_Chuck_Func()
 Chuck_Namespace * Chuck_Context::new_Chuck_Namespace()
 {
     // allocate
-    Chuck_Namespace * theNpsc = new Chuck_Namespace;
-    if( !theNpsc ) return NULL;
-    // set v ref
-    theNpsc->m_v_ref = &new_nspc;
-    // initialize it
-    init_special( theNpsc );
+    Chuck_Namespace * theNspc = new Chuck_Namespace;
+    if( !theNspc ) return NULL;
+    // remember in context | 1.5.1.1
+    this->new_nspc.push_back( theNspc ); CK_SAFE_ADD_REF( theNspc );
 
-    return theNpsc;
+    return theNspc;
 }
 
 
@@ -6604,9 +6440,7 @@ Chuck_Type * new_array_type( Chuck_Env * env, Chuck_Type * array_parent,
     // add reference
     CK_SAFE_ADD_REF(t->info);
     // set owner
-    t->owner = owner_nspc;
-    // add reference
-    CK_SAFE_ADD_REF(t->owner);
+    t->owner = owner_nspc; CK_SAFE_ADD_REF(t->owner);
 
     // return the type
     return t;
@@ -6646,9 +6480,7 @@ Chuck_Type * new_array_element_type( Chuck_Env * env, Chuck_Type * base_type,
       CK_SAFE_ADD_REF(t->info);
     }
     // set owner
-    t->owner = owner_nspc;
-    // add reference
-    CK_SAFE_ADD_REF(t->owner);
+    t->owner = owner_nspc; CK_SAFE_ADD_REF(t->owner);
 
     // return the type
     return t;
@@ -7962,6 +7794,25 @@ const Chuck_Value_Dependency * Chuck_Value_Dependency_Graph::locate(
 
 
 //-----------------------------------------------------------------------------
+// name: clear() | 1.5.1.1
+// desc: clear all dependencies | to be called when all dependencies are met
+// for example, at the successful compilation of a context (e.g., a file)
+// after this, calls to locate() will return NULL, indicating no dependencies
+// NOTE dependency analysis is for within-context only, and is not needed
+// across contexts (e.g., files)
+//-----------------------------------------------------------------------------
+void Chuck_Value_Dependency_Graph::clear()
+{
+    // direct dependencies
+    this->directs.clear();
+    // remote dependencies
+    this->remotes.clear();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: Chuck_Type()
 // desc: constructor
 //-----------------------------------------------------------------------------
@@ -8027,14 +7878,16 @@ void Chuck_Type::reset()
     // free only if not locked: to prevent garbage collection after exit
     if( !this->m_locked )
     {
-        // TODO: uncomment this, fix it to behave correctly
         // release references
-        // CK_SAFE_RELEASE(parent);
-        // CK_SAFE_RELEASE(array_type);
-        CK_SAFE_RELEASE(info);
-        // CK_SAFE_RELEASE(owner);
-        // CK_SAFE_RELEASE(func);
-        // CK_SAFE_RELEASE(ugen_info);
+        CK_SAFE_RELEASE( info );
+        CK_SAFE_RELEASE( owner );
+
+        // TODO: uncomment this, fix it to behave correctly
+        // TODO: make it safe to do this, as there are multiple instances of ->parent assignments without add-refs
+        // CK_SAFE_RELEASE( parent );
+        // CK_SAFE_RELEASE( array_type );
+        // CK_SAFE_RELEASE( ugen_info );
+        // CK_SAFE_RELEASE( func );
     }
 }
 
@@ -8053,15 +7906,15 @@ const Chuck_Type & Chuck_Type::operator =( const Chuck_Type & rhs )
     // copy
     this->xid = rhs.xid;
     this->base_name = rhs.base_name;
-    this->parent = rhs.parent;
+    this->parent = rhs.parent; CK_SAFE_ADD_REF(this->parent);
     this->obj_size = rhs.obj_size;
     this->size = rhs.size;
     this->is_copy = TRUE;
     this->array_depth = rhs.array_depth;
-    this->array_type = rhs.array_type; // CK_SAFE_ADD_REF(this->array_type);
-    this->func = rhs.func; // CK_SAFE_ADD_REF(this->func);
+    this->array_type = rhs.array_type; CK_SAFE_ADD_REF(this->array_type);
+    this->func = rhs.func; CK_SAFE_ADD_REF(this->func);
     this->info = rhs.info; CK_SAFE_ADD_REF(this->info);
-    this->owner = rhs.owner; // CK_SAFE_ADD_REF(this->owner);
+    this->owner = rhs.owner; CK_SAFE_ADD_REF(this->owner);
 
     return *this;
 }
@@ -8073,12 +7926,24 @@ const Chuck_Type & Chuck_Type::operator =( const Chuck_Type & rhs )
 // name: copy()
 // desc: create a copy of this type struct
 //-----------------------------------------------------------------------------
-Chuck_Type * Chuck_Type::copy( Chuck_Env * env ) const
+Chuck_Type * Chuck_Type::copy( Chuck_Env * env, Chuck_Context * context ) const
 {
-    // allocate new instance
-    Chuck_Type * n = env->context->new_Chuck_Type( env );
+    // pointer
+    Chuck_Type * n = NULL;
+    // check context
+    if( context != NULL )
+    {
+        // allocate new instance with context
+        n = context->new_Chuck_Type( env );
+    }
+    else
+    {
+        // allocate new instance without context | 1.5.1.1
+        n = new Chuck_Type( env );
+    }
     // invoke = operator
     *n = *this;
+
     // return new instance
     return n;
 }
