@@ -116,13 +116,18 @@ Chuck_Emitter * emit_engine_init( Chuck_Env * env )
     // log
     EM_log( CK_LOG_SEVERE, "initializing emitter..." );
 
-    // TODO: ensure this in a better way
+    // TODO: ensure this in a better way?
+    // whatever t_CKUINT is defined as, it must be the same size as a pointer
+    // system architecture can vary (e.g., 32-bit vs 64-bit) but this condition
+    // is assumed to be true in the virtual machine
     assert( sizeof(t_CKUINT) == sizeof(void *) );
 
     // allocate new emit
     Chuck_Emitter * emit = new Chuck_Emitter;
     // set the reference
     emit->env = env;
+    // add ref
+    CK_SAFE_ADD_REF( emit->env );
 
     return emit;
 }
@@ -136,14 +141,13 @@ Chuck_Emitter * emit_engine_init( Chuck_Env * env )
 //-----------------------------------------------------------------------------
 t_CKBOOL emit_engine_shutdown( Chuck_Emitter *& emit )
 {
+    // check
     if( !emit ) return FALSE;
 
     // log
     EM_log( CK_LOG_SYSTEM, "shutting down emitter..." );
-
-    // delete
-    delete emit;
-    emit = NULL;
+    // shut it down; this is system cleanup -- delete instead of release
+    CK_SAFE_DELETE( emit );
 
     return TRUE;
 }
@@ -3270,6 +3274,8 @@ t_CKBOOL emit_engine_emit_exp_unary( Chuck_Emitter * emit, a_Exp_Unary unary )
             {
                 // dependency tracking: ensure object instantiation (e.g., Foo foo;) is not invoked
                 // before dependencies are met | 1.5.0.8 (ge) added
+                // NOTE if the type (t) originates from another file, this should
+                // behave correctly and return NULL | 1.5.1.1 (ge) fixed
                 const Chuck_Value_Dependency * unfulfilled = t->depends.locate( unary->where );
                 // at least one unfulfilled
                 if( unfulfilled )
@@ -3868,6 +3874,7 @@ t_CKBOOL emit_engine_emit_exp_func_call( Chuck_Emitter * emit,
     if( !emit->env->func && !spork )
     {
         // dependency tracking: check if we invoke func before all its deps are initialized | 1.5.0.8 (ge) added
+        // NOTE if func originates from another file, this should behave correctly and return NULL | 1.5.1.1 (ge) fixed
         const Chuck_Value_Dependency * unfulfilled = func->depends.locate( where, emit->env->class_def != NULL );
         // at least one unfulfilled dependency
         if( unfulfilled )
@@ -4627,6 +4634,7 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
                         Chuck_Type * actual_type = type->actual_type;
                         // dependency tracking: ensure object instantiation (e.g., Foo foo;) is not invoked
                         // before dependencies are met | 1.5.0.8 (ge) added
+                        // NOTE if actual_type originates from another file, this should behave correctly and return NULL | 1.5.1.1 (ge) fixed
                         const Chuck_Value_Dependency * unfulfilled = actual_type->depends.locate( decl->type->where );
                         // at least one unfulfilled dependency
                         if( unfulfilled )
@@ -4661,6 +4669,7 @@ t_CKBOOL emit_engine_emit_exp_decl( Chuck_Emitter * emit, a_Exp_Decl decl,
                 {
                     // dependency tracking: ensure object instantiation (e.g., Foo foo;) is not invoked
                     // before dependencies are met | 1.5.0.8 (ge) added
+                    // NOTE if type originates from another file, this should behave correctly and return NULL | 1.5.1.1 (ge) fixed
                     const Chuck_Value_Dependency * unfulfilled = type->depends.locate( var_decl->where );
                     // at least one unfulfilled
                     if( unfulfilled )
