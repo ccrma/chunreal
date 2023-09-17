@@ -9,15 +9,10 @@ public class Chunreal : ModuleRules
 
         PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
 
-        PublicDefinitions.Add("__WINDOWS_MODERN__");
-        PublicDefinitions.Add("__PLATFORM_WIN32__");
-        PublicDefinitions.Add("__WINDOWS_DS__");
-
         PublicDefinitions.Add("__DISABLE_MIDI__");
         PublicDefinitions.Add("__DISABLE_WATCHDOG__");
         PublicDefinitions.Add("__DISABLE_KBHIT__");
         PublicDefinitions.Add("__DISABLE_PROMPTER__");
-        PublicDefinitions.Add("__DISABLE_RTAUDIO__");
         PublicDefinitions.Add("__DISABLE_OTF_SERVER__");
         PublicDefinitions.Add("__DISABLE_ALTER_HID__");
         PublicDefinitions.Add("__DISABLE_HID__");
