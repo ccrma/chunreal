@@ -139,7 +139,7 @@ DLL_QUERY xxx_query( Chuck_DL_Query * QUERY )
     type_engine_register_deprecate( env, "delayp", "DelayP" );
     type_engine_register_deprecate( env, "sndbuf", "SndBuf" );
     // 1.5.0.0 (ge) removed deprecate; allow both
-    // type_engine_register_deprecate( env, "Chubgraph", "Chugraph" );
+    type_engine_register_deprecate( env, "Chubgraph", "Chugraph" );
 
     //! \section audio output
 
@@ -3576,7 +3576,7 @@ CK_DLL_CTRL( sndbuf_ctrl_read )
         if( er )
         {
             CK_FPRINTF_STDERR( "[chuck](via SndBuf): sndfile error '%li' opening '%s'...\n", er, filename );
-            CK_FPRINTF_STDERR( "[chuck](via SndBuf):  |- reason: %s\n", sf_strerror( d->fd ) );
+            CK_FPRINTF_STDERR( "[chuck](via SndBuf): ...(reason: %s)\n", sf_strerror( d->fd ) );
             if( d->fd )
             {
                 sf_close( d->fd );

@@ -471,6 +471,36 @@ done:
 
 
 //-----------------------------------------------------------------------------
+// name: extract_args()
+// desc: extract argument from format filename:arg1:arg2:etc
+//-----------------------------------------------------------------------------
+t_CKBOOL extract_args( const string & token,
+                       string & filename, string & args )
+{
+    // clear
+    filename = ""; args = "";
+
+    // vector
+    vector<string> argv;
+    // extract
+    if( !extract_args( token, filename, argv ) ) return FALSE;
+
+    // concat
+    for( t_CKUINT i = 0; i < argv.size(); i++ )
+    {
+        // the arg
+        args += argv[i];
+        // if not last
+        if( i < (argv.size()-1) ) args += ":";
+    }
+
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // path expansion using wordexp and glob on UNIX systems
 //-----------------------------------------------------------------------------
 #if !defined(__PLATFORM_WINDOWS__) && !defined(__EMSCRIPTEN__) && !defined(__ANDROID__) && !defined(__CHIP_MODE__)
@@ -730,8 +760,10 @@ std::string expand_filepath( const std::string & fp, t_CKBOOL ensurePathExists )
     return expandFilePathWindows( fp );
 #else
     // expand ~ to full path
-    string ep = expandTildePath( fp );
     // 1.5.0.4 (ge) always expand ~, since glob does not...
+    // 1.5.1.3 (ge) only expand if ~ detected
+    //              reason: on macOS wordexp() causes audio interruptions
+    string ep = fp.find('~') != string::npos ? expandTildePath( fp ) : fp;
 
     // if also ensure exists
     if( ensurePathExists ) { return globTildePath( ep ); }
