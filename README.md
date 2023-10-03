@@ -22,6 +22,7 @@ Try opening the following example levels and playing in the editor viewport!
 - **Chunreal_1Source_ExampleLevel**
 - **Chunreal_ManySources_ExampleLevel**
 - **Chunreal_Physics_ExampleLevel**
+- **Chunreal_Mic_ExampleLevel**
 - **Chunreal_GlobalEvent_ExampleLevel**
 - **Chunreal_PitchChange_ExampleLevel**
 
