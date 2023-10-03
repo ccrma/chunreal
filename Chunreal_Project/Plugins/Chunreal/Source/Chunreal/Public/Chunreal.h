@@ -16,7 +16,7 @@
 #include "Chunreal/chuck/chuck_def.h"
 
 //whether to print chuck log
-#define PRINT_CHUCK_LOG false
+#define PRINT_CHUCK_LOG true
 
 //Declare custom log category "LogChunreal"
 DECLARE_LOG_CATEGORY_EXTERN(LogChunreal, Log, All);

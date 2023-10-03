@@ -52,7 +52,7 @@ namespace Metasound
         #if PRINT_CHUCK_LOG
         theChuck->setStdoutCallback(FChunrealModule::printThisFromChuck);
         theChuck->setStderrCallback(FChunrealModule::printThisFromChuck);
-        theChuck->setLogLevel(CK_LOG_INFO);
+        //theChuck->setLogLevel(CK_LOG_INFO);
         #endif
 
         //Start Chuck
@@ -72,6 +72,7 @@ namespace Metasound
         if (!((FString)(**ID)).IsEmpty())
         {
             FChunrealModule::RemoveChuckRef(**ID);
+            FChunrealModule::Log(FString("Removed ChucK ID: ") + **ID);
         }
 
         //Delete allocated memory

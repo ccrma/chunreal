@@ -1108,6 +1108,7 @@ void ck_fflush_stdout()
 
             // and clear buffer
             g_stdout_stream.str( std::string() );
+            g_stdout_stream.clear();
         }
     }
 }
@@ -1141,6 +1142,7 @@ void ck_fflush_stderr()
 
             // and clear buffer
             g_stderr_stream.str( std::string() );
+            g_stderr_stream.clear();
         }
     }
 }
