@@ -523,60 +523,7 @@ string absyn_exp2str( a_Exp exp, t_CKBOOL iterate )
 //-----------------------------------------------------------------------------
 string absyn_op2str( ae_Operator op )
 {
-    string str;
-    // get operation string
-    switch( op )
-    {
-        case ae_op_plus: str = "+"; break;
-        case ae_op_plus_chuck: str = "+=>"; break;
-        case ae_op_minus: str = "-"; break;
-        case ae_op_minus_chuck: str = "-=>"; break;
-        case ae_op_times: str = "*"; break;
-        case ae_op_times_chuck: str = "*=>"; break;
-        case ae_op_divide: str = "/"; break;
-        case ae_op_divide_chuck: str = "/=>"; break;
-        case ae_op_s_or: str = "|"; break;
-        case ae_op_s_or_chuck: str = "|=>"; break;
-        case ae_op_s_and: str = "&"; break;
-        case ae_op_s_and_chuck: str = "&=>"; break;
-        case ae_op_shift_left: str = "<<"; break;
-        case ae_op_shift_left_chuck: str = "<<=>"; break;
-        case ae_op_shift_right: str = ">>"; break;
-        case ae_op_shift_right_chuck: str = ">>=>"; break;
-        case ae_op_percent: str = "%"; break;
-        case ae_op_percent_chuck: str = "%=>"; break;
-        case ae_op_s_xor: str = "^"; break;
-        case ae_op_s_xor_chuck: str = "^=>"; break;
-        case ae_op_chuck: str = "=>"; break;
-        case ae_op_unchuck: str = "=<"; break;
-        case ae_op_upchuck: str = "=^"; break;
-        case ae_op_at_chuck: str = "@=>"; break;
-        // case ae_op_s_chuck: str = ""; break;
-        case ae_op_eq: str = "=="; break;
-        case ae_op_neq: str = "!="; break;
-        case ae_op_lt: str = "<"; break;
-        case ae_op_le: str = "<="; break;
-        case ae_op_gt: str = ">"; break;
-        case ae_op_ge: str = ">="; break;
-        case ae_op_and: str = "&&"; break;
-        case ae_op_or: str = "||"; break;
-        case ae_op_arrow_left: str = "<-"; break;
-        case ae_op_arrow_right: str = "->"; break;
-
-        // unary
-        case ae_op_plusplus: str = "++"; break;
-        case ae_op_minusminus: str = "--"; break;
-        case ae_op_tilda: str = "~"; break;
-        case ae_op_exclamation: str = "!"; break;
-        case ae_op_spork: str = "spork ~"; break;
-        case ae_op_new: str = "new"; break;
-
-        // not used
-        case ae_op_typeof: str = "typeof"; break;
-        case ae_op_sizeof: str = "sizeof"; break;
-        default: str = "[OP]"; break;
-    }
-    return str;
+    return op2str( op );
 }
 
 
@@ -718,7 +665,7 @@ string absyn_primary2str( a_Exp_Primary primary )
         case ae_primary_array: str = "["+absyn_exp2str(primary->array->exp_list)+"]"; break;
         case ae_primary_complex: str = "#("+absyn_exp2str(primary->complex->re)+","+absyn_exp2str(primary->complex->im)+")"; break;
         case ae_primary_polar: str = "%("+absyn_exp2str(primary->polar->mod)+","+absyn_exp2str(primary->polar->phase)+")"; break;
-        case ae_primary_vec: str = "@("+absyn_exp2str(primary->vec->args)+")"; break;
+        case ae_primary_vec: str = "@("+absyn_exp2str(primary->vec->args,TRUE)+")"; break;
         case ae_primary_exp: str = absyn_exp2str(primary->exp); break;
         case ae_primary_hack: str = "<<< " + absyn_exp2str(primary->exp) + " >>>"; break;
         case ae_primary_nil: str = "(void)"; break;

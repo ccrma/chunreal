@@ -61,6 +61,7 @@ static t_CKUINT Object_offset_string = 0;
 t_CKBOOL init_class_object( Chuck_Env * env, Chuck_Type * type )
 {
     Chuck_DL_Func * func = NULL;
+    Chuck_Value * value = NULL;
 
     // log
     EM_log( CK_LOG_SEVERE, "class 'Object'" );
@@ -98,6 +99,13 @@ t_CKBOOL init_class_object( Chuck_Env * env, Chuck_Type * type )
     // end the class import
     type_engine_import_class_end( env );
 
+    // find the offset for can_wait
+    value = type_engine_find_value( type, "toString" );
+    assert( value != NULL );
+    assert( value->func_ref != NULL );
+    // remember it
+    Chuck_Event::our_vt_toString = value->func_ref->vt_index;
+
     return TRUE;
 
 error:
@@ -127,7 +135,7 @@ t_CKBOOL init_class_ugen( Chuck_Env * env, Chuck_Type * type )
     type->ugen_info->tick = __ugen_tick;
     type->ugen_info->num_ins = 1;
     type->ugen_info->num_outs = 1;
-
+    // documentation text
     const char * doc = "base class for all unit generator (UGen) types.";
 
     // init as base class
@@ -412,7 +420,12 @@ t_CKBOOL init_class_event( Chuck_Env * env, Chuck_Type * type )
 
     // add can_wait()
     func = make_new_mfun( "int", "can_wait", event_can_wait );
-    func->doc = "can the event can be waited on? Internally used by virtual machine for synthronization.";
+    func->doc = "can the event can be waited on? (internal) used by virtual machine for synchronization.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add waiting_on()
+    func = make_new_mfun( "void", "waiting_on", event_waiting_on );
+    func->doc = "(internal) used by virtual machine to be notified when a shred starts waiting on this Event.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add examples
@@ -440,6 +453,13 @@ t_CKBOOL init_class_event( Chuck_Env * env, Chuck_Type * type )
     assert( value->func_ref != NULL );
     // remember it
     Chuck_Event::our_can_wait = value->func_ref->vt_index;
+
+    // find the offset for waiting_on
+    value = type_engine_find_value( type, "waiting_on" );
+    assert( value != NULL );
+    assert( value->func_ref != NULL );
+    // remember it
+    Chuck_Event::our_waiting_on = value->func_ref->vt_index;
 
     return TRUE;
 
@@ -558,6 +578,28 @@ t_CKBOOL init_class_shred( Chuck_Env * env, Chuck_Type * type )
     func->doc = "get the enclosing directory, the specified number of parent directories up.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
+    // add childMemSize() | 1.5.1.5
+    func = make_new_mfun( "int", "childMemSize", shred_ctrl_hintChildMemSize );
+    func->add_arg( "int", "sizeInBytes" );
+    func->doc = "set size hint of per-shred call stack (\"mem\") for children shreds subsequently sporked from the calling shred (NOTE this size hint does not affect the calling shred--only its descendants); if sizeInBytes <= 0, the size hint is set to the VM default. (FYI This is an arcane functionality that most programmers never need to worry about. Advanced usage: set size hint to small values (e.g., 1K) to support A LOT (e.g., >10000) of simultaneous shreds; set size hint to large values (e.g., >65K) to spork functions with extremely deep recursion, or to support A LOT (>10000) of declared local variables. Use with care.)";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add childMemSize() | 1.5.1.5
+    func = make_new_mfun( "int", "childMemSize", shred_cget_hintChildMemSize );
+    func->doc = "get the memory stack size hint (in bytes) for shreds sporked from this one.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add childRegSize() | 1.5.1.5
+    func = make_new_mfun( "int", "childRegSize", shred_ctrl_hintChildRegSize );
+    func->add_arg( "int", "sizeInBytes" );
+    func->doc = "set size hint of per-shred operand stack (\"reg\") for children shreds subsequently sporked from the calling shred (NOTE this size hint does not affect the calling shred--only its descendants); if sizeInBytes <= 0, the size hint is set to the VM default. (FYI This is an arcane functionality that most programmers never need to worry about. Advanced usage: set size hint to small values (e.g., 256 bytes) to support A LOT (>10000) of simultaneous shreds; set size hint to large values (e.g., >20K) to spork functions with extremely lengthy (>10000) statements, including array initializer lists. Use with care.)";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add childRegSize() | 1.5.1.5
+    func = make_new_mfun( "int", "childRegSize", shred_cget_hintChildRegSize );
+    func->doc = "get the operand stack size hint (in bytes) for shreds sporked from this one.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
     // add examples
     if( !type_engine_import_add_ex( env, "shred/powerup.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "shred/spork.ck" ) ) goto error;
@@ -575,6 +617,59 @@ t_CKBOOL init_class_shred( Chuck_Env * env, Chuck_Type * type )
 
 error:
 
+    // end the class import
+    type_engine_import_class_end( env );
+
+    return FALSE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: init_class_vec2()
+// desc: initialize primitive type vec2
+//-----------------------------------------------------------------------------
+t_CKBOOL init_class_vec2( Chuck_Env * env, Chuck_Type * type )
+{
+    // init as base class
+    Chuck_DL_Func * func = NULL;
+
+    // log
+    EM_log( CK_LOG_SEVERE, "class 'vec2' (primitive)" );
+
+    // document
+    const char * doc = "a primitive type for a 2-dimensional vector; potentially useful for 2D and UV coordinates.";
+
+    // init as base class
+    if( !type_engine_import_class_begin( env, type, env->global(), NULL, NULL, doc ) )
+        return FALSE;
+
+    // add set(float,float,float)
+    func = make_new_mfun( "void", "set", vec2_set );
+    func->add_arg( "float", "x" );
+    func->add_arg( "float", "y" );
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add setAll(float)
+    func = make_new_mfun( "void", "setAll", vec2_setAll );
+    func->add_arg( "float", "value" );
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add magnitude()
+    func = make_new_mfun( "float", "magnitude", vec2_magnitude );
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add normalize()
+    func = make_new_mfun( "void", "normalize", vec2_normalize );
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // end the class import
+    type_engine_import_class_end( env );
+
+    return TRUE;
+
+error:
     // end the class import
     type_engine_import_class_end( env );
 
@@ -1542,7 +1637,7 @@ CK_DLL_MFUN( ugen_op )
 
     // for multiple channels
     Chuck_DL_Return ret;
-    // added 1.3.0.0 -- Chuck_DL_Api::Api::instance()
+    // added 1.3.0.0 -- Chuck_DL_Api::instance()
     for( t_CKUINT i = 0; i < ugen->m_multi_chan_size; i++ )
         ugen_op( ugen->m_multi_chan[i], ARGS, &ret, VM, SHRED, API );
     // added 1.3.0.2 -- apply op to subgraph outlet
@@ -1586,7 +1681,7 @@ CK_DLL_MFUN( ugen_next )
 
     // for multiple channels
     Chuck_DL_Return ret;
-    // added 1.3.0.0 -- Chuck_DL_Api::Api::instance()
+    // added 1.3.0.0 -- Chuck_DL_Api::instance()
     for( t_CKUINT i = 0; i < ugen->m_multi_chan_size; i++ )
         ugen_next( ugen->m_multi_chan[i], ARGS, &ret, VM, SHRED, API );
     // added 1.3.0.2 -- apply op to subgraph outlet
@@ -1618,7 +1713,7 @@ CK_DLL_MFUN( ugen_gain )
 
     // for multiple channels
     Chuck_DL_Return ret;
-    // added 1.3.0.0 -- Chuck_DL_Api::Api::instance()
+    // added 1.3.0.0 -- Chuck_DL_Api::instance()
     for( t_CKUINT i = 0; i < ugen->m_multi_chan_size; i++ )
         ugen_gain( ugen->m_multi_chan[i], ARGS, &ret, VM, SHRED, API );
     // added 1.3.0.2 -- apply gain to subgraph outlet
@@ -1731,7 +1826,7 @@ CK_DLL_CTOR( uana_ctor )
     Chuck_UAnaBlobProxy * proxy = new Chuck_UAnaBlobProxy( blob );
     // remember it
     OBJ_MEMBER_INT(SELF, uana_offset_blob) = (t_CKINT)proxy;
-    // HACK: DANGER: manually call blob's ctor (added 1.3.0.0 -- Chuck_DL_Api::Api::instance())
+    // HACK: DANGER: manually call blob's ctor (added 1.3.0.0 -- Chuck_DL_Api::instance())
     uanablob_ctor( blob, NULL, VM, SHRED, API );
 }
 
@@ -1772,7 +1867,7 @@ CK_DLL_MFUN( uana_upchuck )
     {
         // for multiple channels
         Chuck_DL_Return ret;
-        // added 1.3.0.0 -- Chuck_DL_Api::Api::instance()
+        // added 1.3.0.0 -- Chuck_DL_Api::instance()
         for( t_CKUINT i = 0; i < uana->m_multi_chan_size; i++ )
             uana_upchuck( uana->m_multi_chan[i], ARGS, &ret, VM, SHRED, API );
 
@@ -1813,7 +1908,7 @@ CK_DLL_MFUN( uana_fval )
     t_CKINT i = GET_NEXT_INT(ARGS);
     // get the fvals array
     Chuck_UAnaBlobProxy * blob = (Chuck_UAnaBlobProxy *)OBJ_MEMBER_INT(SELF, uana_offset_blob);
-    Chuck_Array8 & fvals = blob->fvals();
+    Chuck_ArrayFloat & fvals = blob->fvals();
     // check caps
     if( i < 0 || fvals.size() <= i ) RETURN->v_float = 0;
     else
@@ -1836,10 +1931,10 @@ CK_DLL_MFUN( uana_cval )
     if( i < 0 || cvals.size() <= i ) RETURN->v_complex.re = RETURN->v_complex.im = 0;
     else
     {
-        // get
-        t_CKCOMPLEX val;
+        // get as vec2
+        t_CKVEC2 val;
         cvals.get( i, &val );
-        RETURN->v_complex = val;
+        RETURN->v_vec2 = val;
     }
 }
 
@@ -1885,10 +1980,10 @@ t_CKTIME & Chuck_UAnaBlobProxy::when()
     return OBJ_MEMBER_TIME(m_blob, uanablob_offset_when);
 }
 
-Chuck_Array8 & Chuck_UAnaBlobProxy::fvals()
+Chuck_ArrayFloat & Chuck_UAnaBlobProxy::fvals()
 {
     // TODO: DANGER: is this actually returning correct reference?!
-    Chuck_Array8 * arr8 = (Chuck_Array8 *)OBJ_MEMBER_INT(m_blob, uanablob_offset_fvals);
+    Chuck_ArrayFloat * arr8 = (Chuck_ArrayFloat *)OBJ_MEMBER_INT(m_blob, uanablob_offset_fvals);
     assert( arr8 != NULL );
     return *arr8;
 }
@@ -1914,14 +2009,14 @@ CK_DLL_CTOR( uanablob_ctor )
     OBJ_MEMBER_TIME(SELF, uanablob_offset_when) = 0;
 
     // fvals
-    Chuck_Array8 * arr8 = new Chuck_Array8( 8 );
-    initialize_object( arr8, SHRED->vm_ref->env()->ckt_array );
+    Chuck_ArrayFloat * arr8 = new Chuck_ArrayFloat( 8 );
+    initialize_object( arr8, SHRED->vm_ref->env()->ckt_array, SHRED, VM );
     arr8->add_ref();
     OBJ_MEMBER_INT(SELF, uanablob_offset_fvals) = (t_CKINT)arr8;
 
     // cvals
     Chuck_Array16 * arr16 = new Chuck_Array16( 8 );
-    initialize_object( arr16, SHRED->vm_ref->env()->ckt_array );
+    initialize_object( arr16, SHRED->vm_ref->env()->ckt_array, SHRED, VM );
     arr16->add_ref();
     OBJ_MEMBER_INT(SELF, uanablob_offset_cvals) = (t_CKINT)arr16;
 }
@@ -1930,7 +2025,7 @@ CK_DLL_CTOR( uanablob_ctor )
 CK_DLL_DTOR( uanablob_dtor )
 {
     // get array
-    Chuck_Array8 * arr8 = (Chuck_Array8 *)OBJ_MEMBER_INT(SELF, uanablob_offset_fvals);
+    Chuck_ArrayFloat * arr8 = (Chuck_ArrayFloat *)OBJ_MEMBER_INT(SELF, uanablob_offset_fvals);
     // release it
     arr8->release();
     OBJ_MEMBER_INT(SELF, uanablob_offset_fvals) = 0;
@@ -1953,7 +2048,7 @@ CK_DLL_MFUN( uanablob_when )
 CK_DLL_MFUN( uanablob_fvals )
 {
     // set return
-    RETURN->v_object = (Chuck_Array8 *)OBJ_MEMBER_INT(SELF, uanablob_offset_fvals);
+    RETURN->v_object = (Chuck_ArrayFloat *)OBJ_MEMBER_INT(SELF, uanablob_offset_fvals);
 }
 
 CK_DLL_MFUN( uanablob_fval )
@@ -1961,7 +2056,7 @@ CK_DLL_MFUN( uanablob_fval )
     // get index
     t_CKINT i = GET_NEXT_INT(ARGS);
     // get the fvals array
-    Chuck_Array8 * fvals = (Chuck_Array8 *)OBJ_MEMBER_INT(SELF, uanablob_offset_fvals);
+    Chuck_ArrayFloat * fvals = (Chuck_ArrayFloat *)OBJ_MEMBER_INT(SELF, uanablob_offset_fvals);
     // check caps
     if( i < 0 || fvals->size() <= i ) RETURN->v_float = 0;
     else
@@ -1984,9 +2079,9 @@ CK_DLL_MFUN( uanablob_cval )
     else
     {
         // get
-        t_CKCOMPLEX val;
+        t_CKVEC2 val;
         cvals->get( i, &val );
-        RETURN->v_complex = val;
+        RETURN->v_vec2 = val;
     }
 }
 
@@ -2029,9 +2124,65 @@ CK_DLL_MFUN( event_wait )
     assert( FALSE );
 }
 
+// default implementation
 CK_DLL_MFUN( event_can_wait )
 {
     RETURN->v_int = TRUE;
+}
+
+// 1.5.1.5 (ge/andrew) added; default implementation
+CK_DLL_MFUN( event_waiting_on )
+{
+    // do nothing here; this function could be overridden as needed
+    // FYI get the calling shred with 'SHRED' parameter to this function
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// vec2 API
+//-----------------------------------------------------------------------------
+CK_DLL_MFUN( vec2_set )
+{
+    // HACK: this is a particularly horrid cast from (Chuck_Object *)
+    // t_CKVEC3 is neither a super- or sub-class of Chuck_Object...
+    t_CKVEC2 * vec2 = (t_CKVEC2 *)SELF;
+    // get index
+    vec2->x = GET_NEXT_FLOAT(ARGS);
+    vec2->y = GET_NEXT_FLOAT(ARGS);
+}
+
+CK_DLL_MFUN( vec2_setAll )
+{
+    // get data pointer
+    t_CKVEC2 * vec2 = (t_CKVEC2 *)SELF;
+    // get index
+    vec2->x = vec2->y = GET_NEXT_FLOAT(ARGS);
+}
+
+CK_DLL_MFUN( vec2_magnitude )
+{
+    // get data pointer
+    t_CKVEC2 * vec2 = (t_CKVEC2 *)SELF;
+    // compute magnitude
+    t_CKFLOAT mag = ::sqrt( vec2->x*vec2->x + vec2->y*vec2->y );
+    // return
+    RETURN->v_float = mag;
+}
+
+CK_DLL_MFUN( vec2_normalize )
+{
+    // get data pointer
+    t_CKVEC2 * vec2 = (t_CKVEC2 *)SELF;
+    // compute magnitude
+    t_CKFLOAT mag = ::sqrt( vec2->x*vec2->x + vec2->y*vec2->y );
+    // check for zero
+    if( mag > 0 )
+    {
+        vec2->x /= mag;
+        vec2->y /= mag;
+    }
 }
 
 
@@ -2174,12 +2325,12 @@ CK_DLL_MFUN( vec4_set )
 {
     // HACK: this is a particularly horrid cast from (Chuck_Object *)
     // t_CKVEC3 is neither a super- or sub-class of Chuck_Object...
-    t_CKVEC4 * vec3 = (t_CKVEC4 *)SELF;
+    t_CKVEC4 * vec4 = (t_CKVEC4 *)SELF;
     // get index
-    vec3->x = GET_NEXT_FLOAT(ARGS);
-    vec3->y = GET_NEXT_FLOAT(ARGS);
-    vec3->z = GET_NEXT_FLOAT(ARGS);
-    vec3->w = GET_NEXT_FLOAT(ARGS);
+    vec4->x = GET_NEXT_FLOAT(ARGS);
+    vec4->y = GET_NEXT_FLOAT(ARGS);
+    vec4->z = GET_NEXT_FLOAT(ARGS);
+    vec4->w = GET_NEXT_FLOAT(ARGS);
 }
 
 CK_DLL_MFUN( vec4_setAll )
@@ -2345,6 +2496,38 @@ CK_DLL_SFUN( shred_fromId ) // added 1.3.2.0
 }
 
 
+CK_DLL_MFUN( shred_ctrl_hintChildMemSize ) // 1.5.1.5
+{
+    // get arg
+    t_CKINT sizeInBytes = GET_NEXT_INT(ARGS);
+    // set
+    RETURN->v_int = SHRED->childSetMemSize( sizeInBytes );
+}
+
+
+CK_DLL_MFUN( shred_cget_hintChildMemSize ) // 1.5.1.5
+{
+    // set
+    RETURN->v_int = SHRED->childGetMemSize();
+}
+
+
+CK_DLL_MFUN( shred_ctrl_hintChildRegSize ) // 1.5.1.5
+{
+    // get arg
+    t_CKINT sizeInBytes = GET_NEXT_INT(ARGS);
+    // set
+    RETURN->v_int = SHRED->childSetRegSize( sizeInBytes );
+}
+
+
+CK_DLL_MFUN( shred_cget_hintChildRegSize ) // 1.5.1.5
+{
+    // set
+    RETURN->v_int = SHRED->childGetRegSize();
+}
+
+
 //-----------------------------------------------------------------------------
 // string API
 //-----------------------------------------------------------------------------
@@ -2407,7 +2590,7 @@ CK_DLL_MFUN(string_charAt)
 
     if(index < 0 || index >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", index);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", index);
         RETURN->v_int = -1;
         return;
     }
@@ -2423,7 +2606,7 @@ CK_DLL_MFUN(string_setCharAt)
 
     if(index < 0 || index >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", index);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", index);
         RETURN->v_int = -1;
         return;
     }
@@ -2442,7 +2625,7 @@ CK_DLL_MFUN(string_substring)
 
     if(start < 0 || start >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", start);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", start);
         RETURN->v_string = NULL;
         return;
     }
@@ -2461,14 +2644,14 @@ CK_DLL_MFUN(string_substringN)
 
     if(start < 0 || start >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", start);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", start);
         RETURN->v_string = NULL;
         return;
     }
 
     if(length < 0 || start+length > str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", length);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", length);
         RETURN->v_string = NULL;
         return;
     }
@@ -2487,12 +2670,12 @@ CK_DLL_MFUN(string_insert)
 
     if(position < 0 || position >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", position);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", position);
         return;
     }
     if(str2 == NULL)
     {
-        throw_exception(SHRED, "NullPointerException");
+        ck_throw_exception(SHRED, "NullPointer");
         return;
     }
 
@@ -2510,12 +2693,12 @@ CK_DLL_MFUN(string_replace)
 
     if(position < 0 || position >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", position);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", position);
         return;
     }
     if(str2 == NULL)
     {
-        throw_exception(SHRED, "NullPointerException");
+        ck_throw_exception(SHRED, "NullPointer");
         return;
     }
 
@@ -2540,19 +2723,19 @@ CK_DLL_MFUN(string_replaceN)
 
     if(position < 0 || position >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", position);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", position);
         return;
     }
 
     if(length < 0 || position+length > str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", length);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", length);
         return;
     }
 
     if(str2 == NULL)
     {
-        throw_exception(SHRED, "NullPointerException");
+        ck_throw_exception(SHRED, "NullPointer");
         return;
     }
 
@@ -2606,7 +2789,7 @@ CK_DLL_MFUN(string_findStart)
 
     if(start < 0 || start >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", start);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", start);
         RETURN->v_int = -1;
         return;
     }
@@ -2640,7 +2823,7 @@ CK_DLL_MFUN(string_findStrStart)
 
     if(start < 0 || start >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", start);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", start);
         RETURN->v_int = -1;
         return;
     }
@@ -2674,7 +2857,7 @@ CK_DLL_MFUN(string_rfindStart)
 
     if(start < 0 || start >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", start);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", start);
         RETURN->v_int = -1;
         return;
     }
@@ -2708,7 +2891,7 @@ CK_DLL_MFUN(string_rfindStrStart)
 
     if(start < 0 || start >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", start);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", start);
         RETURN->v_int = -1;
         return;
     }
@@ -2729,13 +2912,13 @@ CK_DLL_MFUN(string_erase)
 
     if(start < 0 || start >= str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", start);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", start);
         return;
     }
 
     if(length < 0 || start+length > str->str().length())
     {
-        throw_exception(SHRED, "IndexOutOfBoundsException", length);
+        ck_throw_exception(SHRED, "IndexOutOfBounds", length);
         return;
     }
 
@@ -2920,12 +3103,12 @@ CK_DLL_MFUN( array_push_back )
 {
     Chuck_Array * array = (Chuck_Array *)SELF;
     // ISSUE: 64-bit (fixed 1.3.1.0 using data kind)
-    if( array->data_type_kind() == CHUCK_ARRAY4_DATAKIND )
-        RETURN->v_int = ((Chuck_Array4 *)array)->push_back( GET_NEXT_UINT( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY8_DATAKIND )
-        RETURN->v_int = ((Chuck_Array8 *)array)->push_back( GET_NEXT_FLOAT( ARGS ) );
+    if( array->data_type_kind() == CHUCK_ARRAYINT_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayInt *)array)->push_back( GET_NEXT_UINT( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYFLOAT_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayFloat *)array)->push_back( GET_NEXT_FLOAT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->push_back( GET_NEXT_COMPLEX( ARGS ) );
+        RETURN->v_int = ((Chuck_Array16 *)array)->push_back( GET_NEXT_VEC2( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
         RETURN->v_int = ((Chuck_Array24 *)array)->push_back( GET_NEXT_VEC3( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
@@ -2942,12 +3125,12 @@ CK_DLL_MFUN( array_insert )
     t_CKINT position = GET_NEXT_INT( ARGS );
 
     // ISSUE: 64-bit (fixed 1.3.1.0 using data kind)
-    if( array->data_type_kind() == CHUCK_ARRAY4_DATAKIND )
-        RETURN->v_int = ((Chuck_Array4 *)array)->insert( position, GET_NEXT_UINT( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY8_DATAKIND )
-        RETURN->v_int = ((Chuck_Array8 *)array)->insert( position, GET_NEXT_FLOAT( ARGS ) );
+    if( array->data_type_kind() == CHUCK_ARRAYINT_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayInt *)array)->insert( position, GET_NEXT_UINT( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYFLOAT_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayFloat *)array)->insert( position, GET_NEXT_FLOAT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->insert( position, GET_NEXT_COMPLEX( ARGS ) );
+        RETURN->v_int = ((Chuck_Array16 *)array)->insert( position, GET_NEXT_VEC2( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
         RETURN->v_int = ((Chuck_Array24 *)array)->insert( position, GET_NEXT_VEC3( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
@@ -2969,12 +3152,12 @@ CK_DLL_MFUN( array_push_front )
 {
     Chuck_Array * array = (Chuck_Array *)SELF;
     // ISSUE: 64-bit (fixed 1.3.1.0 using data kind)
-    if( array->data_type_kind() == CHUCK_ARRAY4_DATAKIND )
-        RETURN->v_int = ((Chuck_Array4 *)array)->push_front( GET_NEXT_UINT( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY8_DATAKIND )
-        RETURN->v_int = ((Chuck_Array8 *)array)->push_front( GET_NEXT_FLOAT( ARGS ) );
+    if( array->data_type_kind() == CHUCK_ARRAYINT_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayInt *)array)->push_front( GET_NEXT_UINT( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYFLOAT_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayFloat *)array)->push_front( GET_NEXT_FLOAT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->push_front( GET_NEXT_COMPLEX( ARGS ) );
+        RETURN->v_int = ((Chuck_Array16 *)array)->push_front( GET_NEXT_VEC2( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
         RETURN->v_int = ((Chuck_Array24 *)array)->push_front( GET_NEXT_VEC3( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
@@ -3011,7 +3194,7 @@ CK_DLL_MFUN( array_erase2 )
 CK_DLL_MFUN( array_get_keys )
 {
     Chuck_Array * array = (Chuck_Array *)SELF;
-    Chuck_Array4 * returned_keys = (Chuck_Array4 *) GET_NEXT_OBJECT(ARGS);
+    Chuck_ArrayInt * returned_keys = (Chuck_ArrayInt *) GET_NEXT_OBJECT(ARGS);
 
     // clear return array
     returned_keys->set_size(0);
@@ -3043,7 +3226,7 @@ CK_DLL_MFUN( array_reverse )
 //-----------------------------------------------------------------------------
 static void typeGetTypes(
     Chuck_VM * vm,
-    Chuck_Array4 * ret,
+    Chuck_ArrayInt * ret,
     t_CKBOOL isObj,
     t_CKBOOL isPrim,
     t_CKBOOL isSpecial,
@@ -3190,8 +3373,8 @@ CK_DLL_MFUN( type_children )
     string name = me->base_name;
 
     // instantiate
-    Chuck_Array4 * ret = new Chuck_Array4( TRUE );
-    initialize_object( ret, VM->env()->ckt_array );
+    Chuck_ArrayInt * ret = new Chuck_ArrayInt( TRUE );
+    initialize_object( ret, VM->env()->ckt_array, SHRED, VM );
 
     // results
     vector<Chuck_Type *> types;
@@ -3350,8 +3533,8 @@ CK_DLL_SFUN( type_typeOf_vec4 )
 CK_DLL_SFUN( type_getTypes )
 {
     // instantiate
-    Chuck_Array4 * array = new Chuck_Array4( TRUE );
-    initialize_object( array, VM->env()->ckt_array );
+    Chuck_ArrayInt * array = new Chuck_ArrayInt( TRUE );
+    initialize_object( array, VM->env()->ckt_array, SHRED, VM );
 
     // get args
     t_CKINT attributes = GET_NEXT_INT(ARGS);
@@ -3375,8 +3558,8 @@ CK_DLL_SFUN( type_getTypes )
 CK_DLL_SFUN( type_getTypes2 )
 {
     // instantiate
-    Chuck_Array4 * array = new Chuck_Array4( TRUE );
-    initialize_object( array, VM->env()->ckt_array );
+    Chuck_ArrayInt * array = new Chuck_ArrayInt( TRUE );
+    initialize_object( array, VM->env()->ckt_array, SHRED, VM );
 
     // get args
     t_CKBOOL objs = GET_NEXT_INT(ARGS);
@@ -3396,8 +3579,8 @@ CK_DLL_SFUN( type_getTypes2 )
 CK_DLL_SFUN( type_getTypesAll )
 {
     // instantiate
-    Chuck_Array4 * array = new Chuck_Array4( TRUE );
-    initialize_object( array, VM->env()->ckt_array );
+    Chuck_ArrayInt * array = new Chuck_ArrayInt( TRUE );
+    initialize_object( array, VM->env()->ckt_array, SHRED, VM );
 
     // get all types
     typeGetTypes( VM, array, true, true, true, true, true, true, true );

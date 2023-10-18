@@ -52,7 +52,7 @@ typedef enum {
     te_function, te_object, te_user, te_array, te_null, te_ugen, te_uana,
     te_event, te_void, te_stdout, te_stderr, te_adc, te_dac, te_bunghole,
     te_uanablob, te_io, te_fileio, te_chout, te_cherr, te_multi,
-    te_vec3, te_vec4, te_vector, te_auto
+    te_vec2, te_vec3, te_vec4, te_vector, te_auto
 } te_Type;
 
 
@@ -280,14 +280,21 @@ protected:
 
 
 
-// forward reference
+//-----------------------------------------------------------------------------
+// forward references
+//-----------------------------------------------------------------------------
 struct Chuck_Type;
 struct Chuck_Value;
 struct Chuck_Func;
 struct Chuck_Multi;
 struct Chuck_VM;
 struct Chuck_VM_Code;
+struct Chuck_VM_MFunInvoker;
 struct Chuck_DLL;
+// operator loading structs | 1.5.1.5
+struct Chuck_Op_Registry;
+struct Chuck_Op_Semantics;
+struct Chuck_Op_Overload;
 
 
 
@@ -423,6 +430,243 @@ public:
 
 
 //-----------------------------------------------------------------------------
+// name: struct Chuck_Op_Registry | 1.5.1.5 (ge) added
+// desc: operator overloading registry
+//-----------------------------------------------------------------------------
+struct Chuck_Op_Registry
+{
+public:
+    // constructor
+    Chuck_Op_Registry();
+    // destructor
+    ~Chuck_Op_Registry();
+
+public:
+    // add semantics for particular operator
+    Chuck_Op_Semantics * add( ae_Operator op );
+    // get semantics for particular operator
+    Chuck_Op_Semantics * lookup( ae_Operator op );
+    // can overload as binary?
+    t_CKBOOL binaryOverloadable( ae_Operator op );
+    // can overload as unary prefix?
+    t_CKBOOL unaryPreOverloadable( ae_Operator op );
+    // can overload as unary postfix?
+    t_CKBOOL unaryPostOverloadable( ae_Operator op );
+
+public:
+    // push registry stack; mark all unmarked overloads with current ID
+    // returns pushID associated with this push
+    t_CKUINT push();
+    // remove all overload greater than previous pushID
+    // return how many levels were popped (1 or 0)
+    t_CKUINT pop();
+    // reset pop local overload state (everything above publicID)
+    void reset2local();
+    // reset pop beyond public state (everything above preserveID)
+    void reset2public();
+    // (system) preserve current state (cannot be popped normally)
+    void preserve();
+    // (system) remove preserve status (allowing pops for all stack levels)
+    void unpreserve();
+    // get the current stack ID
+    t_CKUINT stackLevel() const { return m_stackID; }
+
+public:
+    // reserve builtin overloads
+    void reserve( Chuck_Type * lhs, ae_Operator op, Chuck_Type * rhs, t_CKBOOL commute = FALSE );
+    // reserve prefix
+    void reserve( ae_Operator op, Chuck_Type * type );
+    // reserve postfix
+    void reserve( Chuck_Type * type, ae_Operator op );
+
+    // add binary operator overload: lhs OP rhs
+    t_CKBOOL add_overload( Chuck_Type * lhs, ae_Operator op, Chuck_Type * rhs, Chuck_Func * func, 
+                           te_Origin origin, const std::string & originName = "", t_CKINT originWhere = 0, t_CKBOOL isPublic = FALSE );
+    // add prefix unary operator overload: OP rhs
+    t_CKBOOL add_overload( ae_Operator op, Chuck_Type * rhs, Chuck_Func * func,
+                           te_Origin origin, const std::string & originName = "", t_CKINT originWhere = 0, t_CKBOOL isPublic = FALSE );
+    // add postfix unary operator overload: lhs OP
+    t_CKBOOL add_overload( Chuck_Type * lhs, ae_Operator op, Chuck_Func * func,
+                           te_Origin origin, const std::string & originName = "", t_CKINT originWhere = 0, t_CKBOOL isPublic = FALSE );
+
+    // look up binary operator overload: lhs OP rhs
+    Chuck_Op_Overload * lookup_overload( Chuck_Type * lhs, ae_Operator op, Chuck_Type * rhs );
+    // look up prefix unary operator overload: OP rhs
+    Chuck_Op_Overload * lookup_overload( ae_Operator op, Chuck_Type * rhs );
+    // look up postfix unary operator overload: lhs OP
+    Chuck_Op_Overload * lookup_overload( Chuck_Type * lhs, ae_Operator op );
+
+protected:
+    // remove all overload greater than pushID
+    // return how many levels were popped
+    t_CKUINT pop( t_CKUINT pushID );
+    // map of operator to its semantic mappings
+    std::map<ae_Operator, Chuck_Op_Semantics *> m_operatorMap;
+    // operator overload stack level
+    t_CKUINT m_stackID;
+    // system-level operator preservation ID (cannot be reset; use unpreserve to undo)
+    t_CKUINT m_stackPreserveID;
+
+public:
+    // user-level public operator overload (can be reset)
+    static const t_CKUINT STACK_PUBLIC_ID;
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_TypePair | 1.5.1.5 (ge) added
+// desc: a type pair, used as key in operator overload map
+//-----------------------------------------------------------------------------
+struct Chuck_TypePair
+{
+    // left hand side type
+    Chuck_Type * lhs;
+    // right hand side type
+    Chuck_Type * rhs;
+
+    // constructor
+    Chuck_TypePair( Chuck_Type * LHS = NULL, Chuck_Type * RHS = NULL ) : lhs(LHS), rhs(RHS) { }
+    // copy constructor
+    Chuck_TypePair( const Chuck_TypePair & other ) : lhs(other.lhs), rhs(other.rhs) { }
+    // operator
+    bool operator <( const Chuck_TypePair & other ) const;
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Op_Semantics | 1.5.1.5 (ge) added
+// desc: all overloading information for a particualr operator
+//-----------------------------------------------------------------------------
+struct Chuck_Op_Semantics
+{
+protected:
+    // the operator
+    ae_Operator m_op;
+    // is binary overloadable?
+    bool is_overloadable_binary;
+    // is unary prefix overloadable?
+    bool is_overloadable_unary_pre;
+    // is unary postfix overloadable?
+    bool is_overloadable_unary_post;
+    // binary overload map
+    std::map<Chuck_TypePair, Chuck_Op_Overload *> overloads;
+
+public:
+    // constructor
+    Chuck_Op_Semantics( ae_Operator op = ae_op_none );
+    // destructor
+    ~Chuck_Op_Semantics();
+
+public:
+    // configure how operator could be overloaded
+    void configure( bool binary_OL, bool unary_pre_OL, bool unary_post_OL );
+    // is binary overloadable
+    bool isBinaryOL() const { return is_overloadable_binary; }
+    bool isUnaryPreOL() const { return is_overloadable_unary_pre; }
+    bool isUnaryPostOL() const { return is_overloadable_unary_post; }
+
+public:
+    // add overload
+    void add( Chuck_Op_Overload * overload );
+    // remove overloads with mark > pushID
+    void removeAbove( t_CKUINT pushID );
+    // squash all overloads marks to pushID
+    void squashTo( t_CKUINT pushID );
+    // retrieve all overloads for an operator
+    void getOverloads( std::vector<const Chuck_Op_Overload *> & results );
+    // get entry by types
+    Chuck_Op_Overload * getOverload( Chuck_Type * lhs, Chuck_Type * rhs );
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Op_Overload | 1.5.1.5 (ge) added
+// desc: a particular overloading
+//-----------------------------------------------------------------------------
+struct Chuck_Op_Overload
+{
+    // where this overload was defined
+    te_Origin m_origin;
+    // origin name
+    std::string m_originName;
+    // origin parse position (if applicable)
+    t_CKINT m_originWhere;
+
+protected:
+    // the operator
+    ae_Operator m_op;
+    // which kind of overload?
+    te_Op_OverloadKind m_kind;
+    // the function to call
+    Chuck_Func * m_func;
+    // left hand side
+    Chuck_Type * m_lhs;
+    // right hand side
+    Chuck_Type * m_rhs;
+    // ID associated with when this overload was created
+    t_CKUINT m_pushID;
+    // is reserved
+    t_CKBOOL m_isReserved;
+
+    // set left hand side type
+    void setLHS( Chuck_Type * type );
+    // set right hand side type
+    void setRHS( Chuck_Type * type );
+    // zero out
+    void zero();
+
+public:
+    // constructor: binary
+    Chuck_Op_Overload( Chuck_Type * LHS, ae_Operator op, Chuck_Type * RHS, Chuck_Func * func );
+    // constructor: postfix
+    Chuck_Op_Overload( Chuck_Type * LHS, ae_Operator op, Chuck_Func * func );
+    // constructor: prefix
+    Chuck_Op_Overload( ae_Operator op, Chuck_Type * RHS, Chuck_Func * func );
+    // copy constructor
+    Chuck_Op_Overload( const Chuck_Op_Overload & other );
+    // destructor
+    ~Chuck_Op_Overload();
+    // operator < for overload
+    bool operator <( const Chuck_Op_Overload & other ) const;
+
+    // update origin info
+    void updateOrigin( te_Origin origin, const std::string & name = "", t_CKINT where = 0 );
+    // update overload stack push ID
+    void mark( t_CKUINT pushID );
+    // set as reserved
+    void updateReserved( t_CKBOOL isReserved ) { m_isReserved = isReserved; }
+    // get is reserved
+    t_CKBOOL reserved() const { return m_isReserved; }
+
+public:
+    // get op
+    ae_Operator op() const { return m_op; }
+    // get the kind of overload
+    te_Op_OverloadKind kind() const { return m_kind; }
+    // get func
+    Chuck_Func * func() const { return m_func; }
+    // get left hand side type
+    Chuck_Type * lhs() const { return m_lhs; }
+    // get right hand side type
+    Chuck_Type * rhs() const { return m_rhs; }
+    // get overload stack push ID
+    t_CKUINT pushID() const { return m_pushID; }
+    // has origin been set?
+    t_CKBOOL hasOrigin() const { return m_origin != te_originUnknown; }
+    // overloading natively handled? (e.g., in chuck_type)
+    t_CKBOOL isNative() const;
+};
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: struct Chuck_Env
 // desc: chuck type environment; one per VM instance
 //-----------------------------------------------------------------------------
@@ -503,6 +747,9 @@ public:
     std::map<std::string, t_CKBOOL> key_types;
     std::map<std::string, t_CKBOOL> key_values;
 
+    // operators mapping registry | 1.5.1.5
+    Chuck_Op_Registry op_registry;
+
     // deprecated types
     std::map<std::string, std::string> deprecated;
     // level - 0:stop, 1:warn, 2:ignore
@@ -518,6 +765,7 @@ public:
     Chuck_Type * ckt_dur;
     Chuck_Type * ckt_complex;
     Chuck_Type * ckt_polar;
+    Chuck_Type * ckt_vec2;
     Chuck_Type * ckt_vec3;
     Chuck_Type * ckt_vec4;
     Chuck_Type * ckt_null;
@@ -762,6 +1010,32 @@ protected: // apropos-related helper function
     void apropos_vars( std::string & output, const std::string & prefix, t_CKBOOL inherited );
     // dump info about examples
     void apropos_examples( std::string & output, const std::string & prefix );
+
+public:
+    // struct to hold callback on instantiate
+    struct CallbackOnInstantiate
+    {
+        // whether to auto-set shred origin at instantiation;
+        // see t_CKBOOL initialize_object( ... )
+        t_CKBOOL shouldSetShredOrigin;
+        // the callback
+        f_callback_on_instantiate callback;
+        // constructor
+        CallbackOnInstantiate( f_callback_on_instantiate cb = NULL, t_CKBOOL setShredOrigin = FALSE )
+        : callback(cb), shouldSetShredOrigin(setShredOrigin) { }
+    };
+    // register type instantiation callback
+    void add_instantiate_cb( f_callback_on_instantiate cb, t_CKBOOL setShredOrigin );
+    // unregister type instantiation callback
+    void remove_instantiate_cb( f_callback_on_instantiate cb );
+    // get vector of callbacks (including this and parents), return whether any requires setShredOrigin
+    t_CKBOOL cbs_on_instantiate( std::vector<CallbackOnInstantiate> & results );
+
+protected:
+    // vector of callbacks on instantiation of this type (or its subclass)
+    std::vector<CallbackOnInstantiate> m_cbs_on_instantiate;
+    // internal get vector of callbacks (including this and parents), return whether any requires setShredOrigin
+    t_CKBOOL do_cbs_on_instantiate( std::vector<CallbackOnInstantiate> & results );
 };
 
 
@@ -806,7 +1080,7 @@ struct Chuck_Value : public Chuck_VM_Object
 
     // dependency tracking | 1.5.0.8 (ge) added
     // code position of where this value is considered initialized
-    // NOTE sed to determine dependencies within a file context
+    // NOTE used to determine dependencies within a file context
     t_CKUINT depend_init_where; // 1.5.0.8
 
     // documentation
@@ -834,11 +1108,13 @@ struct Chuck_Func : public Chuck_VM_Object
     std::string name;
     // base name (without the designation, e.g., "dump"); 1.4.1.0
     std::string base_name;
+    // get return type
+    Chuck_Type * type() const;
     // human readable function signature: e.g., void Object.func( int foo, float bar[] );
     std::string signature( t_CKBOOL incFunDef = TRUE, t_CKBOOL incRetType = TRUE ) const;
     // code (included imported)
     Chuck_VM_Code * code;
-    // member
+    // member (inside class)
     t_CKBOOL is_member;
     // static (inside class)
     t_CKBOOL is_static;
@@ -856,6 +1132,18 @@ struct Chuck_Func : public Chuck_VM_Object
 
     // documentation
     std::string doc;
+
+public:
+    // pack c-style array of DL_Args into args cache
+    t_CKBOOL pack_cache( Chuck_DL_Arg * dlargs, t_CKUINT numArgs );
+    // args cache (used by c++ to chuck function calls) | 1.5.1.5
+    t_CKBYTE * args_cache;
+    // size of args cache
+    t_CKUINT args_cache_size;
+    // setup invoker for this fun (for calling chuck function from c++)
+    t_CKBOOL setup_invoker( t_CKUINT vtable_offet, Chuck_VM * vm, Chuck_VM_Shred * shred );
+    // associate mfun invoker (if applicable)
+    Chuck_VM_MFunInvoker * invoker_mfun;
 
 protected:
     // AST func def from parser | 1.5.0.5 (ge) moved to protected
@@ -883,12 +1171,15 @@ public:
         m_def = NULL;
         code = NULL;
         is_member = FALSE;
-        is_static = FALSE,
+        is_static = FALSE;
         vt_index = CK_NO_VALUE;
         value_ref = NULL;
         /*dl_code = NULL;*/
         next = NULL;
         up = NULL;
+        args_cache = NULL;
+        args_cache_size = 0;
+        invoker_mfun = NULL;
     }
 
     // destructor
@@ -941,7 +1232,7 @@ t_CKBOOL isobj( Chuck_Env * env, Chuck_Type * type );
 t_CKBOOL isfunc( Chuck_Env * env, Chuck_Type * type );
 t_CKBOOL isvoid( Chuck_Env * env, Chuck_Type * type );
 t_CKBOOL iskindofint( Chuck_Env * env, Chuck_Type * type ); // added 1.3.1.0: this includes int + pointers
-t_CKUINT getkindof( Chuck_Env * env, Chuck_Type * type ); // added 1.3.1.0: to get the kindof a type
+te_KindOf getkindof( Chuck_Env * env, Chuck_Type * type ); // added 1.3.1.0: to get the kindof a type
 
 
 //-----------------------------------------------------------------------------
@@ -988,6 +1279,8 @@ t_CKBOOL type_engine_import_ugen_ctrl( Chuck_Env * env, const char * type, const
                                        f_ctrl ctrl, t_CKBOOL write, t_CKBOOL read );
 t_CKBOOL type_engine_import_add_ex( Chuck_Env * env, const char * ex );
 t_CKBOOL type_engine_import_class_end( Chuck_Env * env );
+// add global operator overload | 1.5.1.5 (ge & andrew) chaos
+t_CKBOOL type_engine_import_op_overload( Chuck_Env * env, Chuck_DL_Func * func );
 t_CKBOOL type_engine_register_deprecate( Chuck_Env * env,
                                          const std::string & former, const std::string & latter );
 
@@ -1013,8 +1306,16 @@ Chuck_Value * type_engine_find_value( Chuck_Env * env, const std::string & xid, 
 Chuck_Namespace * type_engine_find_nspc( Chuck_Env * env, a_Id_List path );
 // convert a vector of type names to a vector of Types | 1.5.0.0 (ge) added
 void type_engine_names2types( Chuck_Env * env, const std::vector<std::string> & typeNames, std::vector<Chuck_Type *> & types );
-// check and process auto types
+// check and process auto types | 1.5.0.8 (ge) added
 t_CKBOOL type_engine_infer_auto( Chuck_Env * env, a_Exp_Decl decl, Chuck_Type * type );
+// initialize operator overload subsystem | 1.5.1.5 (ge) added
+t_CKBOOL type_engine_init_op_overload( Chuck_Env * env );
+// verify an operator overload | 1.5.1.5 (ge) added
+t_CKBOOL type_engine_scan_func_op_overload( Chuck_Env * env, a_Func_Def func_def );
+// type-check an operator overload func def | 1.5.1.5 (ge) added
+t_CKBOOL type_engine_check_func_op_overload( Chuck_Env * env, a_Func_Def func_def );
+
+
 
 
 //-----------------------------------------------------------------------------

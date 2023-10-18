@@ -113,7 +113,7 @@ void Chuck_VM_Object::add_ref()
 
 //-----------------------------------------------------------------------------
 // name: release()
-// desc: remove reference
+// desc: decrement reference; deletes objects when refcount reaches 0;
 //-----------------------------------------------------------------------------
 void Chuck_VM_Object::release()
 {
@@ -122,10 +122,10 @@ void Chuck_VM_Object::release()
     //-----------------------------------------------------------------------------
     if( m_ref_count <= 0 )
     {
-        // print warning
+        // log warning
         EM_log( CK_LOG_FINEST, "(internal) Object.release() refcount already %d", m_ref_count );
 
-        // print error
+        // disabled: error out
         // EM_error3( "[chuck]: (internal error) Object.release() refcount == %d", m_ref_count );
         // make sure there is at least one reference
         // assert( m_ref_count > 0 );
@@ -136,8 +136,6 @@ void Chuck_VM_Object::release()
         m_ref_count--;
     }
 
-    // added 1.3.0.0
-    // CK_VM_DEBUG(CK_FPRINTF_STDERR( "Chuck_VM_Object::release() : 0x%08x, %s, %ulu\n", this, mini_type(typeid(*this).name()), m_ref_count));
     // updated 1.5.0.5 to use Chuck_VM_Debug
     CK_VM_DEBUGGER( release( this ) );
 
@@ -148,10 +146,10 @@ void Chuck_VM_Object::release()
         if( our_locks_in_effect && m_locked )
         {
             EM_error2( 0, "(internal error) releasing locked VM object!" );
-            // fail
+            // bail out
             assert( FALSE );
             // in case assert is disabled
-            *(int *)0 = 1;
+            // *(int *)0 = 1;
         }
 
     #ifndef __CHUNREAL_ENGINE__
@@ -165,8 +163,9 @@ void Chuck_VM_Object::release()
         // track | 1.5.0.5 (ge)
         CK_VM_DEBUGGER( destruct( this ) );
 
-        // REFACTOR-2017: doing this for now
-        delete this;
+        // trigger this object's deletion / destructors
+        // should be valid as long as no members are used beyond this point
+        delete this; // REFACTOR-2017
     }
 }
 
@@ -239,6 +238,9 @@ t_CKUINT Chuck_VM_Object::refcount() const
 
 
 
+// static instantiation | 1.5.1.5
+t_CKUINT Chuck_Object::our_vt_toString = 0;
+
 //-----------------------------------------------------------------------------
 // name: Chuck_Object()
 // desc: constructor
@@ -253,6 +255,10 @@ Chuck_Object::Chuck_Object()
     data = NULL;
     // zero size
     data_size = 0;
+    // zero origin shred
+    origin_shred = NULL;
+    // zero origin vm
+    origin_vm = NULL;
 }
 
 
@@ -275,12 +281,16 @@ Chuck_Object::~Chuck_Object()
             // sanity check
             assert( type->info->dtor && type->info->dtor->native_func );
             // REFACTOR-2017: do we know which VM to pass in? (currently NULL)
-            ((f_dtor)(type->info->dtor->native_func))( this, NULL, NULL, Chuck_DL_Api::Api::instance() );
+            ((f_dtor)(type->info->dtor->native_func))( this, NULL, NULL, Chuck_DL_Api::instance() );
         }
 
         // go up the inheritance
         type = type->parent;
     }
+
+    // release
+    CK_SAFE_RELEASE( origin_shred );
+    CK_SAFE_RELEASE( origin_vm );
 
     // free
     CK_SAFE_DELETE( vtable );
@@ -324,6 +334,32 @@ void Chuck_Object::help() // 1.4.1.0 (ge)
 
 
 //-----------------------------------------------------------------------------
+// name: setOriginShred()
+// desc: set origin shred
+//-----------------------------------------------------------------------------
+void Chuck_Object::setOriginShred( Chuck_VM_Shred * shred )
+{
+    // assign
+    CK_SAFE_REF_ASSIGN( this->origin_shred, shred );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: setOriginVM()
+// desc: set origin shred
+//-----------------------------------------------------------------------------
+void Chuck_Object::setOriginVM( Chuck_VM * vm )
+{
+    // assign
+    CK_SAFE_REF_ASSIGN( this->origin_vm, vm );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: Chuck_Array()
 // desc: constructor
 //-----------------------------------------------------------------------------
@@ -342,10 +378,10 @@ Chuck_Array::~Chuck_Array() { }
 
 
 //-----------------------------------------------------------------------------
-// name: Chuck_Array4()
+// name: Chuck_ArrayInt()
 // desc: constructor
 //-----------------------------------------------------------------------------
-Chuck_Array4::Chuck_Array4( t_CKBOOL is_obj, t_CKINT capacity )
+Chuck_ArrayInt::Chuck_ArrayInt( t_CKBOOL is_obj, t_CKINT capacity )
 {
     // sanity check
     assert( capacity >= 0 );
@@ -362,10 +398,10 @@ Chuck_Array4::Chuck_Array4( t_CKBOOL is_obj, t_CKINT capacity )
 
 
 //-----------------------------------------------------------------------------
-// name: ~Chuck_Array4()
+// name: ~Chuck_ArrayInt()
 // desc: destructor
 //-----------------------------------------------------------------------------
-Chuck_Array4::~Chuck_Array4()
+Chuck_ArrayInt::~Chuck_ArrayInt()
 {
     // 1.4.2.0 (ge) | added, which should cascade to nested array objects
     clear();
@@ -378,7 +414,7 @@ Chuck_Array4::~Chuck_Array4()
 // name: addr()
 // desc: return address of element at position i, as an int
 //-----------------------------------------------------------------------------
-t_CKUINT Chuck_Array4::addr( t_CKINT i )
+t_CKUINT Chuck_ArrayInt::addr( t_CKINT i )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -395,7 +431,7 @@ t_CKUINT Chuck_Array4::addr( t_CKINT i )
 // name: addr()
 // desc: return address of element at key, as an int
 //-----------------------------------------------------------------------------
-t_CKUINT Chuck_Array4::addr( const string & key )
+t_CKUINT Chuck_ArrayInt::addr( const string & key )
 {
     // get the addr
     return (t_CKUINT)(&m_map[key]);
@@ -408,7 +444,7 @@ t_CKUINT Chuck_Array4::addr( const string & key )
 // name: get()
 // desc: get value of element at position i
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::get( t_CKINT i, t_CKUINT * val )
+t_CKINT Chuck_ArrayInt::get( t_CKINT i, t_CKUINT * val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -428,7 +464,7 @@ t_CKINT Chuck_Array4::get( t_CKINT i, t_CKUINT * val )
 // name: get()
 // desc: get value of element at key
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::get( const string & key, t_CKUINT * val )
+t_CKINT Chuck_ArrayInt::get( const string & key, t_CKUINT * val )
 {
     // set to zero
     *val = 0;
@@ -448,7 +484,7 @@ t_CKINT Chuck_Array4::get( const string & key, t_CKUINT * val )
 // name: set()
 // desc: set element of array by position, with ref counting as applicable
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::set( t_CKINT i, t_CKUINT val )
+t_CKINT Chuck_ArrayInt::set( t_CKINT i, t_CKUINT val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -477,7 +513,7 @@ t_CKINT Chuck_Array4::set( t_CKINT i, t_CKUINT val )
 // name: set()
 // desc: set element of map by key, with ref counting as applicable
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::set( const string & key, t_CKUINT val )
+t_CKINT Chuck_ArrayInt::set( const string & key, t_CKUINT val )
 {
     map<string, t_CKUINT>::iterator iter = m_map.find( key );
 
@@ -502,7 +538,7 @@ t_CKINT Chuck_Array4::set( const string & key, t_CKUINT val )
 // name: insert() | 1.5.0.8 (ge) added
 // desc: insert before position | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::insert( t_CKINT i, t_CKUINT val )
+t_CKINT Chuck_ArrayInt::insert( t_CKINT i, t_CKUINT val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -525,7 +561,7 @@ t_CKINT Chuck_Array4::insert( t_CKINT i, t_CKUINT val )
 // name: map_find()
 // desc: (map only) test if key is in map
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::map_find( const string & key )
+t_CKINT Chuck_ArrayInt::map_find( const string & key )
 {
     return m_map.find( key ) != m_map.end();
 }
@@ -537,7 +573,7 @@ t_CKINT Chuck_Array4::map_find( const string & key )
 // name: erase()
 // desc: (map only) erase element by key
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::map_erase( const string & key )
+t_CKINT Chuck_ArrayInt::map_erase( const string & key )
 {
     map<string, t_CKUINT>::iterator iter = m_map.find( key );
     t_CKINT v = iter != m_map.end();
@@ -559,7 +595,7 @@ t_CKINT Chuck_Array4::map_erase( const string & key )
 // name: push_back()
 // desc: append element by value
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::push_back( t_CKUINT val )
+t_CKINT Chuck_ArrayInt::push_back( t_CKUINT val )
 {
     // if obj, reference count it (added 1.3.0.0)
     if( m_is_obj && val ) ((Chuck_Object *)val)->add_ref();
@@ -577,7 +613,7 @@ t_CKINT Chuck_Array4::push_back( t_CKUINT val )
 // name: pop_back()
 // desc: pop the last element in vector
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::pop_back()
+t_CKINT Chuck_ArrayInt::pop_back()
 {
     // check
     if( m_vector.size() == 0 )
@@ -607,7 +643,7 @@ t_CKINT Chuck_Array4::pop_back()
 // name: push_front() | 1.5.0.8 (ge) added
 // desc: prepend element by value | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::push_front( t_CKUINT val )
+t_CKINT Chuck_ArrayInt::push_front( t_CKUINT val )
 {
     // if obj, reference count it (added 1.3.0.0)
     if( m_is_obj && val ) ((Chuck_Object *)val)->add_ref();
@@ -625,7 +661,7 @@ t_CKINT Chuck_Array4::push_front( t_CKUINT val )
 // name: pop_front() | 1.5.0.8 (ge) added
 // desc: pop the last element in vector | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::pop_front()
+t_CKINT Chuck_ArrayInt::pop_front()
 {
     // check
     if( m_vector.size() == 0 )
@@ -653,7 +689,7 @@ t_CKINT Chuck_Array4::pop_front()
 // name: erase()
 // desc: erase element by position
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::erase( t_CKINT pos )
+t_CKINT Chuck_ArrayInt::erase( t_CKINT pos )
 {
     // check
     if( m_vector.size() == 0 || pos < 0 || pos >= m_vector.size() )
@@ -680,7 +716,7 @@ t_CKINT Chuck_Array4::erase( t_CKINT pos )
 // name: erase()
 // desc: erase a range of elements [begin,end)
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::erase( t_CKINT begin, t_CKINT end )
+t_CKINT Chuck_ArrayInt::erase( t_CKINT begin, t_CKINT end )
 {
     // if needed swap the two
     if( begin > end ) { t_CKINT temp = begin; begin = end; end = temp; }
@@ -719,7 +755,7 @@ t_CKINT Chuck_Array4::erase( t_CKINT begin, t_CKINT end )
 // name: get_keys() | 1.4.1.1 nshaheed (added)
 // desc: return vector of keys from associative array
 //-----------------------------------------------------------------------------
-void Chuck_Array4::get_keys( std::vector<std::string> & keys )
+void Chuck_ArrayInt::get_keys( std::vector<std::string> & keys )
 {
     // clear the return array
     keys.clear();
@@ -755,7 +791,7 @@ static void my_random_shuffle( RandomIt first, RandomIt last )
 // name: shuffle() | 1.5.0.0 nshaheed, azaday, kunwoo, ge (added)
 // desc: shuffle the contents of the array
 //-----------------------------------------------------------------------------
-void Chuck_Array4::shuffle()
+void Chuck_ArrayInt::shuffle()
 {
     my_random_shuffle( m_vector.begin(), m_vector.end() );
 }
@@ -767,7 +803,7 @@ void Chuck_Array4::shuffle()
 // name: reverse()
 // desc: reverses array in-place
 //-----------------------------------------------------------------------------
-void Chuck_Array4::reverse()
+void Chuck_ArrayInt::reverse()
 {
     std::reverse( m_vector.begin(), m_vector.end() );
 }
@@ -788,7 +824,7 @@ static bool ck_compare_sint( t_CKUINT lhs, t_CKUINT rhs )
 // name: sort()
 // desc: sort the array in ascending order
 //-----------------------------------------------------------------------------
-void Chuck_Array4::sort()
+void Chuck_ArrayInt::sort()
 {
     // if object references sort as unsigned
     if( m_is_obj ) std::sort( m_vector.begin(), m_vector.end() );
@@ -803,7 +839,7 @@ void Chuck_Array4::sort()
 // name: back()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::back( t_CKUINT * val ) const
+t_CKINT Chuck_ArrayInt::back( t_CKUINT * val ) const
 {
     // check
     if( m_vector.size() == 0 )
@@ -822,7 +858,7 @@ t_CKINT Chuck_Array4::back( t_CKUINT * val ) const
 // name: clear()
 // desc: ...
 //-----------------------------------------------------------------------------
-void Chuck_Array4::clear( )
+void Chuck_ArrayInt::clear( )
 {
     // zero
     zero( 0, m_vector.size() );
@@ -838,7 +874,7 @@ void Chuck_Array4::clear( )
 // name: set_capacity()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::set_capacity( t_CKINT capacity )
+t_CKINT Chuck_ArrayInt::set_capacity( t_CKINT capacity )
 {
     // sanity check
     assert( capacity >= 0 );
@@ -875,7 +911,7 @@ t_CKINT Chuck_Array4::set_capacity( t_CKINT capacity )
 // name: set_size()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array4::set_size( t_CKINT size )
+t_CKINT Chuck_ArrayInt::set_size( t_CKINT size )
 {
     // sanity check
     assert( size >= 0 );
@@ -909,7 +945,7 @@ t_CKINT Chuck_Array4::set_size( t_CKINT size )
 // name: zero()
 // desc: ...
 //-----------------------------------------------------------------------------
-void Chuck_Array4::zero( t_CKUINT start, t_CKUINT end )
+void Chuck_ArrayInt::zero( t_CKUINT start, t_CKUINT end )
 {
     // sanity check
     assert( start <= m_vector.capacity() && end <= m_vector.capacity() );
@@ -944,10 +980,10 @@ void Chuck_Array4::zero( t_CKUINT start, t_CKUINT end )
 
 
 //-----------------------------------------------------------------------------
-// name: Chuck_Array8()
+// name: Chuck_ArrayFloat()
 // desc: constructor
 //-----------------------------------------------------------------------------
-Chuck_Array8::Chuck_Array8( t_CKINT capacity )
+Chuck_ArrayFloat::Chuck_ArrayFloat( t_CKINT capacity )
 {
     // sanity check
     assert( capacity >= 0 );
@@ -961,10 +997,10 @@ Chuck_Array8::Chuck_Array8( t_CKINT capacity )
 
 
 //-----------------------------------------------------------------------------
-// name: ~Chuck_Array8()
+// name: ~Chuck_ArrayFloat()
 // desc: destructor
 //-----------------------------------------------------------------------------
-Chuck_Array8::~Chuck_Array8()
+Chuck_ArrayFloat::~Chuck_ArrayFloat()
 {
     // do nothing
     clear();
@@ -977,7 +1013,7 @@ Chuck_Array8::~Chuck_Array8()
 // name: addr()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKUINT Chuck_Array8::addr( t_CKINT i )
+t_CKUINT Chuck_ArrayFloat::addr( t_CKINT i )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -994,7 +1030,7 @@ t_CKUINT Chuck_Array8::addr( t_CKINT i )
 // name: addr()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKUINT Chuck_Array8::addr( const string & key )
+t_CKUINT Chuck_ArrayFloat::addr( const string & key )
 {
     // get the addr
     return (t_CKUINT)(&m_map[key]);
@@ -1007,7 +1043,7 @@ t_CKUINT Chuck_Array8::addr( const string & key )
 // name: get()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::get( t_CKINT i, t_CKFLOAT * val )
+t_CKINT Chuck_ArrayFloat::get( t_CKINT i, t_CKFLOAT * val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -1027,7 +1063,7 @@ t_CKINT Chuck_Array8::get( t_CKINT i, t_CKFLOAT * val )
 // name: get()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::get( const string & key, t_CKFLOAT * val )
+t_CKINT Chuck_ArrayFloat::get( const string & key, t_CKFLOAT * val )
 {
     // set to zero
     *val = 0.0;
@@ -1053,7 +1089,7 @@ t_CKINT Chuck_Array8::get( const string & key, t_CKFLOAT * val )
 // name: set()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::set( t_CKINT i, t_CKFLOAT val )
+t_CKINT Chuck_ArrayFloat::set( t_CKINT i, t_CKFLOAT val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -1073,7 +1109,7 @@ t_CKINT Chuck_Array8::set( t_CKINT i, t_CKFLOAT val )
 // name: set()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::set( const string & key, t_CKFLOAT val )
+t_CKINT Chuck_ArrayFloat::set( const string & key, t_CKFLOAT val )
 {
     // 1.3.1.1: removed this
     // map<string, t_CKFLOAT>::iterator iter = m_map.find( key );
@@ -1095,7 +1131,7 @@ t_CKINT Chuck_Array8::set( const string & key, t_CKFLOAT val )
 // name: insert() | 1.5.0.8 (ge) added
 // desc: insert before position | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::insert( t_CKINT i, t_CKFLOAT val )
+t_CKINT Chuck_ArrayFloat::insert( t_CKINT i, t_CKFLOAT val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -1115,7 +1151,7 @@ t_CKINT Chuck_Array8::insert( t_CKINT i, t_CKFLOAT val )
 // name: map_find()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::map_find( const string & key )
+t_CKINT Chuck_ArrayFloat::map_find( const string & key )
 {
     return m_map.find( key ) != m_map.end();
 }
@@ -1126,7 +1162,7 @@ t_CKINT Chuck_Array8::map_find( const string & key )
 // name: map_erase()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::map_erase( const string & key )
+t_CKINT Chuck_ArrayFloat::map_erase( const string & key )
 {
     return m_map.erase( key );
 }
@@ -1138,7 +1174,7 @@ t_CKINT Chuck_Array8::map_erase( const string & key )
 // name: push_back()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::push_back( t_CKFLOAT val )
+t_CKINT Chuck_ArrayFloat::push_back( t_CKFLOAT val )
 {
     // add to vector
     m_vector.push_back( val );
@@ -1153,7 +1189,7 @@ t_CKINT Chuck_Array8::push_back( t_CKFLOAT val )
 // name: pop_back()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::pop_back( )
+t_CKINT Chuck_ArrayFloat::pop_back( )
 {
     // check
     if( m_vector.size() == 0 )
@@ -1174,7 +1210,7 @@ t_CKINT Chuck_Array8::pop_back( )
 // name: push_front() | 1.5.0.8 (ge) added
 // desc: prepend element by value | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::push_front( t_CKFLOAT val )
+t_CKINT Chuck_ArrayFloat::push_front( t_CKFLOAT val )
 {
     // add to vector
     m_vector.insert( m_vector.begin(), val );
@@ -1189,7 +1225,7 @@ t_CKINT Chuck_Array8::push_front( t_CKFLOAT val )
 // name: pop_front() | 1.5.0.8 (ge) added
 // desc: pop the last element in vector | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::pop_front()
+t_CKINT Chuck_ArrayFloat::pop_front()
 {
     // check
     if( m_vector.size() == 0 )
@@ -1208,7 +1244,7 @@ t_CKINT Chuck_Array8::pop_front()
 // name: pop_out()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::erase( t_CKINT pos )
+t_CKINT Chuck_ArrayFloat::erase( t_CKINT pos )
 {
         // check
         if ( m_vector.size() == 0 || pos<0 || pos>=m_vector.size())
@@ -1226,7 +1262,7 @@ t_CKINT Chuck_Array8::erase( t_CKINT pos )
 // name: erase()
 // desc: erase a range of elements [begin,end)
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::erase( t_CKINT begin, t_CKINT end )
+t_CKINT Chuck_ArrayFloat::erase( t_CKINT begin, t_CKINT end )
 {
     // if needed swap the two
     if( begin > end ) { t_CKINT temp = begin; begin = end; end = temp; }
@@ -1252,7 +1288,7 @@ t_CKINT Chuck_Array8::erase( t_CKINT begin, t_CKINT end )
 // name: get_keys() | 1.4.1.1 nshaheed (added)
 // desc: return vector of keys from associative array
 //-----------------------------------------------------------------------------
-void Chuck_Array8::get_keys( std::vector<std::string> & keys )
+void Chuck_ArrayFloat::get_keys( std::vector<std::string> & keys )
 {
     // clear the return array
     keys.clear();
@@ -1271,7 +1307,7 @@ void Chuck_Array8::get_keys( std::vector<std::string> & keys )
 // name: reverse()
 // desc: reverses array in-place
 //-----------------------------------------------------------------------------
-void Chuck_Array8::reverse( )
+void Chuck_ArrayFloat::reverse( )
 {
     std::reverse(m_vector.begin(), m_vector.end());
 }
@@ -1282,7 +1318,7 @@ void Chuck_Array8::reverse( )
 // name: shuffle() | 1.5.0.0 nshaheed, azaday, kunwoo, ge (added)
 // desc: shuffle the contents of the array
 //-----------------------------------------------------------------------------
-void Chuck_Array8::shuffle()
+void Chuck_ArrayFloat::shuffle()
 {
     my_random_shuffle( m_vector.begin(), m_vector.end() );
 }
@@ -1294,7 +1330,7 @@ void Chuck_Array8::shuffle()
 // name: sort()
 // desc: sort the array in ascending order
 //-----------------------------------------------------------------------------
-void Chuck_Array8::sort()
+void Chuck_ArrayFloat::sort()
 {
     std::sort( m_vector.begin(), m_vector.end() );
 }
@@ -1306,7 +1342,7 @@ void Chuck_Array8::sort()
 // name: back()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::back( t_CKFLOAT * val ) const
+t_CKINT Chuck_ArrayFloat::back( t_CKFLOAT * val ) const
 {
     // check
     if( m_vector.size() == 0 )
@@ -1325,7 +1361,7 @@ t_CKINT Chuck_Array8::back( t_CKFLOAT * val ) const
 // name: clear()
 // desc: ...
 //-----------------------------------------------------------------------------
-void Chuck_Array8::clear( )
+void Chuck_ArrayFloat::clear( )
 {
     // zero
     zero( 0, m_vector.size() );
@@ -1341,7 +1377,7 @@ void Chuck_Array8::clear( )
 // name: set_capacity()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::set_capacity( t_CKINT capacity )
+t_CKINT Chuck_ArrayFloat::set_capacity( t_CKINT capacity )
 {
     // sanity check
     assert( capacity >= 0 );
@@ -1359,7 +1395,7 @@ t_CKINT Chuck_Array8::set_capacity( t_CKINT capacity )
 // name: set_size()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array8::set_size( t_CKINT size )
+t_CKINT Chuck_ArrayFloat::set_size( t_CKINT size )
 {
     // sanity check
     assert( size >= 0 );
@@ -1393,7 +1429,7 @@ t_CKINT Chuck_Array8::set_size( t_CKINT size )
 // name: zero()
 // desc: ...
 //-----------------------------------------------------------------------------
-void Chuck_Array8::zero( t_CKUINT start, t_CKUINT end )
+void Chuck_ArrayFloat::zero( t_CKUINT start, t_CKUINT end )
 {
     // sanity check
     assert( start <= m_vector.capacity() && end <= m_vector.capacity() );
@@ -1473,7 +1509,7 @@ t_CKUINT Chuck_Array16::addr( const string & key )
 // name: get()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::get( t_CKINT i, t_CKCOMPLEX * val )
+t_CKINT Chuck_Array16::get( t_CKINT i, t_CKVEC2 * val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -1485,6 +1521,9 @@ t_CKINT Chuck_Array16::get( t_CKINT i, t_CKCOMPLEX * val )
     // return good
     return 1;
 }
+// redirect as vec2
+t_CKINT Chuck_Array16::get( t_CKINT i, t_CKCOMPLEX * val )
+{ return this->get( i, (t_CKVEC2 *)val ); }
 
 
 
@@ -1493,14 +1532,14 @@ t_CKINT Chuck_Array16::get( t_CKINT i, t_CKCOMPLEX * val )
 // name: get()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::get( const string & key, t_CKCOMPLEX * val )
+t_CKINT Chuck_Array16::get( const string & key, t_CKVEC2 * val )
 {
     // set to zero
-    val->re = 0.0;
-    val->im = 0.0;
+    val->x = 0;
+    val->y = 0;
 
     // iterator
-    map<string, t_CKCOMPLEX>::iterator iter = m_map.find( key );
+    map<string, t_CKVEC2>::iterator iter = m_map.find( key );
 
     // check
     if( iter != m_map.end() )
@@ -1512,6 +1551,9 @@ t_CKINT Chuck_Array16::get( const string & key, t_CKCOMPLEX * val )
     // return good
     return 1;
 }
+// redirect as vec2
+t_CKINT Chuck_Array16::get( const string & key, t_CKCOMPLEX * val )
+{ return this->get( key, (t_CKVEC2 *)val ); }
 
 
 
@@ -1520,7 +1562,7 @@ t_CKINT Chuck_Array16::get( const string & key, t_CKCOMPLEX * val )
 // name: set()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::set( t_CKINT i, const t_CKCOMPLEX & val )
+t_CKINT Chuck_Array16::set( t_CKINT i, const t_CKVEC2 & val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -1532,6 +1574,9 @@ t_CKINT Chuck_Array16::set( t_CKINT i, const t_CKCOMPLEX & val )
     // return good
     return 1;
 }
+// redirect as vec2
+t_CKINT Chuck_Array16::set( t_CKINT i, const t_CKCOMPLEX & val )
+{ return this->set( i, (t_CKVEC2 &)val ); }
 
 
 
@@ -1540,10 +1585,10 @@ t_CKINT Chuck_Array16::set( t_CKINT i, const t_CKCOMPLEX & val )
 // name: set()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::set( const string & key, const t_CKCOMPLEX & val )
+t_CKINT Chuck_Array16::set( const string & key, const t_CKVEC2 & val )
 {
     // 1.3.1.1: removed this
-    // map<string, t_CKCOMPLEX>::iterator iter = m_map.find( key );
+    // map<string, t_CKVEC2>::iterator iter = m_map.find( key );
 
     // 1.3.5.3: removed this
     // if( val.re == 0 && val.im == 0 ) m_map.erase( key ); else
@@ -1552,6 +1597,9 @@ t_CKINT Chuck_Array16::set( const string & key, const t_CKCOMPLEX & val )
     // return good
     return 1;
 }
+// redirect as vec2
+t_CKINT Chuck_Array16::set( const string & key, const t_CKCOMPLEX & val )
+{ return this->set( key, (t_CKVEC2 &)val ); }
 
 
 
@@ -1560,7 +1608,7 @@ t_CKINT Chuck_Array16::set( const string & key, const t_CKCOMPLEX & val )
 // name: insert() | 1.5.0.8 (ge) added
 // desc: insert before position | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::insert( t_CKINT i, const t_CKCOMPLEX & val )
+t_CKINT Chuck_Array16::insert( t_CKINT i, const t_CKVEC2 & val )
 {
     // bound check
     if( i < 0 || i >= m_vector.capacity() )
@@ -1603,7 +1651,7 @@ t_CKINT Chuck_Array16::map_erase( const string & key )
 // name: push_back()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::push_back( const t_CKCOMPLEX & val )
+t_CKINT Chuck_Array16::push_back( const t_CKVEC2 & val )
 {
     // add to vector
     m_vector.push_back( val );
@@ -1625,8 +1673,8 @@ t_CKINT Chuck_Array16::pop_back( )
         return 0;
 
     // zero
-    m_vector[m_vector.size()-1].re = 0.0;
-    m_vector[m_vector.size()-1].im = 0.0;
+    m_vector[m_vector.size()-1].x = 0;
+    m_vector[m_vector.size()-1].y = 0;
     // add to vector
     m_vector.pop_back();
 
@@ -1640,7 +1688,7 @@ t_CKINT Chuck_Array16::pop_back( )
 // name: push_front() | 1.5.0.8 (ge) added
 // desc: prepend element by value | O(n) running time
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::push_front( const t_CKCOMPLEX & val )
+t_CKINT Chuck_Array16::push_front( const t_CKVEC2 & val )
 {
     // add to vector
     m_vector.insert( m_vector.begin(), val );
@@ -1723,7 +1771,7 @@ void Chuck_Array16::get_keys( std::vector<std::string> & keys )
     // clear the return array
     keys.clear();
     // iterator
-    for( std::map<std::string,t_CKCOMPLEX>::iterator iter = m_map.begin(); iter !=m_map.end(); iter++ )
+    for( std::map<std::string,t_CKVEC2>::iterator iter = m_map.begin(); iter !=m_map.end(); iter++ )
     {
         // add to list
         keys.push_back((*iter).first);
@@ -1761,7 +1809,7 @@ void Chuck_Array16::shuffle()
 // name: ck_compare_polar()
 // desc: compare function for sorting chuck polar values
 //-----------------------------------------------------------------------------
-static bool ck_compare_polar( const t_CKCOMPLEX & lhs, const t_CKCOMPLEX & rhs )
+static bool ck_compare_polar( const t_CKVEC2 & lhs, const t_CKVEC2 & rhs )
 {
     // cast to polar
     const t_CKPOLAR * pL = (const t_CKPOLAR *)&lhs;
@@ -1774,6 +1822,29 @@ static bool ck_compare_polar( const t_CKCOMPLEX & lhs, const t_CKCOMPLEX & rhs )
     if( x == y ) {
         // compare phase
         return pL->phase < pR->phase;
+    }
+    // return magnitude comparison
+    return x < y;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ck_compare_vec2()
+// desc: compare function for sorting chuck vec2 values
+//-----------------------------------------------------------------------------
+static bool ck_compare_vec2( const t_CKVEC2 & lhs, const t_CKVEC2 & rhs )
+{
+    // compare magnitude first
+    t_CKFLOAT x = ck_vec2_magnitude(lhs);
+    t_CKFLOAT y = ck_vec2_magnitude(rhs);
+    // if magnitude equal
+    if( x == y ) {
+        // compare phase
+        t_CKFLOAT xp = ck_vec2_phase(lhs);
+        t_CKFLOAT yp = ck_vec2_phase(rhs);
+        return xp < yp;
     }
     // return magnitude comparison
     return x < y;
@@ -1819,7 +1890,7 @@ void Chuck_Array16::sort()
     if( m_isPolarType )
         std::sort( m_vector.begin(), m_vector.end(), ck_compare_polar );
     else
-        std::sort( m_vector.begin(), m_vector.end(), ck_compare_complex );
+        std::sort( m_vector.begin(), m_vector.end(), ck_compare_vec2 );
 }
 
 
@@ -1829,7 +1900,7 @@ void Chuck_Array16::sort()
 // name: back()
 // desc: ...
 //-----------------------------------------------------------------------------
-t_CKINT Chuck_Array16::back( t_CKCOMPLEX * val ) const
+t_CKINT Chuck_Array16::back( t_CKVEC2 * val ) const
 {
     // check
     if( m_vector.size() == 0 )
@@ -1924,8 +1995,8 @@ void Chuck_Array16::zero( t_CKUINT start, t_CKUINT end )
     for( t_CKUINT i = start; i < end; i++ )
     {
         // zero
-        m_vector[i].re = 0.0;
-        m_vector[i].im = 0.0;
+        m_vector[i].x = 0;
+        m_vector[i].y = 0;
     }
 }
 
@@ -2919,6 +2990,7 @@ void Chuck_Array32::sort()
 
 // Chuck_Event static instantiation
 t_CKUINT Chuck_Event::our_can_wait = 0;
+t_CKUINT Chuck_Event::our_waiting_on = 0;
 
 //-----------------------------------------------------------------------------
 // name: signal_local()
@@ -3408,14 +3480,8 @@ void Chuck_Event::wait( Chuck_VM_Shred * shred, Chuck_VM * vm )
     // make sure the shred info matches the vm
     assert( shred->vm_ref == vm );
 
-    Chuck_DL_Return RETURN;
-    // get the member function
-    f_mfun canwaitplease = (f_mfun)this->vtable->funcs[our_can_wait]->code->native_func;
-    // TODO: check this is right shred
-    // added 1.3.0.0: the DL API instance
-    canwaitplease( this, NULL, &RETURN, vm, shred, Chuck_DL_Api::Api::instance() );
-    // RETURN.v_int = 1;
-
+    // invoke virtual function our_can_wait | 1.5.1.5
+    Chuck_DL_Return RETURN = ck_invoke_mfun_immediate_mode( this, our_can_wait, vm, shred, NULL, 0 );
     // see if we can wait
     if( RETURN.v_int )
     {
@@ -3442,6 +3508,12 @@ void Chuck_Event::wait( Chuck_VM_Shred * shred, Chuck_VM * vm )
 
         // add shred to shreduler
         vm->shreduler()->add_blocked( shred );
+
+        // invoke virtual function our_waiting_on | 1.5.1.5 (ge & andrew)
+        // this is called at the point when a shred has completed the actions
+        // needed to wait on an Event, and can be notified/broadcasted from
+        // a different thread
+        ck_invoke_mfun_immediate_mode( this, our_waiting_on, vm, shred, NULL, 0 );
     }
     else // can't wait
     {

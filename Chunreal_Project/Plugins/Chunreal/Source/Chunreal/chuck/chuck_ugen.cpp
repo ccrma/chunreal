@@ -212,7 +212,6 @@ void Chuck_UGen::init()
     m_sum_v = NULL;
     m_current_v = NULL;
 
-    shred = NULL;
     owner = NULL;
 
     // what a hack
@@ -239,8 +238,8 @@ void Chuck_UGen::init()
 //-----------------------------------------------------------------------------
 void Chuck_UGen::done()
 {
-    if( this->shred )
-        shred->remove( this );
+    if( this->origin_shred )
+        origin_shred->remove( this );
 
     assert( this->m_ref_count == 0 );
 
@@ -972,7 +971,7 @@ t_CKBOOL Chuck_UGen::system_tick( t_CKTIME now )
 
         if( m_op > 0 ) // UGEN_OP_TICK
         {
-            m_valid = tickf( this, m_multi_in_v, m_multi_out_v, 1, Chuck_DL_Api::Api::instance() );
+            m_valid = tickf( this, m_multi_in_v, m_multi_out_v, 1, Chuck_DL_Api::instance() );
 
             if( !m_valid ) memset( m_multi_out_v, 0, sizeof(SAMPLE)*m_multi_chan_size );
 
@@ -1029,9 +1028,9 @@ t_CKBOOL Chuck_UGen::system_tick( t_CKTIME now )
 
         if( m_op > 0 ) // UGEN_OP_TICK
         {
-            // tick the ugen (Chuck_DL_Api::Api::instance() added 1.3.0.0)
+            // tick the ugen (Chuck_DL_Api::instance() added 1.3.0.0)
             // REFACTOR-2017: removed NULL shred (ticks aren't outside shred)
-            if( tick ) m_valid = tick( this, m_sum, &m_current, Chuck_DL_Api::Api::instance() );
+            if( tick ) m_valid = tick( this, m_sum, &m_current, Chuck_DL_Api::instance() );
             if( !m_valid ) m_current = 0.0f;
             // apply gain and pan
             m_current *= m_gain * m_pan;
@@ -1182,7 +1181,7 @@ t_CKBOOL Chuck_UGen::system_tick_v( t_CKTIME now, t_CKUINT numFrames )
         {
             // compute samples with tickf
             // REFACTOR-2017: remove NULL shred
-            m_valid = tickf( this, m_multi_in_v, m_multi_out_v, numFrames, Chuck_DL_Api::Api::instance() );
+            m_valid = tickf( this, m_multi_in_v, m_multi_out_v, numFrames, Chuck_DL_Api::instance() );
 
             // zero samples if not valid
             if( !m_valid ) memset( m_multi_out_v, 0, sizeof(SAMPLE) * m_multi_chan_size * numFrames );
@@ -1258,10 +1257,10 @@ t_CKBOOL Chuck_UGen::system_tick_v( t_CKTIME now, t_CKUINT numFrames )
         // evaluate single-channel tick
         if( m_op > 0 )  // UGEN_OP_TICK
         {
-            // tick the ugen (Chuck_DL_Api::Api::instance() added 1.3.0.0)
+            // tick the ugen (Chuck_DL_Api::instance() added 1.3.0.0)
             if( tick )
                 for( j = 0; j < numFrames; j++ ) // REFACTOR-2017: remove NULL shred
-                    m_valid = tick( this, m_sum_v[j], &(m_current_v[j]), Chuck_DL_Api::Api::instance() );
+                    m_valid = tick( this, m_sum_v[j], &(m_current_v[j]), Chuck_DL_Api::instance() );
             if( !m_valid )
                 for( j = 0; j < numFrames; j++ )
                     m_current_v[j] = 0.0f;
@@ -1322,7 +1321,7 @@ void Chuck_UGen::init_subgraph()
     Chuck_Object * obj = NULL;
 
     // instantiate object for inlet
-    obj = instantiate_and_initialize_object( this->shred->vm_ref->env()->ckt_ugen, this->shred );
+    obj = instantiate_and_initialize_object( this->origin_shred->vm_ref->env()->ckt_ugen, this->origin_shred );
     // set as inlet
     m_inlet = (Chuck_UGen *)obj;
     // additional reference count
@@ -1333,7 +1332,7 @@ void Chuck_UGen::init_subgraph()
     this->add_ref();
 
     // instantiate object for outlet
-    obj = instantiate_and_initialize_object( this->shred->vm_ref->env()->ckt_ugen, this->shred );
+    obj = instantiate_and_initialize_object( this->origin_shred->vm_ref->env()->ckt_ugen, this->origin_shred );
     // set as outlet
     m_outlet = (Chuck_UGen *)obj;
     // additional reference count
@@ -1545,9 +1544,9 @@ t_CKBOOL Chuck_UAna::system_tock( t_CKTIME now )
 
     if( m_op > 0 )  // UGEN_OP_TOCK
     {
-        // tock the uana (Chuck_DL_Api::Api::instance() added 1.3.0.0)
+        // tock the uana (Chuck_DL_Api::instance() added 1.3.0.0)
         // REFACTOR-2017: remove NULL shred
-        if( tock ) m_valid = tock( this, this, blobProxy(), Chuck_DL_Api::Api::instance() );
+        if( tock ) m_valid = tock( this, this, blobProxy(), Chuck_DL_Api::instance() );
         if( !m_valid ) { /* clear out blob? */ }
         // timestamp the blob
         blobProxy()->when() = now;
@@ -1579,7 +1578,7 @@ t_CKBOOL Chuck_UAna::system_tock( t_CKTIME now )
 t_CKINT ugen_generic_num_in( Chuck_Object * obj, t_CKBOOL isArray )
 {
     if(isArray)
-        return ((Chuck_Array4 *) obj)->size();
+        return ((Chuck_ArrayInt *) obj)->size();
     else
         return ((Chuck_UGen *) obj)->m_num_ins;
 }
@@ -1594,7 +1593,7 @@ Chuck_UGen *ugen_generic_get_src( Chuck_Object * obj, t_CKINT chan, t_CKBOOL isA
 {
     if( isArray )
     {
-        Chuck_Array4 *arr = (Chuck_Array4 *) obj;
+        Chuck_ArrayInt *arr = (Chuck_ArrayInt *) obj;
         Chuck_UGen *src = NULL;
         arr->get( chan%arr->size(), (t_CKUINT *) &src );
         return src;
@@ -1615,9 +1614,9 @@ Chuck_UGen *ugen_generic_get_dst( Chuck_Object * obj, t_CKINT chan, t_CKBOOL isA
 {
     if( isArray )
     {
-        Chuck_Array4 *arr = (Chuck_Array4 *) obj;
+        Chuck_ArrayInt *arr = (Chuck_ArrayInt *) obj;
         Chuck_UGen *dst = NULL;
-        ( (Chuck_Array4 *) obj )->get( chan%arr->size(), (t_CKUINT *) &dst );
+        ( (Chuck_ArrayInt *) obj )->get( chan%arr->size(), (t_CKUINT *) &dst );
         return dst;
     }
     else

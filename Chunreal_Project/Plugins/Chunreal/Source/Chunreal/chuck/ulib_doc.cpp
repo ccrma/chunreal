@@ -391,7 +391,7 @@ public:
 
         if(type->doc.size() > 0)
         {
-            std::string doc = capitalize(type->doc);
+            std::string doc = capitalize_and_periodize(type->doc);
             m_outputStr += "<p class=\"class_description\">" + doc + "<p>\n";
         }
         else
@@ -478,7 +478,7 @@ public:
         m_outputStr += "<span class=\"membername\">" + var->name + "</span></p>";
 
         if(var->doc.size() > 0)
-            m_outputStr += "<p class=\"member_description\">" + capitalize(var->doc) + "</p>\n";
+            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize(var->doc) + "</p>\n";
         else
             m_outputStr += "<p class=\"empty_member_description\">No description available</p>\n";
 
@@ -503,7 +503,7 @@ public:
         m_outputStr += "<span class=\"membername\">" + var->name + "</span></p>";
 
         if(var->doc.size() > 0)
-            m_outputStr += "<p class=\"member_description\">" + capitalize(var->doc) + "</p>\n";
+            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize(var->doc) + "</p>\n";
         else
             m_outputStr += "<p class=\"empty_member_description\">No description available</p>\n";
 
@@ -537,7 +537,7 @@ public:
         m_outputStr += ")</p>\n";
 
         if(m_func->doc.size() > 0)
-            m_outputStr += "<p class=\"member_description\">" + capitalize(m_func->doc) + "</p>\n";
+            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize(m_func->doc) + "</p>\n";
         else
             m_outputStr += "<p class=\"empty_member_description\">No description available</p>\n";
 
@@ -573,7 +573,7 @@ public:
         m_outputStr += ")</p>\n";
 
         if(m_func->doc.size() > 0)
-            m_outputStr += "<p class=\"member_description\">" + capitalize(m_func->doc) + "</p>\n";
+            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize(m_func->doc) + "</p>\n";
         else
             m_outputStr += "<p class=\"empty_member_description\">No description available</p>\n";
 
@@ -1377,7 +1377,7 @@ CK_DLL_DTOR( CKDoc_dtor )
 CK_DLL_MFUN( CKDoc_addGroup_type )
 {
     CKDoc * ckdoc = (CKDoc *)OBJ_MEMBER_UINT(SELF, CKDoc_offset_data);
-    Chuck_Array4 * typeArray = (Chuck_Array4 *)GET_NEXT_OBJECT(ARGS);
+    Chuck_ArrayInt * typeArray = (Chuck_ArrayInt *)GET_NEXT_OBJECT(ARGS);
     Chuck_String * groupName = GET_NEXT_STRING(ARGS);
     Chuck_String * shortName = GET_NEXT_STRING(ARGS);
     Chuck_String * description = GET_NEXT_STRING(ARGS);
@@ -1430,7 +1430,7 @@ error:
 CK_DLL_MFUN( CKDoc_addGroup_str )
 {
     CKDoc * ckdoc = (CKDoc *)OBJ_MEMBER_UINT(SELF, CKDoc_offset_data);
-    Chuck_Array4 * strArray = (Chuck_Array4 *)GET_NEXT_OBJECT(ARGS);
+    Chuck_ArrayInt * strArray = (Chuck_ArrayInt *)GET_NEXT_OBJECT(ARGS);
     Chuck_String * groupName = GET_NEXT_STRING(ARGS);
     Chuck_String * shortName = GET_NEXT_STRING(ARGS);
     Chuck_String * desc = GET_NEXT_STRING(ARGS);
@@ -1560,7 +1560,7 @@ CK_DLL_MFUN( CKDoc_genGroups )
 {
     CKDoc * ckdoc = (CKDoc *)OBJ_MEMBER_UINT(SELF, CKDoc_offset_data);
     // the return array
-    Chuck_Array4 * strArray = (Chuck_Array4 *)GET_NEXT_OBJECT(ARGS);
+    Chuck_ArrayInt * strArray = (Chuck_ArrayInt *)GET_NEXT_OBJECT(ARGS);
     // the c++ return vector
     vector<string> results;
     // gen the groups

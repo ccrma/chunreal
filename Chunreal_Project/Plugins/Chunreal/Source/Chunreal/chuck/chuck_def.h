@@ -84,6 +84,7 @@ typedef struct { t_CKFLOAT re ; t_CKFLOAT im ; } t_CKCOMPLEX;
 typedef struct { t_CKFLOAT modulus ; t_CKFLOAT phase ; } t_CKPOLAR;
 
 // vector types
+typedef struct { t_CKFLOAT x ; t_CKFLOAT y ; } t_CKVEC2;
 typedef struct { t_CKFLOAT x ; t_CKFLOAT y ; t_CKFLOAT z ; } t_CKVEC3;
 typedef struct { t_CKFLOAT x ; t_CKFLOAT y ; t_CKFLOAT z ; t_CKFLOAT w ; } t_CKVEC4;
 typedef struct { t_CKUINT N ; t_CKFLOAT * values ; } t_CKVECTOR;
@@ -101,6 +102,7 @@ typedef struct { t_CKUINT N ; t_CKFLOAT * values ; } t_CKVECTOR;
 #define sz_VOIDPTR                  sizeof(t_CKVOIDPTR)
 #define sz_COMPLEX                  sizeof(t_CKCOMPLEX)
 #define sz_POLAR                    sizeof(t_CKPOLAR)
+#define sz_VEC2                     sizeof(t_CKVEC2)
 #define sz_VEC3                     sizeof(t_CKVEC3)
 #define sz_VEC4                     sizeof(t_CKVEC4)
 #define sz_VECTOR                   sizeof(t_CKVECTOR)
@@ -109,12 +111,15 @@ typedef struct { t_CKUINT N ; t_CKFLOAT * values ; } t_CKVECTOR;
 
 // kinds (added 1.3.1.0 to faciliate 64-bit support)
 // to differentiate in case int and float have same size
-#define kindof_VOID                 0
-#define kindof_INT                  1
-#define kindof_FLOAT                2
-#define kindof_COMPLEX              3
-#define kindof_VEC3                 4
-#define kindof_VEC4                 5
+enum te_KindOf
+{
+    kindof_VOID = 0,
+    kindof_INT,
+    kindof_FLOAT,
+    kindof_VEC2, // 1.5.1.7 (ge) was kindof_COMPLEX
+    kindof_VEC3,
+    kindof_VEC4
+};
 
 typedef char *                      c_str;
 typedef const char *                c_constr;
@@ -158,14 +163,14 @@ typedef struct { SAMPLE re ; SAMPLE im ; } t_CKCOMPLEX_SAMPLE;
 #define CK_SQRT2                    (1.41421356237309504880)
 
 // macro for cleaning up: tests for NULL before and sets to NULL after
-#define CK_SAFE_DELETE(x)           do { if(x){ delete x; x = NULL; } } while(0)
-#define CK_SAFE_DELETE_ARRAY(x)     do { if(x){ delete [] x; x = NULL; } } while(0)
-#define CK_SAFE_RELEASE(x)          do { if(x){ x->release(); x = NULL; } } while(0)
-#define CK_SAFE_ADD_REF(x)          do { if(x){ x->add_ref(); } } while(0)
+#define CK_SAFE_DELETE(x)           do { if(x){ delete (x); (x) = NULL; } } while(0)
+#define CK_SAFE_DELETE_ARRAY(x)     do { if(x){ delete [] (x); (x) = NULL; } } while(0)
+#define CK_SAFE_RELEASE(x)          do { if(x){ (x)->release(); (x) = NULL; } } while(0)
+#define CK_SAFE_ADD_REF(x)          do { if(x){ (x)->add_ref(); } } while(0)
 // NOTE the ref assign accounts for the case that lhs == rhs and the reference==1: add BEFORE release
-#define CK_SAFE_REF_ASSIGN(lhs,rhs) do { Chuck_VM_Object * temp = lhs; (lhs) = (rhs); CK_SAFE_ADD_REF(lhs); CK_SAFE_RELEASE(temp); } while(0)
-#define CK_SAFE_FREE(x)             do { if(x){ free(x); x = NULL; } } while(0)
-#define CK_SAFE_UNLOCK_DELETE(x)    do { if(x){ x->unlock(); delete x; x = NULL; } } while(0)
+#define CK_SAFE_REF_ASSIGN(lhs,rhs) do { Chuck_VM_Object * temp = (lhs); (lhs) = (rhs); CK_SAFE_ADD_REF(lhs); CK_SAFE_RELEASE(temp); } while(0)
+#define CK_SAFE_FREE(x)             do { if(x){ free(x); (x) = NULL; } } while(0)
+#define CK_SAFE_UNLOCK_DELETE(x)    do { if(x){ (x)->unlock(); delete (x); (x) = NULL; } } while(0)
 
 // max + min
 #define ck_max(x,y)                 ( (x) >= (y) ? (x) : (y) )
@@ -331,7 +336,6 @@ typedef struct { SAMPLE re ; SAMPLE im ; } t_CKCOMPLEX_SAMPLE;
 #define __DISABLE_RAW__
 #define __DISABLE_KBHIT__
 #define __DISABLE_PROMPTER__
-#define __DISABLE_RTAUDIO__
 #define __DISABLE_OTF_SERVER__
 #define __ALTER_HID__
 #define __ALTER_ENTRY_POINT__
