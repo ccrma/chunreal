@@ -75,4 +75,4 @@ Multiple ChuckMain nodes can be chained in a MetaSound source and can interact w
 
 
 ## ChucK Community
-Join us! [ChucK Community Discord](https://discord.gg/ENr3nurrx8) | [ChucK-users Mailing list](https://lists.cs.princeton.edu/mailman/listinfo/chuck-users)
+Join us!! [ChucK Community Discord](https://discord.gg/ENr3nurrx8) | [ChucK-users Mailing list](https://lists.cs.princeton.edu/mailman/listinfo/chuck-users)
