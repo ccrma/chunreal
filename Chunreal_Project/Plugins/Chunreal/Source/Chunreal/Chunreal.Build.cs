@@ -24,7 +24,7 @@ public class Chunreal : ModuleRules
         PublicDefinitions.Add("__DISABLE_WORDEXP__");
         PublicDefinitions.Add("__ALTER_HID__");
         PublicDefinitions.Add("YY_NO_UNISTD_H");
-        PublicDefinitions.Add("__DISABLE_SNDBUF__");
+        //PublicDefinitions.Add("__DISABLE_SNDBUF__");
         PublicDefinitions.Add("__DISABLE_REGEX__");
 
         PublicDefinitions.Add("__CHUNREAL_ENGINE__");
