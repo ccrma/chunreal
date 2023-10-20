@@ -26,6 +26,7 @@ public class Chunreal : ModuleRules
         PublicDefinitions.Add("YY_NO_UNISTD_H");
         //PublicDefinitions.Add("__DISABLE_SNDBUF__");
         PublicDefinitions.Add("__DISABLE_REGEX__");
+	PublicDefinitions.Add("__USE_CHUCK_YACC__");
 
         PublicDefinitions.Add("__CHUNREAL_ENGINE__");
 
