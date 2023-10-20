@@ -51,6 +51,9 @@
 //-----------------------------------------------------------------------------
 
 #pragma warning(disable : 4668)
+#ifdef __clang__
+#pragma clang diagnostic ignored "-Wundef"
+#endif
 
 #ifndef __UTIL_SNDFILE_H__
 #define __UTIL_SNDFILE_H__
