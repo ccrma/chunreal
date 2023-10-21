@@ -6,7 +6,6 @@ Developed by [Eito Murakami](https://ccrma.stanford.edu/~eitom) and [Ge Wang](ht
 
 
 ## Template Project
-**_Chunreal has been tested on Windows 10 and 11 only. We are working on cross-platform compatibility!_**
 
 This git repository hosts a template Unreal Engine 5.2 project that includes example scenes, Blueprints, MetaSound sources, and materials. Clone or fork the repository and generate Visual Studio project files. 
 If this is your first time compiling a Unreal Engine project, set up your IDE by following these tutorials:
