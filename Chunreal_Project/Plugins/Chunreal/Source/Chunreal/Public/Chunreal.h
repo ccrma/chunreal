@@ -27,6 +27,11 @@ public:
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
 
+    //Get ChucK sample rate
+    static int GetChuckSampleRate();
+    //Set ChucK sample rate
+    static void SetChuckSampleRate(int sampleRate);
+    
     //static function to output custom log
     static void Log(FString message);
 
@@ -36,7 +41,7 @@ public:
     //Store and Remove ChucK ref
     static bool StoreChuckRef(ChucK* chuck, FString id);
     static bool RemoveChuckRef(FString id);
-
+    
     //Global int
     static int GetChuckGlobalInt(FString id, FString paramName);
     static bool SetChuckGlobalInt(FString id, FString paramName, int val);
@@ -51,5 +56,6 @@ public:
     //TODO-global arrays & event listener
 
 private:
+    inline static int chuckSampleRate = 44100;
     inline static TMap<FString, ChucK*> ChuckMap;
 };

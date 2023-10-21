@@ -33,7 +33,7 @@ namespace Metasound
         theChuck = new ChucK();
 
         //Initialize Chuck params
-        theChuck->setParam(CHUCK_PARAM_SAMPLE_RATE, 44100);
+        theChuck->setParam(CHUCK_PARAM_SAMPLE_RATE, FChunrealModule::GetChuckSampleRate());
         theChuck->setParam(CHUCK_PARAM_INPUT_CHANNELS, 2);
         theChuck->setParam(CHUCK_PARAM_OUTPUT_CHANNELS, 2);
         theChuck->setParam(CHUCK_PARAM_VM_ADAPTIVE, 0);

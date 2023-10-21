@@ -10,6 +10,18 @@
 
 #include "ChunrealBlueprint.h"
 
+//Get ChucK sample rate
+int UChunrealBlueprint::GetChuckSampleRate()
+{
+    return FChunrealModule::GetChuckSampleRate();
+}
+
+//Set ChucK sample rate
+void UChunrealBlueprint::SetChuckSampleRate(int sampleRate)
+{
+    FChunrealModule::SetChuckSampleRate(sampleRate);
+}
+
 //Read file
 bool UChunrealBlueprint::ReadFile(FString filepath, FString& text)
 {

@@ -28,6 +28,18 @@ void FChunrealModule::ShutdownModule()
 {
 }
 
+//Get ChucK sample rate
+int FChunrealModule::GetChuckSampleRate()
+{
+    return chuckSampleRate;
+}
+
+//Set ChucK sample rate
+void FChunrealModule::SetChuckSampleRate(int sampleRate)
+{
+    chuckSampleRate = sampleRate;
+}
+
 //static function to output custom log
 void FChunrealModule::Log(FString message)
 {
