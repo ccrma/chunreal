@@ -747,7 +747,7 @@ public:
   //! Return the value which will be output by the next call to tick().
   /*!
     This method is valid only for delay settings greater than zero!
-    [VERSION #] Removed const because derived DelayL impl is non-const and the alternative is a virtual function shadowing warning that escalates to a compile error in Chunreal
+    [VERSION #] Removed const qualification because derived class signatures are non-const, and lcean overrides prevent compiler warnings.
    */
   virtual MY_FLOAT nextOut(void);
 
@@ -822,7 +822,7 @@ public:
   /*!
     This method is valid only for delay settings greater than zero!
    */
-  virtual MY_FLOAT nextOut(void);
+  MY_FLOAT nextOut(void) override;
 
   //! Input one sample to the delay-line and return one output.
   MY_FLOAT tick(MY_FLOAT sample);
@@ -2487,7 +2487,7 @@ public:
   /*!
     This method is valid only for delay settings greater than zero!
    */
-  MY_FLOAT nextOut(void);
+  MY_FLOAT nextOut(void) override;
 
   //! Input one sample to the delay-line and return one output.
   MY_FLOAT tick(MY_FLOAT sample);
