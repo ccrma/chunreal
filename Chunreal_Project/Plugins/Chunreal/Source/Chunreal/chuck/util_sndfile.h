@@ -50,7 +50,7 @@
 // libsndfile: Erik de Castro Lopo (erikd@mega-nerd.com)
 //-----------------------------------------------------------------------------
 
-#pragma warning(disable : 4668)
+#pragma warning(disable : 4668)  // -Wundef
 #ifdef __clang__
 #pragma clang diagnostic ignored "-Wundef"
 #endif

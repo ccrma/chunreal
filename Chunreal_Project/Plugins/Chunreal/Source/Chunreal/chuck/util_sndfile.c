@@ -49,9 +49,6 @@
 //          Ari Lazier (alazier@alumni.princeton.edu)
 // libsndfile: Erik de Castro Lopo (erikd@mega-nerd.com)
 //-----------------------------------------------------------------------------
-
-#pragma warning(disable : 4668)
-
 #include "util_sndfile.h"
 #include "chuck_def.h"
 #include <math.h>
@@ -1421,8 +1418,8 @@ aiff_write_strings (SF_PRIVATE *psf, int location)
 static int
 aiff_command (SF_PRIVATE *psf, int command, void *data, int datasize)
 {
-	/* Avoid compiler warnings. */
 #ifndef __CHUNREAL_ENGINE__
+	/* Avoid compiler warnings. */
 	psf = psf ;
 	data = data ;
 	datasize = datasize ;
@@ -5304,7 +5301,7 @@ static sf_count_t
 dither_read_short (SF_PRIVATE *psf, short *ptr, sf_count_t len)
 {
 #ifndef __CHUNREAL_ENGINE__
-    psf = psf ;
+	psf = psf ;
 	ptr = ptr ;
 #endif
 	return len ;
@@ -5314,7 +5311,7 @@ static sf_count_t
 dither_read_int (SF_PRIVATE *psf, int *ptr, sf_count_t len)
 {
 #ifndef __CHUNREAL_ENGINE__
-    psf = psf ;
+	psf = psf ;
 	ptr = ptr ;
 #endif
 	return len ;
@@ -14045,7 +14042,7 @@ static sf_count_t
 interleave_seek	(SF_PRIVATE *psf, int mode, sf_count_t samples_from_start)
 {
 #ifndef __CHUNREAL_ENGINE__
-    psf = psf ;	mode = mode ;
+	psf = psf ;	mode = mode ;
 #endif
 
 	/*
