@@ -4226,7 +4226,7 @@ void Chuck_Instr_Pre_Constructor::execute( Chuck_VM * vm, Chuck_VM_Shred * shred
 
 //-----------------------------------------------------------------------------
 // name: instantiate_object()
-// desc: ...
+// desc: instantiate Object including data and virtual table
 //-----------------------------------------------------------------------------
 t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_Shred * shred, Chuck_VM * vm, t_CKBOOL setShredOrigin )
 {
@@ -4239,20 +4239,8 @@ t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_S
 
     // REFACTOR-2017: added | 1.5.1.5 (ge & andrew) moved here from instantiate_...
     object->setOriginVM( vm );
-    // check if origin shred is available | 1.5.1.5 (ge)
-    if( shred )
-    {
-        // set the origin shred only in specific cases...
-        // UGens: needs shred for auto-disconnect when shred is removed
-        // user-defined classes (that refer to global-scope variables):
-        // ...needs shred to access the global-scope variables across sporking
-        // setShredOrigin: if true, this is likely a registered callback_on_instantiate
-        if( type->ugen_info || type->originHint == te_originUserDefined || setShredOrigin )
-        {
-            // set origin shred | 1.5.1.5 (ge) was: ugen->shred = shred;
-            object->setOriginShred( shred );
-        }
-    }
+    // set origin shred for non-ugens | 1.5.1.5 (ge & andrew) moved here from instantiate_...
+    if( !type->ugen_info && setShredOrigin ) object->setOriginShred( shred );
 
     // allocate virtual table
     object->vtable = new Chuck_VTable;
@@ -4281,8 +4269,15 @@ t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_S
     {
         // ugen
         Chuck_UGen * ugen = (Chuck_UGen *)object;
-        // add ugen to shred | 1.5.1.5 (ge & andrew) moved from instantiate_and_initialize_object()
-        if( shred ) shred->add( ugen );
+        // UGens: needs shred for auto-disconnect when shred is removed
+        // 1.5.1.5 (ge & andrew) moved from instantiate_and_initialize_object()
+        if( shred )
+        {
+            // add ugen to shred (ref-counted)
+            shred->add( ugen );
+            // add shred to ugen (ref-counted) | 1.5.1.5 (ge) was: ugen->shred = shred;
+            object->setOriginShred( shred );
+        }
         // set tick
         if( type->ugen_info->tick ) ugen->tick = type->ugen_info->tick;
         // added 1.3.0.0 -- tickf for multi-channel tick
@@ -4465,7 +4460,7 @@ error:
 
 //-----------------------------------------------------------------------------
 // name: instantiate_object()
-// desc: ...
+// desc: instantiate a object, push its pointer on reg stack
 //-----------------------------------------------------------------------------
 inline void instantiate_object( Chuck_VM * vm, Chuck_VM_Shred * shred,
                                 Chuck_Type * type )
@@ -5579,6 +5574,37 @@ void Chuck_Instr_Func_Return::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 
 
 //-----------------------------------------------------------------------------
+// name: Chuck_Instr_Stmt_Start()
+// desc: constructor
+//-----------------------------------------------------------------------------
+Chuck_Instr_Stmt_Start::Chuck_Instr_Stmt_Start( t_CKUINT numObjReleases )
+{
+    m_nextOffset = 0;
+    m_numObjReleases = numObjReleases;
+    m_stackLevel = 0;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ~Chuck_Instr_Stmt_Start()
+// desc: destructor
+//-----------------------------------------------------------------------------
+Chuck_Instr_Stmt_Start::~Chuck_Instr_Stmt_Start()
+{
+    // drain stack
+    while( m_stack.size() )
+    {
+        CK_SAFE_DELETE_ARRAY( m_stack.back() );
+        m_stack.pop_back();
+    }
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: params()
 // desc: for instruction dumps
 //-----------------------------------------------------------------------------
@@ -5602,19 +5628,22 @@ void Chuck_Instr_Stmt_Start::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     // if nothing to push, no op
     if( !m_numObjReleases ) return;
 
-    // make room
-    if( !m_objectsToRelease )
-    {
-        // allocate for re-use
-        m_objectsToRelease = new t_CKUINT[m_numObjReleases];
-    }
+    // push level
+    m_stackLevel++;
 
-    // make room for all the object references to release
+    // see if using base cache
+    if( m_stackLevel == 1 && m_stack.size() == 1 ) return;
+
+    // make new region
+    t_CKUINT * region = new t_CKUINT[m_numObjReleases];
+    // zero out region
     for( t_CKUINT i = 0; i < m_numObjReleases; i++ )
     {
         // zero out
-        m_objectsToRelease[i] = 0;
+        region[i] = 0;
     }
+    // push onto stack
+    m_stack.push_back( region );
 }
 
 
@@ -5655,6 +5684,16 @@ t_CKBOOL Chuck_Instr_Stmt_Start::nextOffset( t_CKUINT & offset )
 t_CKBOOL Chuck_Instr_Stmt_Start::setObject( Chuck_VM_Object * object, t_CKUINT offset )
 {
     // check
+    if( m_stackLevel == 0 || m_stack.size() == 0 )
+    {
+        EM_exception(
+            "(internal error) region stack inconsistency in Stmt_Start.setObject(): level=%lu size=%lu",
+            m_stackLevel, (t_CKUINT)m_stack.size() );
+        // return
+        return FALSE;
+    }
+
+    // check
     if( offset >= m_numObjReleases )
     {
         EM_exception(
@@ -5664,8 +5703,10 @@ t_CKBOOL Chuck_Instr_Stmt_Start::setObject( Chuck_VM_Object * object, t_CKUINT o
         return FALSE;
     }
 
+    // region pointer
+    t_CKUINT * region = m_stack.back();
     // pointer arithmetic
-    t_CKUINT * pInt = m_objectsToRelease + offset;
+    t_CKUINT * pInt = region + offset;
 
     // release if not NULL; what was previously there is no-longer accessible
     // NOTE this could happen in the case of a loop:
@@ -5691,19 +5732,18 @@ t_CKBOOL Chuck_Instr_Stmt_Start::cleanupRefs( Chuck_VM_Shred * shred )
     // if nothing to push, no op
     if( !m_numObjReleases ) return TRUE;
 
-    // if no stack pointer
-    if( !m_objectsToRelease )
+    // check
+    if( m_stackLevel == 0 || m_stack.size() == 0 )
     {
-        // we have a problem
         EM_exception(
-            "(internal error) NULL data region in Stmt_Start.cleanupRef() on shred[id=%lu:%s]",
-            shred->xid, shred->name.c_str() );
-        // bail out
+            "(internal error) region stack inconsistency in Stmt_Start.cleanupRefs(): level=%lu size=%lu on shred[id=%lu:%s]",
+            m_stackLevel, (t_CKUINT)m_stack.size(), shred->xid, shred->name.c_str() );
+        // return
         return FALSE;
     }
 
     // cast pointer to data region as Object pointers
-    t_CKUINT * pInt = m_objectsToRelease;
+    t_CKUINT * pInt = m_stack.back();
 
     // make room for all the object references to release
     for( t_CKUINT i = 0; i < m_numObjReleases; i++ )
@@ -5712,8 +5752,21 @@ t_CKBOOL Chuck_Instr_Stmt_Start::cleanupRefs( Chuck_VM_Shred * shred )
         Chuck_VM_Object * object = (Chuck_VM_Object *)(*pInt);
         // release (could be NULL)
         CK_SAFE_RELEASE( object );
+        // zero out the region
+        *pInt = 0;
         // advance pointer
         pInt++;
+    }
+
+    // decrement stack level
+    m_stackLevel--;
+    // pop stack unless we are level 1
+    if( m_stack.size() > 1 )
+    {
+        // clean up
+        CK_SAFE_DELETE_ARRAY( m_stack.back() );
+        // pop
+        m_stack.pop_back();
     }
 
     return TRUE;
@@ -5746,6 +5799,9 @@ void Chuck_Instr_Stmt_Remember_Object::execute( Chuck_VM * vm, Chuck_VM_Shred * 
     // get stack pointer
     t_CKUINT * reg_sp = (t_CKUINT *)shred->reg->sp;
     Chuck_VM_Object * obj = (Chuck_VM_Object *)(*(reg_sp-1));
+
+    // add-ref for certain expressions (e.g., 'new Object;`)
+    if( m_addRef ) CK_SAFE_ADD_REF( obj );
 
     // check
     if( !m_stmtStart )
@@ -6266,12 +6322,16 @@ Chuck_Instr_Array_Alloc::~Chuck_Instr_Array_Alloc()
 // name: do_alloc_array()
 // desc: 1.3.1.0 -- changed size to kind
 //-----------------------------------------------------------------------------
-Chuck_Object * do_alloc_array( Chuck_VM * vm, // REFACTOR-2017: added
-                               Chuck_VM_Shred * shred, // 1.5.1.5 added
-                               t_CKINT * capacity, const t_CKINT * top,
-                               t_CKUINT kind, t_CKBOOL is_obj,
-                               t_CKUINT * objs, t_CKINT & index,
-                               Chuck_Type * type )
+Chuck_Object * do_alloc_array(
+    Chuck_VM * vm, // REFACTOR-2017: added
+    Chuck_VM_Shred * shred, // 1.5.1.5 added
+    t_CKINT * capacity,
+    const t_CKINT * top,
+    t_CKUINT kind,
+    t_CKBOOL is_obj,
+    t_CKUINT * objs,
+    t_CKINT & index,
+    Chuck_Type * type)
 {
     // not top level
     Chuck_ArrayInt * theBase = NULL;
@@ -6299,7 +6359,7 @@ Chuck_Object * do_alloc_array( Chuck_VM * vm, // REFACTOR-2017: added
                 for( i = 0; i < *capacity; i++ )
                 {
                     // add to array for later allocation
-                    objs[index++] = baseX->addr( i );
+                    objs[index++] = baseX->addr(i);
                 }
             }
 
@@ -6349,7 +6409,7 @@ Chuck_Object * do_alloc_array( Chuck_VM * vm, // REFACTOR-2017: added
         }
         else if( kind == kindof_VEC4 ) // 1.3.5.3
         {
-            Chuck_Array32 * baseX = new Chuck_Array32( *capacity );
+            Chuck_Array32* baseX = new Chuck_Array32( *capacity );
             if( !baseX ) goto out_of_memory;
 
             // initialize object | 1.5.0.0 (ge) use array type instead of base t_array
@@ -6365,7 +6425,7 @@ Chuck_Object * do_alloc_array( Chuck_VM * vm, // REFACTOR-2017: added
 
     // not top level
     theBase = new Chuck_ArrayInt( TRUE, *capacity );
-    if( !theBase) goto out_of_memory;
+    if( !theBase ) goto out_of_memory;
 
     // construct type for next array level | 1.5.0.0 (ge) added
     // TODO: look up in common array type pool before allocating
@@ -6385,7 +6445,7 @@ Chuck_Object * do_alloc_array( Chuck_VM * vm, // REFACTOR-2017: added
     for( i = 0; i < *capacity; i++ )
     {
         // the next | REFACTOR-2017: added vm
-        next = do_alloc_array( vm, shred, capacity+1, top, kind, is_obj, objs, index, typeNext );
+        next = do_alloc_array( vm, shred, capacity + 1, top, kind, is_obj, objs, index, typeNext );
         // error if NULL
         if( !next ) goto error;
         // set that, with ref count
@@ -6404,19 +6464,19 @@ Chuck_Object * do_alloc_array( Chuck_VM * vm, // REFACTOR-2017: added
 internal_error_array_depth:
     // we have a big problem
     EM_exception(
-        "(internal error) multi-dimensional array depth mismatch while allocating arrays..." );
+        "(internal error) multi-dimensional array depth mismatch while allocating arrays...");
     goto error;
 
 out_of_memory:
     // we have a problem
     EM_exception(
-        "OutOfMemory: while allocating arrays..." );
+        "OutOfMemory: while allocating arrays...");
     goto error;
 
 negative_array_size:
     // we have a problem
     EM_exception(
-        "NegativeArraySize: while allocating arrays..." );
+        "NegativeArraySize: while allocating arrays...");
     goto error;
 
 error:

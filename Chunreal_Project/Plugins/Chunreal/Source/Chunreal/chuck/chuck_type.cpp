@@ -706,13 +706,17 @@ t_CKBOOL type_engine_init( Chuck_Carrier * carrier )
 void type_engine_shutdown( Chuck_Carrier * carrier )
 {
     // log
-    EM_log( CK_LOG_SEVERE, "shutting down type checker..." );
+    EM_log( CK_LOG_SEVERE, "shutting down type system..." );
+    // push
+    EM_pushlog();
 
     // shut it down; this is system cleanup -- delete instead of release
     CK_SAFE_DELETE( carrier->env );
 
     // log
-    EM_log( CK_LOG_SEVERE, "type checker shutdown complete." );
+    EM_log( CK_LOG_SEVERE, "type system shutdown complete." );
+    // pop
+    EM_poplog();
 }
 
 
@@ -2467,6 +2471,15 @@ t_CKTYPE type_engine_check_op_overload_binary( Chuck_Env * env, ae_Operator op,
         return NULL;
     }
 
+    // get return type | 1.5.1.8 (ge & andrew) we are back
+    Chuck_Type * rtype  = binary->ck_overload_func->type();
+    // check if return type is an Obj
+    if( rtype && isobj( env, rtype ) && env->stmt_stack.size() )
+    {
+        // increment # of objects in this stmt that needs release
+        env->stmt_stack.back()->numObjsToRelease++;
+    }
+
     // the return type
     return binary->ck_overload_func->type();
 }
@@ -2502,6 +2515,15 @@ t_CKTYPE type_engine_check_op_overload_unary( Chuck_Env * env, ae_Operator op,
         return NULL;
     }
 
+    // get return type | 1.5.1.8 (ge & andrew) we are back
+    Chuck_Type * rtype  = unary->ck_overload_func->type();
+    // check if return type is an Obj
+    if( rtype && isobj( env, rtype ) && env->stmt_stack.size() )
+    {
+        // increment # of objects in this stmt that needs release
+        env->stmt_stack.back()->numObjsToRelease++;
+    }
+
     // the return type
     return unary->ck_overload_func->type();
 }
@@ -2535,6 +2557,15 @@ t_CKTYPE type_engine_check_op_overload_postfix( Chuck_Env * env, Chuck_Type * lh
             op2str( op ), lhs->c_name() );
         // done
         return NULL;
+    }
+
+    // get return type | 1.5.1.8 (ge & andrew) we are back
+    Chuck_Type * rtype  = postfix->ck_overload_func->type();
+    // check if return type is an Obj
+    if( rtype && isobj( env, rtype ) && env->stmt_stack.size() )
+    {
+        // increment # of objects in this stmt that needs release
+        env->stmt_stack.back()->numObjsToRelease++;
     }
 
     // the return type
@@ -3134,6 +3165,13 @@ t_CKTYPE type_engine_check_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
                 EM_error2( unary->where,
                     "cannot use 'new' on an individual object reference (@)" );
                 return NULL;
+            }
+
+            // check if return type is an Obj | 1.5.1.8
+            if( isobj( env, t ) && env->stmt_stack.size() )
+            {
+                // increment # of objects in this stmt that needs release
+                env->stmt_stack.back()->numObjsToRelease++;
             }
 
             // return the type
@@ -5269,12 +5307,45 @@ Chuck_Type * Chuck_Namespace::lookup_type( const string & theName, t_CKINT climb
 Chuck_Type * Chuck_Namespace::lookup_type( S_Symbol theName, t_CKINT climb,
                                            t_CKBOOL stayWithinClassDef )
 {
+    // remove arrays from name
+    int depth = 0;
+    S_Symbol oldName = theName;
+    std::string theNameStr = S_name(theName);
+
+    // parse for [] | 1.5.1.9
+    while( theNameStr.size() >= 2 && theNameStr.substr(theNameStr.size() - 2, 2) == "[]" )
+    {
+        depth++;
+        // remove "[]" from the name
+        theNameStr.pop_back();
+        theNameStr.pop_back();
+    }
+
+    // if this is an array, create an S_Symbol with only the base type
+    // (i.e. "int[]" becomes "int" | 1.5.1.9
+    if( depth )
+    {
+        theName = insert_symbol(theNameStr.c_str());
+    }
+
+    // find base type
     Chuck_Type * t = type.lookup( theName, climb );
     // respect stayWithinClassDef; check if we are in class def using pre_ctor
     t_CKBOOL keepGoing = ( this->pre_ctor && stayWithinClassDef ) == FALSE;
     // climb up to parent namespace
     if( climb > 0 && !t && parent && keepGoing )
-        return parent->lookup_type( theName, climb, stayWithinClassDef );
+        return parent->lookup_type( oldName, climb, stayWithinClassDef );
+
+    // if this is an array, create an array type and return that | 1.5.1.9
+    if( depth )
+    {
+        // base type
+        Chuck_Type * baseT = t;
+        // new array type
+        t = new_array_type(baseT->env(), baseT->env()->ckt_array, depth, baseT, baseT->env()->curr);
+    }
+
+    // return t
     return t;
 }
 
@@ -5450,7 +5521,7 @@ t_CKBOOL operator <=( const Chuck_Type & lhs, const Chuck_Type & rhs )
     }
 
     // if lhs is null and rhs is a object | removed 1.5.1.7?
-    if( (lhs == *(lhs.env_ref->ckt_null)) && (rhs <= *(rhs.env_ref->ckt_object)) ) return TRUE;
+    if( (lhs == *(lhs.env()->ckt_null)) && (rhs <= *(rhs.env()->ckt_object)) ) return TRUE;
 
     return FALSE;
 }
@@ -9048,6 +9119,33 @@ Chuck_Type * Chuck_Type::copy( Chuck_Env * env, Chuck_Context * context ) const
 
     // return new instance
     return n;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: env() | 1.5.1.8 (ge) added method, avoid direct variable access
+// desc: get env reference that contains this type
+//-----------------------------------------------------------------------------
+Chuck_Env * Chuck_Type::env() const
+{
+    return env_ref;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: vm() | 1.5.1.8 (ge) added method, avoid direct variable access
+// desc: get VM reference associated with this type (via the env)
+//-----------------------------------------------------------------------------
+Chuck_VM * Chuck_Type::vm() const
+{
+    // no env ref, no vm ref
+    if( !env_ref ) return NULL;
+    // return env vm ref
+    return env_ref->vm();
 }
 
 

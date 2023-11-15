@@ -16,9 +16,6 @@
 #include "Components/AudioComponent.h"
 #include "ChunrealBlueprint.generated.h"
 
-/**
- * 
- */
 UCLASS()
 class UChunrealBlueprint : public UBlueprintFunctionLibrary
 {
@@ -91,6 +88,6 @@ class UChunrealBlueprint : public UBlueprintFunctionLibrary
         * @param ID ChucK ID
         * @param paramName Name of the ChucK global event to broadcast
         */
-        UFUNCTION(BlueprintCallable, Category = "Chunreal", meta = (keywords = "Set ChucK String"))
+        UFUNCTION(BlueprintCallable, Category = "Chunreal", meta = (keywords = "Broadcast ChucK Event"))
             static bool BroadcastChuckGlobalEvent(FString id, FString paramName);
 };

@@ -9,7 +9,6 @@
 //-----------------------------------------------------------------------------
 
 #include "ChuckMainNode.h"
-#include "Chunreal/chuck/chuck_globals.h"
 
 #define LOCTEXT_NAMESPACE "Metasound_ChuckMainNode"
 
@@ -63,7 +62,7 @@ namespace Metasound
         if (!((FString)(**ID)).IsEmpty())
         {
             FChunrealModule::StoreChuckRef(theChuck, **ID);
-            FChunrealModule::Log(FString("Added ChucK ID: ") + **ID);
+            //FChunrealModule::Log(FString("Added ChucK ID: ") + **ID);
         }
     }
     FChuckMainOperator::~FChuckMainOperator()
@@ -72,7 +71,7 @@ namespace Metasound
         if (!((FString)(**ID)).IsEmpty())
         {
             FChunrealModule::RemoveChuckRef(**ID);
-            FChunrealModule::Log(FString("Removed ChucK ID: ") + **ID);
+            //FChunrealModule::Log(FString("Removed ChucK ID: ") + **ID);
         }
 
         //Delete allocated memory
@@ -132,23 +131,22 @@ namespace Metasound
         float* outBufferRight = AudioOutputRight->GetData();
         const int32 numSamples = AudioInputLeft->Num();
 
-        //Check Trigger & Run Chuck Code
+        //Run ChucK code
         if (trigger.IsTriggered())
         {
             if (hasSporkedOnce)
-            { 
+            {
                 Chuck_Msg* msg = new Chuck_Msg;
                 msg->type = 3;  //MSG_REMOVEALL
                 theChuck->vm()->process_msg(msg);
             }
             else
-            { 
+            {
                 hasSporkedOnce = true;
             }
-
-            theChuck->compileCode(TCHAR_TO_UTF8(**Code), "", 1);
+            FChunrealModule::CompileChuckCode(theChuck, TCHAR_TO_UTF8(**Code));
         }
-       
+
         //Make interleaved buffers
         if (!bufferInitialized)
         {
@@ -164,7 +162,7 @@ namespace Metasound
         }
 
         //Process samples by ChucK
-        theChuck->run((float*)inBufferInterleaved, outBufferInterleaved, numSamples);
+        FChunrealModule::RunChuck(theChuck, (float*)inBufferInterleaved, outBufferInterleaved, numSamples);
 
         //Retrive each output channel and apply volume multiplier
         for (int i = 0; i < numSamples; i++)

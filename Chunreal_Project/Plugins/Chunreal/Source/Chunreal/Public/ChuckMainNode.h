@@ -22,13 +22,13 @@ namespace Metasound
     namespace ChuckMainNode
     {
         METASOUND_PARAM(InParamNameTrigger, "Run Code", "Trigger to run Chuck code.")
-            METASOUND_PARAM(InParamNameCode, "Code", "Chuck code to run.")
-            METASOUND_PARAM(InParamNameID, "ID", "Unique ID assigned to ChucK")
-            METASOUND_PARAM(InParamNameAudioInputLeft, "Audio Input Left", "Audio input left.")
-            METASOUND_PARAM(InParamNameAudioInputRight, "Audio Input Right", "Audio input right.")
-            METASOUND_PARAM(InParamNameAmplitude, "Volume Multiplier", "Volume multiplier.")
-            METASOUND_PARAM(OutParamNameAudioOutputLeft, "Audio Output Left", "Audio output left.")
-            METASOUND_PARAM(OutParamNameAudioOutputRight, "Audio Output Right", "Audio output right.")
+        METASOUND_PARAM(InParamNameCode, "Code", "Chuck code to run.")
+        METASOUND_PARAM(InParamNameID, "ID", "Unique ID assigned to ChucK")
+        METASOUND_PARAM(InParamNameAudioInputLeft, "Audio Input Left", "Audio input left.")
+        METASOUND_PARAM(InParamNameAudioInputRight, "Audio Input Right", "Audio input right.")
+        METASOUND_PARAM(InParamNameAmplitude, "Volume Multiplier", "Volume multiplier.")
+        METASOUND_PARAM(OutParamNameAudioOutputLeft, "Audio Output Left", "Audio output left.")
+        METASOUND_PARAM(OutParamNameAudioOutputRight, "Audio Output Right", "Audio output right.")
     }
 
 #undef LOCTEXT_NAMESPACE
@@ -69,6 +69,7 @@ namespace Metasound
         FAudioBufferWriteRef AudioOutputLeft;
         FAudioBufferWriteRef AudioOutputRight;
 
+        //interleaved buffers
         float* inBufferInterleaved;
         float* outBufferInterleaved;
 

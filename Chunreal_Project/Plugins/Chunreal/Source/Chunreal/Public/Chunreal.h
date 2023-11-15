@@ -14,6 +14,8 @@
 #include "Modules/ModuleManager.h"
 #include "Chunreal/chuck/chuck.h"
 #include "Chunreal/chuck/chuck_def.h"
+#include "Chunreal/chuck/chuck_globals.h"
+#include "Chunreal/chuck/chuck_vm.h"
 
 //whether to print chuck log
 #define PRINT_CHUCK_LOG true
@@ -27,6 +29,9 @@ public:
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
 
+    //reference to ChucK parent
+    inline static ChucK* chuckParent = nullptr;
+
     //Get ChucK sample rate
     static int GetChuckSampleRate();
     //Set ChucK sample rate
@@ -35,12 +40,21 @@ public:
     //static function to output custom log
     static void Log(FString message);
 
-    //Receive message from Chuck
+    //Receive message from Chuck with a mutex
     static void printThisFromChuck(const char* msg);
 
-    //Store and Remove ChucK ref
+    //Compile ChucK code with a mutex
+    static void CompileChuckCode(ChucK* chuckRef, const std::string& code, std::vector<t_CKUINT>* shredIDs = nullptr);
+
+    //Run ChucK with a mutex
+    static void RunChuck(ChucK* chuckRef, const float* input, float* output, t_CKINT numFrames);
+
+    //Store and Remove ChucK ref with a mutex
     static bool StoreChuckRef(ChucK* chuck, FString id);
     static bool RemoveChuckRef(FString id);
+
+    //Get next available ChucK sub index
+    static int GetChuckSubIndex();
     
     //Global int
     static int GetChuckGlobalInt(FString id, FString paramName);
@@ -58,4 +72,10 @@ public:
 private:
     inline static int chuckSampleRate = 44100;
     inline static TMap<FString, ChucK*> ChuckMap;
+    inline static int subIndex = 0;
+
+    inline static FCriticalSection printMutex;
+    inline static FCriticalSection refMutex;
+    inline static FCriticalSection compilerMutex;
+    inline static FCriticalSection runMutex;
 };

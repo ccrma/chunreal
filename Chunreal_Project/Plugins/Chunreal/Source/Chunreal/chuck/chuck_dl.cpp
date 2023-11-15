@@ -1498,6 +1498,57 @@ t_CKUINT CK_DLL_CALL ck_refcount( Chuck_DL_Api::Object object )
 }
 
 
+
+
+//-----------------------------------------------------------------------------
+// helper function
+//-----------------------------------------------------------------------------
+Chuck_Object * do_ck_create( Chuck_VM_Shred * shred, Chuck_VM * vm, Chuck_DL_Api::Type t, vector<t_CKINT> & caps, t_CKBOOL addRef )
+{
+    // type
+    Chuck_Type * type = (Chuck_Type *)t;
+    // object
+    Chuck_Object * object = NULL;
+
+    // check if type is some kind of array
+    if( isa(type, vm->env()->ckt_array) )
+    {
+        // 1.5.1.9 (nshaheed) added
+        t_CKINT index = 0;
+        bool is_object = (bool)isa(type->array_type, vm->env()->ckt_object);
+        // get array depth
+        t_CKUINT depth = type->array_depth;
+        // create capacity
+        t_CKINT * capacity = new t_CKINT[depth];
+        // make sure
+        assert( depth == caps.size() );
+        // iterate and copy
+        for( t_CKUINT i = 0; i < depth; i++ ) capacity[i] = caps[i];
+        // allocate array
+        object = do_alloc_array( vm, shred,
+                                 &capacity[depth - 1], capacity,
+                                 getkindof(vm->env(), type->array_type),
+                                 is_object, NULL, index, type );
+        // clean up
+        CK_SAFE_DELETE_ARRAY( capacity );
+    }
+    else
+    {
+        // instantiate and initialize
+        if( shred ) object = instantiate_and_initialize_object( type, shred, vm );
+        else object = instantiate_and_initialize_object( type, vm );
+    }
+
+    // if requested to add ref
+    if( object && addRef ) CK_SAFE_ADD_REF(object);
+
+    // done
+    return object;
+}
+
+
+
+
 //-----------------------------------------------------------------------------
 // name: ck_create_with_shred()
 // desc: host-side hook implementation for instantiating and initializing
@@ -1520,13 +1571,22 @@ static Chuck_DL_Api::Object CK_DLL_CALL ck_create_with_shred( Chuck_VM_Shred * s
 
     // type
     Chuck_Type * type = (Chuck_Type *)t;
-    // instantiate and initialize
-    Chuck_Object * o = instantiate_and_initialize_object( type, shred, shred->vm_ref );
-    // if requested to add ref
-    if( o && addRef ) CK_SAFE_ADD_REF(o);
-    // done
-    return (Chuck_DL_Api::Object)o;
+    // do_alloc_array() expects a stack of intial capacities for
+    // each dimension of the array. Because this is only expected
+    // to be used through the chuck_dl API, which does not support
+    // setting the capacity explicitly, only empty arrays are
+    // initialized | 1.5.1.9
+    vector<t_CKINT> caps;
+    // check for array type
+    if( type->array_depth )
+        for( t_CKUINT i = 0; i < type->array_depth; i++ )
+            caps.push_back(0);
+
+    // process and return
+    return (Chuck_DL_Api::Object)do_ck_create( shred, shred->vm_ref, t, caps, addRef );
 }
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -1541,20 +1601,28 @@ static Chuck_DL_Api::Object CK_DLL_CALL ck_create_without_shred( Chuck_VM * vm, 
     if( t == NULL )
     {
         // print error message
-        EM_error2( 0, "DL_Api:object:ck_create_no_shred: NULL object reference." );
+        EM_error2( 0, "DL_Api:object:ck_create_without_shred: NULL object reference." );
         // done
         return NULL;
     }
 
     // type
     Chuck_Type * type = (Chuck_Type *)t;
-    // instantiate and initialize
-    Chuck_Object * o = instantiate_and_initialize_object( type, vm );
-    // if requested to add ref
-    if( o && addRef ) CK_SAFE_ADD_REF(o);
-    // done
-    return (Chuck_DL_Api::Object)o;
+    // do_alloc_array() expects a stack of intial capacities for
+    // each dimension of the array. Because this is only expected
+    // to be used through the chuck_dl API, which does not support
+    // setting the capacity explicitly, only empty arrays are
+    // initialized | 1.5.1.9
+    vector<t_CKINT> caps;
+    // check for array type
+    if( type->array_depth )
+        for( t_CKUINT i = 0; i < type->array_depth; i++ )
+            caps.push_back(0);
+
+    // process and return
+    return (Chuck_DL_Api::Object)do_ck_create( NULL, vm, t, caps, addRef );
 }
+
 
 
 
@@ -1931,6 +1999,80 @@ static t_CKBOOL CK_DLL_CALL ck_array_int_get_key( Chuck_DL_Api::ArrayInt a, cons
 
 
 //-----------------------------------------------------------------------------
+// name: ck_array_float_size()
+// desc: get size of an array | 1.5.1.8 (nshaheed) added
+//-----------------------------------------------------------------------------
+static t_CKBOOL CK_DLL_CALL ck_array_float_size( Chuck_DL_Api::ArrayFloat a, t_CKINT & value )
+{
+    // default value
+    value = 0;
+    // check
+    if( a == NULL ) return FALSE;
+
+    // cast to array_float
+    Chuck_ArrayFloat * array = (Chuck_ArrayFloat *)a;
+
+    value = array->size();
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ck_array_float_push_back()
+// desc: push back an element into an array | 1.5.1.8 (nshaheed) added
+//-----------------------------------------------------------------------------
+static t_CKBOOL CK_DLL_CALL ck_array_float_push_back( Chuck_DL_Api::ArrayFloat a, t_CKFLOAT value )
+{
+    // check
+    if( a == NULL ) return FALSE;
+    // cast to array_float
+    Chuck_ArrayFloat * array = (Chuck_ArrayFloat *)a;
+    // action
+    array->push_back( value );
+    // done
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ck_array_float_get_idx()
+// desc: get an indexed element from an array | 1.5.1.8 (nshaheed) added
+//-----------------------------------------------------------------------------
+static t_CKBOOL CK_DLL_CALL ck_array_float_get_idx( Chuck_DL_Api::ArrayFloat a, t_CKINT idx, t_CKFLOAT & value )
+{
+    // check
+    if( a == NULL ) return FALSE;
+    // cast to array_float
+    Chuck_ArrayFloat * array = (Chuck_ArrayFloat *)a;
+    // action
+    return array->get( idx, &value );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ck_array_float_get()
+// desc: get a keyed element from an array | 1.5.1.8 (nshaheed) added
+//-----------------------------------------------------------------------------
+static t_CKBOOL CK_DLL_CALL ck_array_float_get_key( Chuck_DL_Api::ArrayFloat a, const std::string& key, t_CKFLOAT & value )
+{
+    // check
+    if( a == NULL ) return FALSE;
+    // cast to array_float
+    Chuck_ArrayFloat * array = (Chuck_ArrayFloat *)a;
+    // action
+    return array->get( key, &value );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // constructor for the VMApi; connects function pointers to host-side impl
 //-----------------------------------------------------------------------------
 Chuck_DL_Api::VMApi::VMApi() :
@@ -1970,7 +2112,11 @@ set_string(ck_set_string),
 array_int_size(ck_array_int_size),
 array_int_push_back(ck_array_int_push_back),
 array_int_get_idx(ck_array_int_get_idx),
-array_int_get_key(ck_array_int_get_key)
+array_int_get_key(ck_array_int_get_key),
+array_float_size(ck_array_float_size),
+array_float_push_back(ck_array_float_push_back),
+array_float_get_idx(ck_array_float_get_idx),
+array_float_get_key(ck_array_float_get_key)
 { }
 
 
@@ -2036,7 +2182,7 @@ Chuck_DL_Return CK_DLL_CALL ck_invoke_mfun_immediate_mode( Chuck_Object * obj, t
         // iterate over c-style array
         for( t_CKUINT i = 0; i < numArgs; i++ ) args_vector.push_back(args_list[i]);
         // invoke the invoker
-        func->invoker_mfun->invoke( obj, args_vector );
+        func->invoker_mfun->invoke( obj, args_vector, caller_shred );
     }
 
     // return it
