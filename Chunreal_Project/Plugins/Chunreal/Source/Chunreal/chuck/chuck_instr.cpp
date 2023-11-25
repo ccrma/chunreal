@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -2306,6 +2306,35 @@ void Chuck_Instr_Reg_Push_Imm4::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 
 //-----------------------------------------------------------------------------
 // name: execute()
+// desc: push Chuck_VM_Code * onto register stack
+//-----------------------------------------------------------------------------
+void Chuck_Instr_Reg_Push_Code::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
+
+    // push val into reg stack
+    push_( reg_sp, (t_CKUINT)m_code );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: params()
+// desc: params for printing
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Reg_Push_Code::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "'%s'", m_code ? m_code->name.c_str() : "[null]" );
+    return buffer;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: execute()
 // desc: ...
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Reg_Push_Zero::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
@@ -4033,7 +4062,8 @@ void Chuck_Instr_Alloc_Member_Vec4::execute( Chuck_VM * vm, Chuck_VM_Shred * shr
 
 
 
-inline void call_pre_constructor( Chuck_VM * vm, Chuck_VM_Shred * shred,
+// function prototype
+void call_pre_constructor( Chuck_VM * vm, Chuck_VM_Shred * shred,
     Chuck_VM_Code * pre_ctor, t_CKUINT stack_offset );
 //-----------------------------------------------------------------------------
 // name: call_all_parent_pre_constructors()
@@ -4048,7 +4078,7 @@ void call_all_parent_pre_constructors( Chuck_VM * vm, Chuck_VM_Shred * shred,
         call_all_parent_pre_constructors( vm, shred, type->parent, stack_offset );
     }
     // now, call my ctor
-    if( type->has_constructor )
+    if( type->has_pre_ctor )
     {
         call_pre_constructor( vm, shred, type->info->pre_ctor, stack_offset );
     }
@@ -4181,7 +4211,7 @@ static Chuck_Instr_Func_Call g_func_call;
 static Chuck_Instr_Func_Call_Member g_func_call_member( 0, NULL );
 //-----------------------------------------------------------------------------
 // name: call_pre_constructor()
-// desc: ...
+// desc: invoke class pre-constructor code
 //-----------------------------------------------------------------------------
 inline void call_pre_constructor( Chuck_VM * vm, Chuck_VM_Shred * shred,
                                   Chuck_VM_Code * pre_ctor, t_CKUINT stack_offset )
@@ -4219,6 +4249,20 @@ inline void call_pre_constructor( Chuck_VM * vm, Chuck_VM_Shred * shred,
 void Chuck_Instr_Pre_Constructor::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     call_pre_constructor( vm, shred, pre_ctor, stack_offset );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: params()
+// desc: params for printing
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Pre_Constructor::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "ctor='%s', offset=%lu", pre_ctor ? pre_ctor->name.c_str() : "[null]", (unsigned long)stack_offset );
+    return buffer;
 }
 
 
@@ -5050,6 +5094,19 @@ t_CKBOOL func_release_args( Chuck_VM * vm, a_Arg_List args, t_CKBYTE * mem_sp )
 
 
 //-----------------------------------------------------------------------------
+// for printing
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Func_Call::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "convention='%s'", m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK ? "this:back" : "this:front" );
+    return buffer;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: execute()
 // desc: ...
 //-----------------------------------------------------------------------------
@@ -5107,16 +5164,30 @@ void Chuck_Instr_Func_Call::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
         // need this
         if( func->need_this )
         {
-            // copy this from end of arguments to the front
-            *mem_sp2++ = *(reg_sp2 + stack_depth_ints - 1);
+            // check convention | 1.5.2.0 (ge) added
+            if( m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK )
+            {
+                // copy this from end of arguments to the front
+                *mem_sp2++ = *(reg_sp2 + stack_depth_ints - 1);
+            } else {
+                // copy this from start of arguments
+                *mem_sp2++ = *reg_sp2++;
+            }
             // one less word to copy
             stack_depth_ints--;
         }
         // static inside class | 1.4.1.0 (ge) added
         else if( func->is_static )
         {
-            // copy type from end of arguments to the front
-            *mem_sp2++ = *(reg_sp2 + stack_depth_ints - 1);
+            // check convention | 1.5.2.0 (ge) added
+            if( m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK )
+            {
+                // copy type from end of arguments to the front
+                *mem_sp2++ = *(reg_sp2 + stack_depth_ints - 1);
+            } else {
+                // copy type from start of arguments
+                *mem_sp2++ = *reg_sp2++;
+            }
             // one less word to copy
             stack_depth_ints--;
         }
@@ -5137,6 +5208,21 @@ error_overflow:
 
 
 //-----------------------------------------------------------------------------
+// for printing
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Func_Call_Member::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s, %s",
+              m_func_ref ? m_func_ref->signature(FALSE,FALSE).c_str() : "[null]",
+              m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK ? "this:back" : "this:front" );
+    return buffer;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: execute()
 // desc: imported member function call with return
 //-----------------------------------------------------------------------------
@@ -5150,8 +5236,6 @@ void Chuck_Instr_Func_Call_Member::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
     pop_( reg_sp, 2 );
     // get the function to be called as code
     Chuck_VM_Code * func = (Chuck_VM_Code *)*reg_sp;
-    // get the function to be called
-    // MOVED TO BELOW: f_mfun f = (f_mfun)func->native_func;
     // get the local stack depth - caller local variables
     t_CKUINT local_depth = *(reg_sp+1);
     // convert to number of int's (was: 4-byte words), extra partial word counts as additional word
@@ -5184,8 +5268,15 @@ void Chuck_Instr_Func_Call_Member::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
         // need this
         if( func->need_this )
         {
-            // copy this from end of arguments to the front
-            *mem_sp2++ = *(reg_sp2 + stack_depth - 1);
+            // check convention | 1.5.2.0 (ge) added
+            if( m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK )
+            {
+                // copy this from end of arguments to the front
+                *mem_sp2++ = *(reg_sp2 + stack_depth - 1);
+            } else {
+                // copy this from start of arguments
+                *mem_sp2++ = *reg_sp2++;
+            }
             // one less word to copy
             stack_depth--;
         }
@@ -5194,16 +5285,18 @@ void Chuck_Instr_Func_Call_Member::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
             *mem_sp2++ = *reg_sp2++;
     }
 
-    // check the type
-    if( func->native_func_type == Chuck_VM_Code::NATIVE_CTOR )
+    // check the function pointer kind: ctor or mfun?
+    if( func->native_func_kind == ae_fp_ctor ) // ctor
     {
         // cast to right type
         f_ctor f = (f_ctor)func->native_func;
         // call (added 1.3.0.0 -- Chuck_DL_Api::instance())
         f( (Chuck_Object *)(*mem_sp), mem_sp + 1, vm, shred, Chuck_DL_Api::instance() );
     }
-    else
+    else // mfun
     {
+        // make sure is mfun
+        assert( func->native_func_kind == ae_fp_mfun );
         // cast to right type
         f_mfun f = (f_mfun)func->native_func;
         // call the function (added 1.3.0.0 -- Chuck_DL_Api::instance())
@@ -5284,6 +5377,21 @@ error_overflow:
 
 
 //-----------------------------------------------------------------------------
+// for printing
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Func_Call_Static::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s, %s",
+              m_func_ref ? m_func_ref->signature(FALSE,FALSE).c_str() : "[null]",
+              m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK ? "this:back" : "this:front" );
+    return buffer;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: execute()
 // desc: imported static function call with return
 //-----------------------------------------------------------------------------
@@ -5299,6 +5407,8 @@ void Chuck_Instr_Func_Call_Static::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
     Chuck_VM_Code * func = (Chuck_VM_Code *)*(reg_sp);
     // get the function to be called
     f_sfun f = (f_sfun)func->native_func;
+    // verify | 1.5.2.0
+    assert( func->native_func_kind == ae_fp_sfun );
     // get the local stack depth - caller local variables
     t_CKUINT local_depth = *(reg_sp+1);
     // convert to number of int's (was: 4-byte words), extra partial word counts as additional word
@@ -5331,8 +5441,15 @@ void Chuck_Instr_Func_Call_Static::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
         // need type
         if( func->is_static )
         {
-            // copy this from end of arguments to the front
-            *mem_sp2++ = *(reg_sp2 + stack_depth - 1);
+            // check convention | 1.5.2.0 (ge) added
+            if( m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK )
+            {
+                // copy this from end of arguments to the front
+                *mem_sp2++ = *(reg_sp2 + stack_depth - 1);
+            } else {
+                // copy this from start of arguments
+                *mem_sp2++ = *reg_sp2++;
+            }
             // one less word to copy
             stack_depth--;
         }
@@ -5420,6 +5537,20 @@ error_overflow:
 
 
 //-----------------------------------------------------------------------------
+// for printing
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Func_Call_Global::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s",
+              m_func_ref ? m_func_ref->signature(FALSE,FALSE).c_str() : "[null]" );
+    return buffer;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: execute() | 1.5.1.5
 // desc: imported global function call with return
 //-----------------------------------------------------------------------------
@@ -5435,6 +5566,8 @@ void Chuck_Instr_Func_Call_Global::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
     Chuck_VM_Code * func = (Chuck_VM_Code *)*(reg_sp);
     // get the function to be called
     f_gfun f = (f_gfun)func->native_func;
+    // verify | 1.5.2.0
+    assert( func->native_func_kind == ae_fp_gfun );
     // get the local stack depth - caller local variables
     t_CKUINT local_depth = *(reg_sp+1);
     // convert to number of int's (was: 4-byte words), extra partial word counts as additional word
@@ -6174,7 +6307,7 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         // pop the values
         pop_( reg_sp, m_length * (sz_VEC2 / sz_INT) ); // 1.3.1.0 added size division
         // instantiate array
-        Chuck_Array16 * array = new Chuck_Array16( m_length );
+        Chuck_ArrayVec2 * array = new Chuck_ArrayVec2( m_length );
         // problem
         if( !array ) goto out_of_memory;
         // fill array
@@ -6196,7 +6329,7 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         // pop the values
         pop_( reg_sp, m_length * (sz_VEC3 / sz_INT) );
         // instantiate array
-        Chuck_Array24 * array = new Chuck_Array24( m_length );
+        Chuck_ArrayVec3 * array = new Chuck_ArrayVec3( m_length );
         // problem
         if( !array ) goto out_of_memory;
         // fill array
@@ -6216,7 +6349,7 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         // pop the values
         pop_( reg_sp, m_length * (sz_VEC4 / sz_INT) );
         // instantiate array
-        Chuck_Array32 * array = new Chuck_Array32( m_length );
+        Chuck_ArrayVec4 * array = new Chuck_ArrayVec4( m_length );
         // problem
         if( !array ) goto out_of_memory;
         // fill array
@@ -6382,7 +6515,7 @@ Chuck_Object * do_alloc_array(
         }
         else if( kind == kindof_VEC2 ) // ISSUE: 64-bit (fixed 1.3.1.0) | 1.5.1.7 (ge) complex -> vec2
         {
-            Chuck_Array16 * baseX = new Chuck_Array16( *capacity );
+            Chuck_ArrayVec2 * baseX = new Chuck_ArrayVec2( *capacity );
             if( !baseX ) goto out_of_memory;
 
             // check array type
@@ -6398,7 +6531,7 @@ Chuck_Object * do_alloc_array(
         }
         else if( kind == kindof_VEC3 ) // 1.3.5.3
         {
-            Chuck_Array24 * baseX = new Chuck_Array24( *capacity );
+            Chuck_ArrayVec3 * baseX = new Chuck_ArrayVec3( *capacity );
             if( !baseX ) goto out_of_memory;
 
             // initialize object | 1.5.0.0 (ge) use array type instead of base t_array
@@ -6409,7 +6542,7 @@ Chuck_Object * do_alloc_array(
         }
         else if( kind == kindof_VEC4 ) // 1.3.5.3
         {
-            Chuck_Array32* baseX = new Chuck_Array32( *capacity );
+            Chuck_ArrayVec4* baseX = new Chuck_ArrayVec4( *capacity );
             if( !baseX ) goto out_of_memory;
 
             // initialize object | 1.5.0.0 (ge) use array type instead of base t_array
@@ -6708,7 +6841,7 @@ void Chuck_Instr_Array_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     else if( m_kind == kindof_VEC2 ) // ISSUE: 64-bit | 1.5.1.7 (ge) complex -> vec2
     {
         // get array
-        Chuck_Array16 * arr = (Chuck_Array16 *)(*sp);
+        Chuck_ArrayVec2 * arr = (Chuck_ArrayVec2 *)(*sp);
         // get index
         i = (t_CKINT)(*(sp+1));
         // normalize index to allow for negative indexing
@@ -6732,7 +6865,7 @@ void Chuck_Instr_Array_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     else if( m_kind == kindof_VEC3 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array24 * arr = (Chuck_Array24 *)(*sp);
+        Chuck_ArrayVec3 * arr = (Chuck_ArrayVec3 *)(*sp);
         // get index
         i = (t_CKINT)(*(sp + 1));
         // normalize index to allow for negative indexing
@@ -6756,7 +6889,7 @@ void Chuck_Instr_Array_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     else if( m_kind == kindof_VEC4 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array32 * arr = (Chuck_Array32 *)(*sp);
+        Chuck_ArrayVec4 * arr = (Chuck_ArrayVec4 *)(*sp);
         // get index
         i = (t_CKINT)(*(sp+1));
         // normalize index to allow for negative indexing
@@ -6876,7 +7009,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
     else if( m_kind == kindof_VEC2 ) // ISSUE: 64-bit (fixed 1.3.1.0)
     {
         // get array
-        Chuck_Array16 * arr = (Chuck_Array16 *)(*sp);
+        Chuck_ArrayVec2 * arr = (Chuck_ArrayVec2 *)(*sp);
         // get index
         key = (Chuck_String *)(*(sp+1));
         // check if writing
@@ -6898,7 +7031,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
     else if( m_kind == kindof_VEC3 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array24 * arr = (Chuck_Array24 *)(*sp);
+        Chuck_ArrayVec3 * arr = (Chuck_ArrayVec3 *)(*sp);
         // get index
         key = (Chuck_String *)(*(sp+1));
         // check if writing
@@ -6920,7 +7053,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
     else if( m_kind == kindof_VEC4 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array32 * arr = (Chuck_Array32 *)(*sp);
+        Chuck_ArrayVec4 * arr = (Chuck_ArrayVec4 *)(*sp);
         // get index
         key = (Chuck_String *)(*(sp+1));
         // check if writing
@@ -7077,7 +7210,7 @@ void Chuck_Instr_Array_Access_Multi::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
     else if( m_kind == kindof_VEC2 ) // ISSUE: 64-bit (fixed 1.3.1.0)
     {
         // get array
-        Chuck_Array16 * arr = (Chuck_Array16 *)(base);
+        Chuck_ArrayVec2 * arr = (Chuck_ArrayVec2 *)(base);
         // get index
         i = (t_CKINT)(*ptr);
         // check if writing
@@ -7099,7 +7232,7 @@ void Chuck_Instr_Array_Access_Multi::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
     else if( m_kind == kindof_VEC3 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array24 * arr = (Chuck_Array24 *)(base);
+        Chuck_ArrayVec3 * arr = (Chuck_ArrayVec3 *)(base);
         // get index
         i = (t_CKINT)(*ptr);
         // check if writing
@@ -7121,7 +7254,7 @@ void Chuck_Instr_Array_Access_Multi::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
     else if( m_kind == kindof_VEC4 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array32 * arr = (Chuck_Array32 *)(base);
+        Chuck_ArrayVec4 * arr = (Chuck_ArrayVec4 *)(base);
         // get index
         i = (t_CKINT)(*ptr);
         // check if writing
@@ -7234,7 +7367,7 @@ void Chuck_Instr_Array_Append::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     else if( m_val == kindof_VEC2 ) // ISSUE: 64-bit (fixed 1.3.1.0)
     {
         // get array
-        Chuck_Array16 * arr = (Chuck_Array16 *)(*sp);
+        Chuck_ArrayVec2 * arr = (Chuck_ArrayVec2 *)(*sp);
         // get value
         v2 = (*(t_CKVEC2 *)(sp+1));
         // append
@@ -7243,7 +7376,7 @@ void Chuck_Instr_Array_Append::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     else if( m_val == kindof_VEC3 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array24 * arr = (Chuck_Array24 *)(*sp);
+        Chuck_ArrayVec3 * arr = (Chuck_ArrayVec3 *)(*sp);
         // get value
         v3 = (*(t_CKVEC3 *)(sp+1));
         // append
@@ -7252,7 +7385,7 @@ void Chuck_Instr_Array_Append::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     else if( m_val == kindof_VEC4 ) // 1.3.5.3
     {
         // get array
-        Chuck_Array32 * arr = (Chuck_Array32 *)(*sp);
+        Chuck_ArrayVec4 * arr = (Chuck_ArrayVec4 *)(*sp);
         // get value
         v4 = (*(t_CKVEC4 *)(sp+1));
         // append
@@ -7927,9 +8060,10 @@ void Chuck_Instr_Cast_vec4tovec3::execute( Chuck_VM * vm, Chuck_VM_Shred * shred
 
 
 
+
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: "cast" Object to a string, using the Object's method .toString()
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Cast_object2string::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
@@ -7946,6 +8080,60 @@ void Chuck_Instr_Cast_object2string::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
     Chuck_String * str = RETURN.v_string;
     // set it
     push_( sp, (t_CKUINT)str );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: params()
+// desc: params for printing
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Cast_Runtime_Verify::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s $ %s", m_from->c_name(), m_to->c_name() );
+    return buffer;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: execute()
+// desc: type cast runtime verification
+//-----------------------------------------------------------------------------
+void Chuck_Instr_Cast_Runtime_Verify::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    // stack pointer
+    t_CKUINT * sp = (t_CKUINT *)shred->reg->sp;
+    // cast to object
+    Chuck_Object * obj = (Chuck_Object *)(*(sp-1));
+
+    // NULL is ok
+    if( !obj ) return;
+
+    // actual type of object
+    Chuck_Type * actualType = obj->type_ref;
+    // check against to type to cast to
+    if( !isa(actualType,m_to) ) goto invalid_cast;
+
+    // got here? ok
+    return;
+
+invalid_cast:
+    // we have a problem
+    EM_exception( "RuntimeCastIncompatible: in shred[id=%lu:%s]...",
+                  shred->xid, shred->name.c_str()  );
+    // print code context
+    if( m_codeWithFormat != "" ) CK_FPRINTF_STDERR( m_codeWithFormat.c_str(), TC::orange(actualType->c_name(),true).c_str(), TC::orange(m_to->c_name(),true).c_str() );
+    // done
+    goto done;
+
+done:
+    // do something!
+    shred->is_running = FALSE;
+    shred->is_done = TRUE;
 }
 
 
@@ -8496,7 +8684,7 @@ void Chuck_Instr_ForEach_Inc_And_Branch::execute( Chuck_VM * vm, Chuck_VM_Shred 
             case kindof_VEC2:
             {
                 // cast to specific array type
-                Chuck_Array16 * arr = (Chuck_Array16 *) array;
+                Chuck_ArrayVec2 * arr = (Chuck_ArrayVec2 *) array;
                 // get element
                 arr->get( *counter, (t_CKVEC2 *)pVar );
                 break;
@@ -8504,7 +8692,7 @@ void Chuck_Instr_ForEach_Inc_And_Branch::execute( Chuck_VM * vm, Chuck_VM_Shred 
             case kindof_VEC3:
             {
                 // cast to specific array type
-                Chuck_Array24 * arr = (Chuck_Array24 *) array;
+                Chuck_ArrayVec3 * arr = (Chuck_ArrayVec3 *) array;
                 // get element
                 arr->get( *counter, (t_CKVEC3 *)pVar );
                 break;
@@ -8512,7 +8700,7 @@ void Chuck_Instr_ForEach_Inc_And_Branch::execute( Chuck_VM * vm, Chuck_VM_Shred 
             case kindof_VEC4:
             {
                 // cast to specific array type
-                Chuck_Array32 * arr = (Chuck_Array32 *) array;
+                Chuck_ArrayVec4 * arr = (Chuck_ArrayVec4 *) array;
                 // get element
                 arr->get( *counter, (t_CKVEC4 *)pVar );
                 break;

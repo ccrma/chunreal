@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -139,7 +139,7 @@ public:
 public:
     t_CKTIME & when();
     Chuck_ArrayFloat & fvals();
-    Chuck_Array16 & cvals();
+    Chuck_ArrayVec2 & cvals();
 
 public:
     Chuck_Object * realblob() { return m_blob; }
@@ -169,8 +169,8 @@ CK_DLL_MFUN( shred_sourcePath ); // added 1.3.0.0
 CK_DLL_MFUN( shred_sourceDir ); // added 1.3.0.0
 CK_DLL_MFUN( shred_sourceDir2 ); // added 1.3.2.0
 CK_DLL_SFUN( shred_fromId ); // added 1.3.2.0
-CK_DLL_SFUN( shred_parent ); // added 1.5.1.9 (nshaheed)
-CK_DLL_SFUN( shred_ancestor ); // added 1.5.1.9 (nshaheed)
+CK_DLL_SFUN( shred_parent ); // added 1.5.2.0 (nshaheed)
+CK_DLL_SFUN( shred_ancestor ); // added 1.5.2.0 (nshaheed)
 CK_DLL_MFUN( shred_ctrl_hintChildMemSize ); // added 1.5.1.5
 CK_DLL_MFUN( shred_cget_hintChildMemSize ); // added 1.5.1.5
 CK_DLL_MFUN( shred_ctrl_hintChildRegSize ); // added 1.5.1.5

@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -56,6 +56,11 @@ CK_DLL_CTRL( osc_ctrl_width );
 CK_DLL_CGET( osc_cget_width );
 CK_DLL_CTRL( osc_ctrl_sync );
 CK_DLL_CGET( osc_cget_sync );
+
+// generic overloaded ctor( float freq )
+CK_DLL_CTOR( oscx_ctor_1 );
+// generic overloaded ctor( float freq, float phase )
+CK_DLL_CTOR( oscx_ctor_2 );
 
 // sinosc
 CK_DLL_TICK( sinosc_tick );

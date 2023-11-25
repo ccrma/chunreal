@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -65,11 +65,14 @@ CK_DLL_DTOR( pan2_dtor );
 CK_DLL_CTRL( pan2_ctrl_value );
 CK_DLL_CGET( pan2_cget_value );
 
-// MIX2
+// Mix2
 CK_DLL_CTOR( mix2_ctor );
 CK_DLL_CTOR( mix2_dtor );
 CK_DLL_CTRL( mix2_ctrl_value );
 CK_DLL_CGET( mix2_cget_value );
+
+// Gain
+CK_DLL_MFUN( gain_ctor_1 );
 
 // noise
 CK_DLL_TICK( noise_tick );

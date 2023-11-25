@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -361,6 +361,12 @@ DLL_QUERY xxx_query( Chuck_DL_Query * QUERY )
         return FALSE;
 
     if( !type_engine_import_add_ex( env, "basic/i-robot.ck" ) ) goto error;
+
+    // add ctrl: fprob
+    func = make_new_mfun( "void", "Gain", gain_ctor_1 );
+    func->doc = "Create a Gain with default value.";
+    func->add_arg( "float", "gain" );
+    if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // end import
     if( !type_engine_import_class_end( env ) )
@@ -1854,6 +1860,21 @@ CK_DLL_TICK( dac_tick )
 CK_DLL_TICK( bunghole_tick )
 {
     *out = 0.0f; return 0;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: Gain( float gain )
+// desc: Gain constructor that takes a float
+//-----------------------------------------------------------------------------
+CK_DLL_MFUN( gain_ctor_1 )
+{
+    // get ugen
+    Chuck_UGen * ugen = (Chuck_UGen *)SELF;
+    // set from constructor arg
+    ugen->m_gain = GET_NEXT_FLOAT(ARGS);
 }
 
 

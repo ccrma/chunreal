@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -600,12 +600,12 @@ t_CKBOOL init_class_shred( Chuck_Env * env, Chuck_Type * type )
     func->doc = "get the operand stack size hint (in bytes) for shreds sporked from this one.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
-    // add parent() | 1.5.1.9 (nshaheed)
+    // add parent() | 1.5.2.0 (nshaheed)
     func = make_new_sfun( "Shred", "parent", shred_parent );
     func->doc = "get the calling shred's parent shred (i.e., the shred that sporked the calling shred). Returns null if there is no parent Shred. (Related: see Shred.ancestor())";
     if( !type_engine_import_sfun( env, func ) ) goto error;
 
-    // add ancestor() | 1.5.1.9 (nshaheed)
+    // add ancestor() | 1.5.2.0 (nshaheed)
     func = make_new_sfun( "Shred", "ancestor", shred_ancestor );
     func->doc = "get the calling shred's \"ancestor\" shred (i.e., the top-level shred). Returns itself if the calling shred is the top-level shred. (Related: see Shred.parent())";
     if( !type_engine_import_sfun( env, func ) ) goto error;
@@ -1938,7 +1938,7 @@ CK_DLL_MFUN( uana_cval )
     t_CKINT i = GET_NEXT_INT(ARGS);
     // get the fvals array
     Chuck_UAnaBlobProxy * blob = (Chuck_UAnaBlobProxy *)OBJ_MEMBER_INT(SELF, uana_offset_blob);
-    Chuck_Array16 & cvals = blob->cvals();
+    Chuck_ArrayVec2 & cvals = blob->cvals();
     // check caps
     if( i < 0 || cvals.size() <= i ) RETURN->v_complex.re = RETURN->v_complex.im = 0;
     else
@@ -2000,10 +2000,10 @@ Chuck_ArrayFloat & Chuck_UAnaBlobProxy::fvals()
     return *arr8;
 }
 
-Chuck_Array16 & Chuck_UAnaBlobProxy::cvals()
+Chuck_ArrayVec2 & Chuck_UAnaBlobProxy::cvals()
 {
     // TODO: DANGER: is this actually returning correct reference?!
-    Chuck_Array16 * arr16 = (Chuck_Array16 *)OBJ_MEMBER_INT(m_blob, uanablob_offset_cvals);
+    Chuck_ArrayVec2 * arr16 = (Chuck_ArrayVec2 *)OBJ_MEMBER_INT(m_blob, uanablob_offset_cvals);
     assert( arr16 != NULL );
     return *arr16;
 }
@@ -2027,7 +2027,7 @@ CK_DLL_CTOR( uanablob_ctor )
     OBJ_MEMBER_INT(SELF, uanablob_offset_fvals) = (t_CKINT)arr8;
 
     // cvals
-    Chuck_Array16 * arr16 = new Chuck_Array16( 8 );
+    Chuck_ArrayVec2 * arr16 = new Chuck_ArrayVec2( 8 );
     initialize_object( arr16, SHRED->vm_ref->env()->ckt_array, SHRED, VM );
     arr16->add_ref();
     OBJ_MEMBER_INT(SELF, uanablob_offset_cvals) = (t_CKINT)arr16;
@@ -2043,7 +2043,7 @@ CK_DLL_DTOR( uanablob_dtor )
     OBJ_MEMBER_INT(SELF, uanablob_offset_fvals) = 0;
 
     // get array
-    Chuck_Array16 * arr16 = (Chuck_Array16 *)OBJ_MEMBER_INT(SELF, uanablob_offset_cvals);
+    Chuck_ArrayVec2 * arr16 = (Chuck_ArrayVec2 *)OBJ_MEMBER_INT(SELF, uanablob_offset_cvals);
     // release it
     arr16->release();
     OBJ_MEMBER_INT(SELF, uanablob_offset_cvals) = 0;
@@ -2085,7 +2085,7 @@ CK_DLL_MFUN( uanablob_cval )
     // get index
     t_CKINT i = GET_NEXT_INT(ARGS);
     // get the fvals array
-    Chuck_Array16 * cvals = (Chuck_Array16 *)OBJ_MEMBER_INT(SELF, uanablob_offset_cvals);
+    Chuck_ArrayVec2 * cvals = (Chuck_ArrayVec2 *)OBJ_MEMBER_INT(SELF, uanablob_offset_cvals);
     // check caps
     if( i < 0 || cvals->size() <= i ) RETURN->v_complex.re = RETURN->v_complex.im = 0;
     else
@@ -2100,7 +2100,7 @@ CK_DLL_MFUN( uanablob_cval )
 CK_DLL_MFUN( uanablob_cvals )
 {
     // set return
-    RETURN->v_object = (Chuck_Array16 *)OBJ_MEMBER_INT(SELF, uanablob_offset_cvals);
+    RETURN->v_object = (Chuck_ArrayVec2 *)OBJ_MEMBER_INT(SELF, uanablob_offset_cvals);
 }
 
 // ctor
@@ -2540,7 +2540,7 @@ CK_DLL_MFUN( shred_cget_hintChildRegSize ) // 1.5.1.5
 }
 
 
-CK_DLL_SFUN( shred_parent ) // added 1.5.1.9 (nshaheed)
+CK_DLL_SFUN( shred_parent ) // added 1.5.2.0 (nshaheed)
 {
     // get the parent
     Chuck_VM_Shred * parent = SHRED->parent;
@@ -2549,7 +2549,7 @@ CK_DLL_SFUN( shred_parent ) // added 1.5.1.9 (nshaheed)
 }
 
 
-CK_DLL_SFUN( shred_ancestor ) // added 1.5.1.9 (nshaheed)
+CK_DLL_SFUN( shred_ancestor ) // added 1.5.2.0 (nshaheed)
 {
     // current shred
     Chuck_VM_Shred * curr = SHRED;
@@ -3146,12 +3146,12 @@ CK_DLL_MFUN( array_push_back )
         RETURN->v_int = ((Chuck_ArrayInt *)array)->push_back( GET_NEXT_UINT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAYFLOAT_DATAKIND )
         RETURN->v_int = ((Chuck_ArrayFloat *)array)->push_back( GET_NEXT_FLOAT( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->push_back( GET_NEXT_VEC2( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
-        RETURN->v_int = ((Chuck_Array24 *)array)->push_back( GET_NEXT_VEC3( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
-        RETURN->v_int = ((Chuck_Array32 *)array)->push_back( GET_NEXT_VEC4( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC2_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec2 *)array)->push_back( GET_NEXT_VEC2( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC3_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec3 *)array)->push_back( GET_NEXT_VEC3( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC4_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec4 *)array)->push_back( GET_NEXT_VEC4( ARGS ) );
     else
         assert( FALSE );
 }
@@ -3168,12 +3168,12 @@ CK_DLL_MFUN( array_insert )
         RETURN->v_int = ((Chuck_ArrayInt *)array)->insert( position, GET_NEXT_UINT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAYFLOAT_DATAKIND )
         RETURN->v_int = ((Chuck_ArrayFloat *)array)->insert( position, GET_NEXT_FLOAT( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->insert( position, GET_NEXT_VEC2( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
-        RETURN->v_int = ((Chuck_Array24 *)array)->insert( position, GET_NEXT_VEC3( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
-        RETURN->v_int = ((Chuck_Array32 *)array)->insert( position, GET_NEXT_VEC4( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC2_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec2 *)array)->insert( position, GET_NEXT_VEC2( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC3_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec3 *)array)->insert( position, GET_NEXT_VEC3( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC4_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec4 *)array)->insert( position, GET_NEXT_VEC4( ARGS ) );
     else
         assert( FALSE );
 }
@@ -3195,12 +3195,12 @@ CK_DLL_MFUN( array_push_front )
         RETURN->v_int = ((Chuck_ArrayInt *)array)->push_front( GET_NEXT_UINT( ARGS ) );
     else if( array->data_type_kind() == CHUCK_ARRAYFLOAT_DATAKIND )
         RETURN->v_int = ((Chuck_ArrayFloat *)array)->push_front( GET_NEXT_FLOAT( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY16_DATAKIND )
-        RETURN->v_int = ((Chuck_Array16 *)array)->push_front( GET_NEXT_VEC2( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY24_DATAKIND )
-        RETURN->v_int = ((Chuck_Array24 *)array)->push_front( GET_NEXT_VEC3( ARGS ) );
-    else if( array->data_type_kind() == CHUCK_ARRAY32_DATAKIND )
-        RETURN->v_int = ((Chuck_Array32 *)array)->push_front( GET_NEXT_VEC4( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC2_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec2 *)array)->push_front( GET_NEXT_VEC2( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC3_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec3 *)array)->push_front( GET_NEXT_VEC3( ARGS ) );
+    else if( array->data_type_kind() == CHUCK_ARRAYVEC4_DATAKIND )
+        RETURN->v_int = ((Chuck_ArrayVec4 *)array)->push_front( GET_NEXT_VEC4( ARGS ) );
     else
         assert( FALSE );
 }
@@ -3288,17 +3288,17 @@ static void typeGetTypes(
         // if not requesting special types
         if( !isSpecial && (special == TRUE) ) continue;
         // check origin
-        te_Origin origin = types[i]->originHint;
+        ckte_Origin origin = types[i]->originHint;
 
         // filter level 1
         if( (isObj && isobj(vm->env(), types[i])) ||
             (isPrim && isprim(vm->env(), types[i])) )
         {
             // filter level 2
-            if( (isBuiltin && (origin == te_originBuiltin)) ||
-                (isChug && (origin == te_originChugin)) ||
-                (isImport && (origin == te_originImport)) ||
-                (isUser && (origin == te_originUserDefined)) )
+            if( (isBuiltin && (origin == ckte_origin_BUILTIN)) ||
+                (isChug && (origin == ckte_origin_CHUGIN)) ||
+                (isImport && (origin == ckte_origin_IMPORT)) ||
+                (isUser && (origin == ckte_origin_USERDEFINED)) )
             {
                 // copy
                 ret->m_vector.push_back( (t_CKINT)types[i] );
@@ -3449,23 +3449,23 @@ CK_DLL_MFUN( type_origin )
     // check origin hint
     switch( type->originHint )
     {
-    case te_originBuiltin:
+    case ckte_origin_BUILTIN:
         s = "builtin";
         break;
-    case te_originChugin:
+    case ckte_origin_CHUGIN:
         s = "chugin";
         break;
-    case te_originImport:
+    case ckte_origin_IMPORT:
         s = "cklib";
         break;
-    case te_originUserDefined:
+    case ckte_origin_USERDEFINED:
         s = "user";
         break;
-    case te_originGenerated:
+    case ckte_origin_GENERATED:
         s = "generated";
         break;
 
-    case te_originUnknown:
+    case ckte_origin_UNKNOWN:
     default:
         s = "[unknown origin]";
         break;
@@ -3492,7 +3492,7 @@ CK_DLL_MFUN( type_isObject )
 CK_DLL_MFUN( type_isArray )
 {
     Chuck_Type * type = (Chuck_Type *)SELF;
-    // test for arrayhood -- either array depth > 0 or type could be "@array" | 1.5.1.9
+    // test for arrayhood -- either array depth > 0 or type could be "@array" | 1.5.2.0
     RETURN->v_int = type->array_depth > 0 || isa(type, type->env()->ckt_array);
 }
 

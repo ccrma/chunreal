@@ -1,25 +1,25 @@
 /*----------------------------------------------------------------------------
-    ChucK Concurrent, On-the-fly Audio Programming Language
-      Compiler and Virtual Machine
+  ChucK Strongly-timed Audio Programming Language
+    Compiler and Virtual Machine
 
-    Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
-      http://chuck.cs.princeton.edu/
-      http://soundlab.cs.princeton.edu/
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
+    http://chuck.cs.princeton.edu/
+    http://soundlab.cs.princeton.edu/
 
-    This program is free software; you can redistribute it and/or modify
-    it under the terms of the GNU General Public License as published by
-    the Free Software Foundation; either version 2 of the License, or
-    (at your option) any later version.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
-    but WITHOUT ANY WARRANTY; without even the implied warranty of
-    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-    GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
-    along with this program; if not, write to the Free Software
-    Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-    U.S.A.
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+  U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -263,6 +263,32 @@ unsigned long ck_nextpow2( unsigned long n )
 unsigned long ck_ensurepow2( unsigned long n )
 {
     return ck_nextpow2( n-1 );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// equal( x, y ) -- 1.4.1.1 (added ge)
+// returns whether x and y (floats) are considered equal
+//
+// Knuth, Donald E., /The Art of Computer Programming
+// Volume II: Seminumerical Algorithms/, Addison-Wesley, 1969.
+// based on Knuth section 4.2.2 pages 217-218
+// https://www.cs.technion.ac.il/users/yechiel/c++-faq/floating-point-arith.html
+//-----------------------------------------------------------------------------
+t_CKBOOL ck_equals( t_CKFLOAT x, t_CKFLOAT y )
+{
+    const t_CKFLOAT epsilon = .00000001; // a small number 1e-8
+    // absolute values
+    t_CKFLOAT abs_x = (x >= 0.0 ? x : -x);
+    t_CKFLOAT abs_y = (y >= 0.0 ? y : -y);
+    // smaller of the two absolute values (this step added by ge; ensures symmetry)
+    t_CKFLOAT min = abs_x < abs_y ? abs_x : abs_y;
+    // absolute value of the difference
+    t_CKFLOAT v = x-y; t_CKFLOAT abs_v = (v >= 0.0 ? v : -v);
+    // test whether difference is less/equal to episilon * smaller of two abs values
+    return abs_v <= (epsilon * min);
 }
 
 

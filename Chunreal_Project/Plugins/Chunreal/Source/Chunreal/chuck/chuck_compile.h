@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -83,9 +83,9 @@ public: // data
     // libraries (ck code) to import
     std::list<std::string> m_cklibs_to_preload;
 
-    // origin hint; this flag is set to different te_Origin values
+    // origin hint; this flag is set to different ckte_Origin values
     // to denote where new entities originate | 1.5.0.0 (ge) added
-    te_Origin m_originHint;
+    ckte_Origin m_originHint;
 
 public: // to all
     // contructor

@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -33,7 +33,7 @@
 #ifndef __CHUCK_SYMBOL_H__
 #define __CHUCK_SYMBOL_H__
 
-#include "chuck_utils.h"
+#include "chuck_def.h"
 
 
 #if defined(_cplusplus) || defined(__cplusplus)
@@ -82,6 +82,31 @@ void S_pop(S_table t);
 }
 #endif
 
+
+
+
+// moved here from archaic chuck_utils.h | 1.5.2.0 (ge)
+#if defined(_cplusplus) || defined(__cplusplus)
+extern "C" {
+#endif
+
+
+typedef struct U_boolList_ * U_boolList;
+struct U_boolList_
+{
+    t_CKBOOL head;
+    U_boolList tail;
+};
+
+
+void * checked_malloc( t_CKINT size );
+c_str cc_str( char * );
+U_boolList U_BoolList( t_CKBOOL head, U_boolList tail );
+
+
+#if defined(_cplusplus) || defined(__cplusplus)
+}
+#endif
 
 
 

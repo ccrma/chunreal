@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -2214,6 +2214,30 @@ protected:
 
 
 //-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_Reg_Push_Code | 1.5.2.0 (ge) added
+// desc: push Chuck_VM_Code * onto register stack
+//-----------------------------------------------------------------------------
+struct Chuck_Instr_Reg_Push_Code : public Chuck_Instr
+{
+public:
+    // for carrying out instruction
+    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+    // for printing
+    const char * params() const;
+
+public:
+    // constructor
+    Chuck_Instr_Reg_Push_Code( Chuck_VM_Code * code ) : m_code(code) { }
+
+public:
+    // code to push
+    Chuck_VM_Code * m_code;
+};
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: struct Chuck_Instr_Reg_Push_Zero
 // desc: push immediate value 0 to reg stack with specific width
 //-----------------------------------------------------------------------------
@@ -2949,7 +2973,7 @@ public:
     { pre_ctor = pre; this->stack_offset = offset; }
 
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
-    // virtual const char * params() const;
+    virtual const char * params() const;
 
 public:
     Chuck_VM_Code * pre_ctor;
@@ -3263,13 +3287,36 @@ public:
 
 
 //-----------------------------------------------------------------------------
+// name: enum ck_Func_Call_Arg_Convention | 1.5.2.0
+// desc: where to find this/type pointers in argument block
+//-----------------------------------------------------------------------------
+enum ck_Func_Call_Arg_Convention
+{
+    // 'this' (member) or 'type' (static) found in the back of arguments block
+    CK_FUNC_CALL_THIS_IN_BACK,
+    // 'this' (member) or 'type' (static) found in the back of arguments block
+    CK_FUNC_CALL_THIS_IN_FRONT
+};
+//-----------------------------------------------------------------------------
 // name: struct Chuck_Instr_Func_Call
 // desc: user-defined function call
 //-----------------------------------------------------------------------------
 struct Chuck_Instr_Func_Call : public Chuck_Instr
 {
 public:
+    // for carrying out instruction
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+    // for printing
+    virtual const char * params() const;
+
+public:
+    // constructor
+    Chuck_Instr_Func_Call( ck_Func_Call_Arg_Convention arg_convention = CK_FUNC_CALL_THIS_IN_BACK )
+    : m_arg_convention(arg_convention) { }
+
+    // when applicable, this flag indicates whether this/type is at the
+    // beginning or at the end of the argument block on the reg stack
+    ck_Func_Call_Arg_Convention m_arg_convention;
 };
 
 
@@ -3282,14 +3329,22 @@ public:
 struct Chuck_Instr_Func_Call_Member : public Chuck_Instr_Unary_Op
 {
 public:
-    Chuck_Instr_Func_Call_Member( t_CKUINT ret_size, Chuck_Func * func_ref )
-    { this->set( ret_size ); m_func_ref = func_ref; }
+    Chuck_Instr_Func_Call_Member( t_CKUINT ret_size, Chuck_Func * func_ref,
+                                  ck_Func_Call_Arg_Convention arg_convention = CK_FUNC_CALL_THIS_IN_BACK )
+    { this->set( ret_size ); m_func_ref = func_ref; m_arg_convention = arg_convention; }
 
 public:
+    // for carrying out instruction
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+    // for printing
+    virtual const char * params() const;
 
 public:
-    Chuck_Func * m_func_ref; // 1.5.0.0 (ge) | added for arg list cleanup
+    // 1.5.0.0 (ge) | added for arg list cleanup
+    Chuck_Func * m_func_ref;
+    // when applicable, this flag indicates whether this/type is at the
+    // beginning or at the end of the argument block on the reg stack
+    ck_Func_Call_Arg_Convention m_arg_convention;
 };
 
 
@@ -3302,14 +3357,22 @@ public:
 struct Chuck_Instr_Func_Call_Static : public Chuck_Instr_Unary_Op
 {
 public:
-    Chuck_Instr_Func_Call_Static( t_CKUINT ret_size, Chuck_Func * func_ref )
-    { this->set( ret_size ); m_func_ref = func_ref; }
+    Chuck_Instr_Func_Call_Static( t_CKUINT ret_size, Chuck_Func * func_ref,
+                                  ck_Func_Call_Arg_Convention arg_convention = CK_FUNC_CALL_THIS_IN_BACK )
+    { this->set( ret_size ); m_func_ref = func_ref; m_arg_convention = arg_convention; }
 
 public:
+    // for carrying out instruction
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+    // for printing
+    virtual const char * params() const;
 
 public:
-    Chuck_Func * m_func_ref; // 1.5.0.0 (ge) | added for arg list cleanup
+    // 1.5.0.0 (ge) | added for arg list cleanup
+    Chuck_Func * m_func_ref;
+    // when applicable, this flag indicates whether this/type is at the
+    // beginning or at the end of the argument block on the reg stack
+    ck_Func_Call_Arg_Convention m_arg_convention;
 };
 
 
@@ -3326,9 +3389,13 @@ public:
     { this->set( ret_size ); m_func_ref = func_ref; }
 
 public:
+    // for carrying out instruction
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+    // for printing
+    virtual const char * params() const;
 
 public:
+    // 1.5.0.0 (ge) | added for arg list cleanup
     Chuck_Func * m_func_ref;
 };
 
@@ -4280,12 +4347,43 @@ public:
 
 //-----------------------------------------------------------------------------
 // name: struct Chuck_Instr_Cast_object2string
-// desc: ...
+// desc: "cast" Object to a string, using the Object's method .toString()
 //-----------------------------------------------------------------------------
 struct Chuck_Instr_Cast_object2string : public Chuck_Instr
 {
 public:
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_Cast_Runtime_Verify
+// desc: type cast runtime verification  1.5.2.0 (ge) added
+//-----------------------------------------------------------------------------
+struct Chuck_Instr_Cast_Runtime_Verify : public Chuck_Instr
+{
+public:
+    // execute
+    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+    // for printing
+    const char * params() const;
+    // set code snippet (with printf-format style) in case of exception
+    void set_codeformat4exception( const std::string & codeWithFormat )
+    { m_codeWithFormat = codeWithFormat; }
+
+public:
+    Chuck_Instr_Cast_Runtime_Verify( Chuck_Type * from, Chuck_Type * to )
+    {
+        m_from = from;
+        m_to = to;
+    }
+
+protected:
+    Chuck_Type * m_from;
+    Chuck_Type * m_to;
+    std::string m_codeWithFormat;
 };
 
 

@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -81,6 +81,19 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     osc_offset_data = type_engine_import_mvar( env, "int", "@osc_data", FALSE );
     if( osc_offset_data == CK_INVALID_OFFSET ) goto error;
 
+    // overload constructor (float freq)
+    func = make_new_ctor( oscx_ctor_1 );
+    func->add_arg( "float", "freq" );
+    func->doc = "Constructor to initialize a Osc at specified frequency.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // overload constructor (float freq, float phase)
+    func = make_new_ctor( oscx_ctor_2 );
+    func->add_arg( "float", "freq" );
+    func->add_arg( "float", "phase" );
+    func->doc = "Constructor to initialize a Osc at specified frequency and phase.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
     // add ctrl: freq
     func = make_new_mfun( "float", "freq", osc_ctrl_freq );
     func->add_arg( "float", "hz" );
@@ -136,6 +149,19 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
                                         doc.c_str() ) )
         return FALSE;
 
+    // overload constructor (float freq)
+    func = make_new_ctor( oscx_ctor_1 );
+    func->add_arg( "float", "freq" );
+    func->doc = "Constructor to initialize a Phasor at specified frequency.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // overload constructor (float freq, float phase)
+    func = make_new_ctor( oscx_ctor_2 );
+    func->add_arg( "float", "freq" );
+    func->add_arg( "float", "phase" );
+    func->doc = "Constructor to initialize a Phasor at specified frequency and phase.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
     // add examples | 1.5.0.0 added
     if( !type_engine_import_add_ex( env, "basic/phasor.ck" ) ) goto error;
 
@@ -150,6 +176,19 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
                                         NULL, NULL, sinosc_tick, NULL,
                                         doc.c_str() ) )
         return FALSE;
+
+    // overload constructor (float freq)
+    func = make_new_ctor( oscx_ctor_1 );
+    func->add_arg( "float", "freq" );
+    func->doc = "Constructor to initialize a SinOsc at specified frequency.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // overload constructor (float freq, float phase)
+    func = make_new_ctor( oscx_ctor_2 );
+    func->add_arg( "float", "freq" );
+    func->add_arg( "float", "phase" );
+    func->doc = "Constructor to initialize a SinOsc at specified frequency and phase.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // add examples | 1.5.0.0 (ge)
     type_engine_import_add_ex( env, "otf_05.ck" );
@@ -173,6 +212,19 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
                                         NULL, NULL, triosc_tick, NULL,
                                         doc.c_str() ) )
         return FALSE;
+
+    // overload constructor (float freq)
+    func = make_new_ctor( oscx_ctor_1 );
+    func->add_arg( "float", "freq" );
+    func->doc = "Constructor to initialize a TriOsc at specified frequency.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // overload constructor (float freq, float phase)
+    func = make_new_ctor( oscx_ctor_2 );
+    func->add_arg( "float", "freq" );
+    func->add_arg( "float", "phase" );
+    func->doc = "Constructor to initialize a TriOsc at specified frequency and phase.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
 
     func = make_new_mfun( "float", "width", osc_ctrl_width );
     func->add_arg( "float", "width" );
@@ -200,6 +252,19 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
                                         doc.c_str() ) )
         return FALSE;
 
+    // overload constructor (float freq)
+    func = make_new_ctor( oscx_ctor_1 );
+    func->add_arg( "float", "freq" );
+    func->doc = "Constructor to initialize a SawOsc at specified frequency.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // overload constructor (float freq, float phase)
+    func = make_new_ctor( oscx_ctor_2 );
+    func->add_arg( "float", "freq" );
+    func->add_arg( "float", "phase" );
+    func->doc = "Constructor to initialize a SawOsc at specified frequency and phase.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
     func = make_new_mfun( "float", "width", sawosc_ctrl_width );
     func->add_arg( "float", "width" );
     func->doc = "whether sawtooth wave is to fall (0) or rise (1).";
@@ -226,6 +291,19 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
                                         doc.c_str() ) )
         return FALSE;
 
+    // overload constructor (float freq)
+    func = make_new_ctor( oscx_ctor_1 );
+    func->add_arg( "float", "freq" );
+    func->doc = "Constructor to initialize a PulseOsc at specified frequency.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // overload constructor (float freq, float phase)
+    func = make_new_ctor( oscx_ctor_2 );
+    func->add_arg( "float", "freq" );
+    func->add_arg( "float", "phase" );
+    func->doc = "Constructor to initialize a PulseOsc at specified frequency and phase.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
     func = make_new_mfun( "float", "width", osc_ctrl_width );
     func->add_arg( "float", "width" );
     func->doc = "set width of duty cycle [0,1).";
@@ -250,6 +328,19 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
                                         sqrosc_ctor, NULL, NULL, NULL,
                                         doc.c_str() ) )
         return FALSE;
+
+    // overload constructor (float freq)
+    func = make_new_ctor( oscx_ctor_1 );
+    func->add_arg( "float", "freq" );
+    func->doc = "Constructor to initialize a SqrOsc at specified frequency.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // overload constructor (float freq, float phase)
+    func = make_new_ctor( oscx_ctor_2 );
+    func->add_arg( "float", "freq" );
+    func->add_arg( "float", "phase" );
+    func->doc = "Constructor to initialize a SqrOsc at specified frequency and phase.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
 
     func = make_new_mfun( "float", "width", sqrosc_ctrl_width );
     func->doc = "set width of duty cycle (always 0.5).";
@@ -289,8 +380,8 @@ struct Osc_Data
 {
     t_CKFLOAT num;
     t_CKFLOAT freq;
-    t_CKINT    sync;
-    t_CKUINT srate;
+    t_CKINT sync;
+    t_CKINT srate;
     t_CKFLOAT width;
 
     t_CKFLOAT phase;
@@ -311,7 +402,7 @@ struct Osc_Data
 
 //-----------------------------------------------------------------------------
 // name: osc_ctor()
-// desc: ...
+// desc: default cosntructor
 //-----------------------------------------------------------------------------
 CK_DLL_CTOR( osc_ctor )
 {
@@ -326,8 +417,40 @@ CK_DLL_CTOR( osc_ctor )
 
 
 //-----------------------------------------------------------------------------
+// generic overloaded ctor( float freq )
+// to be used by subclasses of Osc
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( oscx_ctor_1 )
+{
+    // return (dummy struct since ctors don't return stuff)
+    Chuck_DL_Return r;
+    // set freq
+    osc_ctrl_freq( SELF, ARGS, &r, VM, SHRED, API );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// generic overloaded ctor( float freq, float phase )
+// to be used by subclasses of Osc
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( oscx_ctor_2 )
+{
+    // return (dummy struct since ctors don't return stuff)
+    Chuck_DL_Return r;
+    // set freq
+    osc_ctrl_freq( SELF, ARGS, &r, VM, SHRED, API );
+    // set freq
+    osc_ctrl_phase( SELF, ARGS, &r, VM, SHRED, API );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: osc_dtor()
-// desc: ...
+// desc: destructor
 //-----------------------------------------------------------------------------
 CK_DLL_DTOR( osc_dtor )
 {
@@ -522,7 +645,7 @@ CK_DLL_TICK( triosc_tick )
         // sync phase to input
         else if( d->sync == 1 )
         {
-            // set freq
+            // set phase
             d->phase = in;
             inc_phase = FALSE;
         }
@@ -594,7 +717,7 @@ CK_DLL_TICK( pulseosc_tick )
         // sync phase to input
         else if( d->sync == 1 )
         {
-            // set freq
+            // set phase
             d->phase = in;
             inc_phase = FALSE;
         }
@@ -723,10 +846,10 @@ CK_DLL_CTRL( osc_ctrl_phase )
 {
     // get data
     Osc_Data * d = (Osc_Data *)OBJ_MEMBER_UINT(SELF, osc_offset_data );
-    // set freq
+    // set phase
     d->phase = GET_CK_FLOAT(ARGS);
-    //bound ( this could be set arbitrarily high or low )
-    if ( d->phase >= 1.0 || d->phase < 0.0 ) d->phase -= floor( d->num );
+    // bound ( this could be set arbitrarily high or low )
+    if( d->phase >= 1.0 || d->phase < 0.0 ) d->phase -= floor( d->num );
     // return
     RETURN->v_float = (t_CKFLOAT)d->phase;
 }
@@ -757,7 +880,7 @@ CK_DLL_CTRL( osc_ctrl_width )
 {
     // get data
     Osc_Data * d = (Osc_Data *)OBJ_MEMBER_UINT(SELF, osc_offset_data );
-    // set freq
+    // set width
     d->width = GET_CK_FLOAT(ARGS);
     //bound ( this could be set arbitrarily high or low )
     d->width = ck_max( 0.0, ck_min( 1.0, d->width ) );
@@ -836,7 +959,7 @@ CK_DLL_CTRL( sawosc_ctrl_width )
 {
     // get data
     Osc_Data * d = (Osc_Data *)OBJ_MEMBER_UINT(SELF, osc_offset_data );
-    // set freq
+    // set width
     d->width = GET_CK_FLOAT(ARGS);
     // bound ( this could be set arbitrarily high or low )
     d->width = ( d->width < 0.5 ) ? 0.0 : 1.0;  //rising or falling
@@ -1311,7 +1434,7 @@ CK_DLL_CTRL( genX_lookup )
     in_index = GET_NEXT_FLOAT(ARGS);
 
     // gewang: moved to here
-    if (in_index < 0.) in_index = -in_index;
+    if( in_index < 0 ) in_index = -in_index;
     scaled_index = in_index * (genX_tableSize - 1); //drive with phasor [0, 1]
 
     //set up interpolation parameters

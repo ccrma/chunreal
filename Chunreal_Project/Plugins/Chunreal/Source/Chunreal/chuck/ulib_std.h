@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -33,6 +33,7 @@
 #define __ULIB_STD_H__
 
 #include "chuck_dl.h"
+#include "chuck_oo.h"
 
 // query
 DLL_QUERY libstd_query( Chuck_DL_Query * QUERY );

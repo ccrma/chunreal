@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -444,6 +444,16 @@ public:
         m_outputStr += "</div>\n";
     }
 
+    void begin_ctors() // 1.5.2.0
+    {
+        m_outputStr += "<h3 class=\"class_section_header\">constructors</h3>\n<div class=\"members\">\n";
+    }
+
+    void begin_dtor() // 1.5.2.0
+    {
+        m_outputStr += "<h3 class=\"class_section_header\">destructor</h3>\n<div class=\"members\">\n";
+    }
+
     void begin_member_funcs()
     {
         m_outputStr += "<h3 class=\"class_section_header\">member functions</h3>\n<div class=\"members\">\n";
@@ -529,11 +539,16 @@ public:
         // function name
         m_outputStr += "<span class=\"membername\">" + string(S_name(func->def()->name)) + "</span>(";
 
+        // remember
         m_func = func;
     }
 
     void end_static_member_func()
     {
+        // verify
+        if( !m_func ) return;
+
+        // finish output string
         m_outputStr += ")</p>\n";
 
         if(m_func->doc.size() > 0)
@@ -543,6 +558,7 @@ public:
 
         m_outputStr += "</div>\n";
 
+        // zero out
         m_func = NULL;
     }
 
@@ -550,10 +566,10 @@ public:
     {
         // return type
         m_outputStr += "<div class=\"member\">\n<p class=\"member_declaration\"><span class=\""
-                     + css_class_for_type(m_env_ref, func->def()->ret_type)
-                     + "\">" + func->def()->ret_type->base_name.c_str();
+                     + css_class_for_type( m_env_ref, func->def() ? func->def()->ret_type : NULL )
+                     + "\">" + (func->def() ? func->def()->ret_type->base_name.c_str() : "void");
         // check array
-        if( func->def()->ret_type->array_depth )
+        if( func->def() && func->def()->ret_type->array_depth )
         {
             m_outputStr += "</span>";
             m_outputStr += "<span class=\"typename\">";
@@ -563,22 +579,63 @@ public:
         m_outputStr += "</span> ";
 
         // function name
-        m_outputStr += "<span class=\"membername\">" + string(S_name(func->def()->name)) + "</span>(";
+        m_outputStr += "<span class=\"membername\">" + func->base_name /* string(S_name(func->def()->name))*/ + "</span>(";
 
+        // save for end_member_func()
         m_func = func;
     }
 
     void end_member_func()
     {
+        // verify
+        if( !m_func ) return;
+
+        // finish output from before
         m_outputStr += ")</p>\n";
 
-        if(m_func->doc.size() > 0)
-            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize(m_func->doc) + "</p>\n";
+        if( m_func->doc.size() > 0 )
+            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize( m_func->doc ) + "</p>\n";
         else
             m_outputStr += "<p class=\"empty_member_description\">No description available</p>\n";
 
+        // finish output
         m_outputStr += "</div>\n";
 
+        // zero out
+        m_func = NULL;
+    }
+
+    void begin_ctor( Chuck_Func * func )
+    {
+        // return type
+        m_outputStr += "<div class=\"member\">\n<p class=\"member_declaration\">";
+
+        // function name
+        m_outputStr += "<span class=\"membername\">" + func->base_name /* string(S_name(func->def()->name))*/ + "</span>(";
+
+        // save for end_member_func()
+        m_func = func;
+    }
+
+    void end_ctor()
+    {
+        // verify
+        if( !m_func ) return;
+
+        // finish output from before
+        m_outputStr += ")</p>\n";
+
+        if( m_func->doc.size() > 0 )
+            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize( m_func->doc ) + "</p>\n";
+        else if( !m_func->def() || !m_func->def()->arg_list ) // default ctor?
+            m_outputStr += "<p class=\"member_description\">" + capitalize_and_periodize( "Default constructor for " + m_func->base_name ) + "</p>\n";
+        else
+            m_outputStr += "<p class=\"empty_member_description\">No description available</p>\n";
+
+        // finish output
+        m_outputStr += "</div>\n";
+
+        // zero out
         m_func = NULL;
     }
 
@@ -626,7 +683,7 @@ public:
 
     static std::string css_class_for_type( Chuck_Env * env, Chuck_Type * type )
     {
-        if( isprim(env, type) || isvoid(env, type) || (type->array_depth && isprim(env, type->array_type)) )
+        if( !type || isprim(env, type) || isvoid(env, type) || (type->array_depth && isprim(env, type->array_type)) )
             return "ckdoc_typename ckdoc_type_primitive";
         else if(isugen(type))
             return "ckdoc_typename ckdoc_type_ugen";
@@ -976,17 +1033,6 @@ string CKDoc::genCSS()
 
 
 //-----------------------------------------------------------------------------
-// compare functions
-//-----------------------------------------------------------------------------
-bool comp_func(Chuck_Func *a, Chuck_Func *b)
-{ return a->name < b->name; }
-bool comp_value(Chuck_Value *a, Chuck_Value *b)
-{ return a->name < b->name; }
-
-
-
-
-//-----------------------------------------------------------------------------
 // name: genGroups()
 // desc: generate all added groups, return each in a separate entry
 //-----------------------------------------------------------------------------
@@ -1150,6 +1196,8 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
         map<string, int> func_names;
 
         // member and static functions and values
+        vector<Chuck_Func *> ctors;
+        Chuck_Func * dtor = NULL;
         vector<Chuck_Func *> mfuncs;
         vector<Chuck_Func *> sfuncs;
         vector<Chuck_Value *> mvars;
@@ -1168,10 +1216,10 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
             if( value->name.length() == 0 )
                 continue;
             // special internal values
-            if(value->name[0] == '@')
+            if( value->name.size() && value->name[0] == '@' )
                 continue;
             // value is a function
-            if( value->type->base_name == "[function]" )
+            if( isa( value->type, value->type->env()->ckt_function ) )
                 continue;
 
             // static or instance?
@@ -1193,42 +1241,81 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
             // first one
             func_names[func->name] = 1;
             // static or instance?
-            if(func->def()->static_decl == ae_key_static) sfuncs.push_back(func);
-            else mfuncs.push_back(func);
+            if( func->is_static ) sfuncs.push_back(func);
+            else
+            {
+                // constructor?
+                if( func->is_ctor ) ctors.push_back(func);
+                // destructor?
+                else if( func->is_dtor ) dtor = func;
+                // other member function?
+                else mfuncs.push_back(func);
+            }
         }
 
         // sort
-        sort(svars.begin(), svars.end(), comp_value);
-        sort(mvars.begin(), mvars.end(), comp_value);
-        sort(sfuncs.begin(), sfuncs.end(), comp_func);
-        sort(mfuncs.begin(), mfuncs.end(), comp_func);
+        sort( svars.begin(), svars.end(), ck_comp_value );
+        sort( mvars.begin(), mvars.end(), ck_comp_value );
+        sort( sfuncs.begin(), sfuncs.end(), ck_comp_func );
+        sort( mfuncs.begin(), mfuncs.end(), ck_comp_func );
+        sort( ctors.begin(), ctors.end(), ck_comp_func_args );
 
-        // static functions
-        if( sfuncs.size() )
+        // whether to potentially insert a default constructor | 1.5.2.0
+        t_CKBOOL insertDefaultCtor = type_engine_has_implicit_def_ctor( type );
+
+        // constructors | 1.5.2.0 (ge) added
+        if( ctors.size() || insertDefaultCtor )
         {
-            // begin static functions
-            output->begin_static_member_funcs();
+            // begin member functions
+            output->begin_ctors();
+
+            // add default constructor, if non-explicitly specified
+            if( ((ctors.size() == 0 || (ctors.size() && ctors[0]->def()->arg_list))) && insertDefaultCtor )
+            {
+                Chuck_Func ftemp;
+                ftemp.base_name = type->base_name;
+                ftemp.doc = "default constructor for " + type->base_name;
+                // begin the func
+                output->begin_ctor( &ftemp );
+                // but don't use the args
+                output->end_ctor();
+            }
+
             // iterate
-            for( vector<Chuck_Func *>::iterator f = sfuncs.begin(); f != sfuncs.end(); f++ )
+            for( vector<Chuck_Func *>::iterator f = ctors.begin(); f != ctors.end(); f++ )
             {
                 // the func
                 Chuck_Func * func = *f;
-                // begin output
-                output->begin_static_member_func(func);
+                // begin the func
+                output->begin_ctor(func);
                 // argument list
                 a_Arg_List args = func->def()->arg_list;
                 while(args != NULL)
                 {
                     // output argument
-                    output->func_arg( args );
+                    output->func_arg(args);
                     args = args->next;
                 }
-                // end output
-                output->end_static_member_func();
+                // end the func
+                output->end_ctor();
             }
-            // end static functions
-            output->end_static_member_funcs();
+
+            // end member functions
+            output->end_member_funcs();
         }
+
+        // destructor | 1.5.2.0 (ge) added but not added
+        // if( dtor )
+        // {
+        //    // begin member functions
+        //    output->begin_dtor();
+        //    // begin the func | no args
+        //    output->begin_member_func(dtor);
+        //    // end the func
+        //    output->end_member_func();
+        //    // end member functions
+        //    output->end_member_funcs();
+        // }
 
         // member functions
         if( mfuncs.size() )
@@ -1257,16 +1344,31 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
             output->end_member_funcs();
         }
 
-        // static vars
-        if( svars.size() )
+        // static functions
+        if( sfuncs.size() )
         {
-            // start output
-            output->begin_static_member_vars();
+            // begin static functions
+            output->begin_static_member_funcs();
             // iterate
-            for( vector<Chuck_Value *>::iterator v = svars.begin(); v != svars.end(); v++ )
-                output->static_member_var(*v);
-            // end output
-            output->end_static_member_vars();
+            for( vector<Chuck_Func *>::iterator f = sfuncs.begin(); f != sfuncs.end(); f++ )
+            {
+                // the func
+                Chuck_Func * func = *f;
+                // begin output
+                output->begin_static_member_func(func);
+                // argument list
+                a_Arg_List args = func->def()->arg_list;
+                while(args != NULL)
+                {
+                    // output argument
+                    output->func_arg( args );
+                    args = args->next;
+                }
+                // end output
+                output->end_static_member_func();
+            }
+            // end static functions
+            output->end_static_member_funcs();
         }
 
         // member vars
@@ -1279,6 +1381,18 @@ string CKDoc::genType( Chuck_Type * type, t_CKBOOL clearOutput )
                 output->member_var(*v);
             // end
             output->end_member_vars();
+        }
+
+        // static vars
+        if( svars.size() )
+        {
+            // start output
+            output->begin_static_member_vars();
+            // iterate
+            for( vector<Chuck_Value *>::iterator v = svars.begin(); v != svars.end(); v++ )
+                output->static_member_var(*v);
+            // end output
+            output->end_static_member_vars();
         }
     }
     // end the type

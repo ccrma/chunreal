@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -1228,7 +1228,7 @@ Chuck_VM_Shred * Chuck_VM::spork( Chuck_VM_Shred * shred )
     m_num_shreds++;
 
     // notify watcher | 1.5.1.5
-    notify_watchers( CKVM_SHREDS_WATCH_SPORK, shred, m_shreds_watchers_spork );
+    notify_watchers( ckvm_shreds_watch_SPORK, shred, m_shreds_watchers_spork );
 
     return shred;
 }
@@ -1397,7 +1397,7 @@ Chuck_VM_Shred * Chuck_VM::get_current_shred() const
 // name: notify_watchers()
 // desc: notify watchers for a particular subscription | 1.5.1.5
 //-----------------------------------------------------------------------------
-void Chuck_VM::notify_watchers( ckvmShredsWatcherFlag which,
+void Chuck_VM::notify_watchers( ckvm_ShredsWatcherFlag which,
                                 Chuck_VM_Shred * shred,
                                 list<Chuck_VM_Shreds_Watcher> & v )
 {
@@ -1435,7 +1435,7 @@ void Chuck_VM::dump_shred( Chuck_VM_Shred * shred )
     shred->is_dumped = TRUE;
 
     // before we reset the shred ID, notify watchers
-    notify_watchers( CKVM_SHREDS_WATCH_REMOVE, shred, m_shreds_watchers_remove );
+    notify_watchers( ckvm_shreds_watch_REMOVE, shred, m_shreds_watchers_remove );
 
     // TODO: cool?
     shred->xid = 0;
@@ -1511,10 +1511,10 @@ void Chuck_VM::subscribe_watcher( f_shreds_watcher cb, t_CKUINT options, void * 
     // watcher bundle
     Chuck_VM_Shreds_Watcher w( cb, userdata );
     // check options and subscribe the watcher
-    ckvm_process_watcher( options & CKVM_SHREDS_WATCH_SPORK, m_shreds_watchers_spork, w );
-    ckvm_process_watcher( options & CKVM_SHREDS_WATCH_REMOVE, m_shreds_watchers_remove, w );
-    ckvm_process_watcher( options & CKVM_SHREDS_WATCH_SUSPEND, m_shreds_watchers_suspend, w );
-    ckvm_process_watcher( options & CKVM_SHREDS_WATCH_ACTIVATE, m_shreds_watchers_activate, w );
+    ckvm_process_watcher( options & ckvm_shreds_watch_SPORK, m_shreds_watchers_spork, w );
+    ckvm_process_watcher( options & ckvm_shreds_watch_REMOVE, m_shreds_watchers_remove, w );
+    ckvm_process_watcher( options & ckvm_shreds_watch_SUSPEND, m_shreds_watchers_suspend, w );
+    ckvm_process_watcher( options & ckvm_shreds_watch_ACTIVATE, m_shreds_watchers_activate, w );
 }
 
 
@@ -1526,7 +1526,7 @@ void Chuck_VM::subscribe_watcher( f_shreds_watcher cb, t_CKUINT options, void * 
 //-----------------------------------------------------------------------------
 void Chuck_VM::remove_watcher( f_shreds_watcher cb )
 {
-    subscribe_watcher( cb, CKVM_SHREDS_WATCH_NONE );
+    subscribe_watcher( cb, ckvm_shreds_watch_NONE );
 }
 
 
@@ -1571,7 +1571,7 @@ Chuck_VM_Code::Chuck_VM_Code()
     need_this = FALSE;
     is_static = FALSE;
     native_func = 0;
-    native_func_type = NATIVE_UNKNOWN;
+    native_func_kind = ae_fp_unknown;
 }
 
 
@@ -1831,12 +1831,12 @@ void Chuck_VM_Shred::detach_ugens()
             // NOTE no need to bump reference since now ugen_map ref counts
             release_v.push_back(ugen);
 
-            // disconnect
-            ugen->disconnect( TRUE );
             // make sure if ugen has an origin shred, it is this one | 1.5.1.5
             assert( !ugen->originShred() || ugen->originShred() == this );
             // also clear reference to this shred | 1.5.1.5
             ugen->setOriginShred( NULL );
+            // disconnect
+            ugen->disconnect( TRUE );
 
             // advance the iterator
             iter++;
@@ -1848,6 +1848,7 @@ void Chuck_VM_Shred::detach_ugens()
         for( vector<Chuck_UGen *>::iterator rvi = release_v.begin();
              rvi != release_v.end(); rvi++ )
         {
+            // cerr << "RELEASE: " << (void *) *rvi<< endl;
             // release it
             CK_SAFE_RELEASE( *rvi );
         }
@@ -1957,14 +1958,12 @@ t_CKBOOL Chuck_VM_Shred::remove( Chuck_UGen * ugen )
     if( !ugen || !m_ugen_map[ugen] )
         return FALSE;
 
+    // remove it
+    m_ugen_map.erase( ugen );
+
     // decrement reference count (added 1.3.0.0)
     ugen->release();
 
-    // RUBBISH
-    // cerr << "vm remove ugen: 0x" << hex << (int)ugen << endl;
-
-    // remove it
-    m_ugen_map.erase( ugen );
     return TRUE;
 }
 
@@ -3307,8 +3306,10 @@ t_CKBOOL Chuck_VM_MFunInvoker::setup( Chuck_Func * func, t_CKUINT func_vt_offset
     instructions.push_back( new Chuck_Instr_Dot_Member_Func(func_vt_offset) );
     // func to code
     instructions.push_back( new Chuck_Instr_Func_To_Code );
-    // push stack depth (in bytes)
-    instructions.push_back( new Chuck_Instr_Reg_Push_Imm(args_size_bytes) );
+    // frame offset; use 0 since we have no local variables
+    // was: push stack depth (in bytes)
+    // was: instructions.push_back( new Chuck_Instr_Reg_Push_Imm(args_size_bytes) );
+    instructions.push_back( new Chuck_Instr_Reg_Push_Imm(0) );
     // func call
     instructions.push_back( new Chuck_Instr_Func_Call());
 
@@ -3576,6 +3577,152 @@ void Chuck_VM_MFunInvoker::cleanup()
     // zero out
     instr_pushThis = NULL;
     instr_pushReturnVar = NULL;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: Chuck_VM_DtorInvoker()
+// desc: constructor
+//-----------------------------------------------------------------------------
+Chuck_VM_DtorInvoker::Chuck_VM_DtorInvoker()
+{
+    // zero
+    invoker_shred = NULL;
+    instr_pushThis = NULL;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: ~Chuck_VM_DtorInvoker()
+// desc: destructor
+//-----------------------------------------------------------------------------
+Chuck_VM_DtorInvoker::~Chuck_VM_DtorInvoker()
+{
+    cleanup();
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: setup()
+// desc: setup the invoker for use
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_VM_DtorInvoker::setup( Chuck_Func * dtor, Chuck_VM * vm )
+{
+    // clean up first
+    if( invoker_shred ) cleanup();
+
+    // a vector of VM instructions
+    vector<Chuck_Instr *> instructions;
+
+    // push this (as func arg) -- will set later
+    instr_pushThis = new Chuck_Instr_Reg_Push_Imm( 0 );
+    instructions.push_back( instr_pushThis );
+    // push destructor VM code
+    instructions.push_back( new Chuck_Instr_Reg_Push_Code(dtor->code) );
+    // push stack offset; 0 since this is a dedicated shred for invoking
+    instructions.push_back( new Chuck_Instr_Reg_Push_Imm(0) );
+    // func call
+    instructions.push_back( new Chuck_Instr_Func_Call());
+    // end of code
+    instructions.push_back( new Chuck_Instr_EOC);
+
+    // create VM code
+    Chuck_VM_Code * code = new Chuck_VM_Code;
+    // allocate instruction array
+    code->instr = new Chuck_Instr*[instructions.size()];
+    // number of instructions
+    code->num_instr = instructions.size();
+    // copy instructions
+    for( t_CKUINT i = 0; i < instructions.size(); i++ ) code->instr[i] = instructions[i];
+    // TODO: should this be > 0
+    code->stack_depth = 0;
+    // TODO: should this be this true?
+    code->need_this = FALSE;
+
+    // create dedicated shred
+    invoker_shred = new Chuck_VM_Shred;
+    // set the VM ref (needed by initialize)
+    invoker_shred->vm_ref = vm;
+    // initialize with code + allocate stacks
+    invoker_shred->initialize( code );
+    // set name
+    invoker_shred->name = dtor->signature(FALSE,TRUE);
+    // enter immediate mode (will throw runtime exception on any time/event ops)
+    invoker_shred->setImmediateMode( TRUE );
+
+    // done
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: invoke()
+// desc: invoke the dtor
+//-----------------------------------------------------------------------------
+void Chuck_VM_DtorInvoker::invoke( Chuck_Object * obj, Chuck_VM_Shred * parent_shred )
+{
+    // no shred?
+    if( !invoker_shred ) return;
+    // verify
+    assert( instr_pushThis != NULL );
+
+    // set this pointer
+    instr_pushThis->set( (t_CKUINT)obj );
+    // reset shred: program counter
+    invoker_shred->pc = 0;
+    // next pc
+    invoker_shred->next_pc = 1;
+    // set parent
+    invoker_shred->parent = parent_shred;
+
+    // set parent base_ref; in case mfun is part of a non-public class
+    // that can access file-global variables outside the class definition
+    if( invoker_shred->parent )
+    { invoker_shred->base_ref = invoker_shred->parent->base_ref; }
+    else
+    { invoker_shred->base_ref = invoker_shred->mem; }
+
+    // shred in dump (all done)
+    invoker_shred->is_dumped = FALSE;
+    // shred done
+    invoker_shred->is_done = FALSE;
+    // shred running
+    invoker_shred->is_running = FALSE;
+    // shred abort
+    invoker_shred->is_abort = FALSE;
+    // set the instr
+    invoker_shred->instr = invoker_shred->code->instr;
+    // zero out the id (shred is in immediate mode and cannot be shreduled)
+    invoker_shred->xid = 0;
+    // inherit now from vm
+    invoker_shred->now = invoker_shred->vm_ref->now();
+    // run shred on VM
+    invoker_shred->run( invoker_shred->vm_ref );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: cleanup()
+// desc: clean up
+//-----------------------------------------------------------------------------
+void Chuck_VM_DtorInvoker::cleanup()
+{
+    // release shred reference
+    // NB this should also cleanup the code and VM instruction we created in setup
+    CK_SAFE_RELEASE( invoker_shred );
+
+    // zero out
+    instr_pushThis = NULL;
 }
 
 

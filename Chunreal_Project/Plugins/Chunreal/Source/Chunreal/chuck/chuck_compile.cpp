@@ -1,8 +1,8 @@
 /*----------------------------------------------------------------------------
-  ChucK Concurrent, On-the-fly Audio Programming Language
+  ChucK Strongly-timed Audio Programming Language
     Compiler and Virtual Machine
 
-  Copyright (c) 2004 Ge Wang and Perry R. Cook.  All rights reserved.
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
@@ -98,7 +98,7 @@ Chuck_Compiler::Chuck_Compiler()
     m_auto_depend = FALSE;
 
     // origin hint | 1.5.0.0 (ge) added
-    m_originHint = te_originUnknown;
+    m_originHint = ckte_origin_UNKNOWN;
 }
 
 
@@ -127,7 +127,7 @@ t_CKBOOL Chuck_Compiler::initialize()
     assert( m_carrier != NULL );
 
     // set origin hint
-    m_originHint = te_originBuiltin;
+    m_originHint = ckte_origin_BUILTIN;
 
     // allocate the type checker
     if( !type_engine_init( m_carrier ) )
@@ -147,7 +147,7 @@ t_CKBOOL Chuck_Compiler::initialize()
         goto error;
 
     // unset origin hint
-    m_originHint = te_originUnknown;
+    m_originHint = ckte_origin_UNKNOWN;
 
     return TRUE;
 
@@ -718,11 +718,11 @@ t_CKBOOL load_internal_modules( Chuck_Compiler * compiler )
 
     // load
     EM_log( CK_LOG_SEVERE, "module 'math'" );
-    if( !load_module( compiler, env, libmath_query, "Math", "global" ) ) goto error;
+    if( !load_module( compiler, env, libmath_query, "math", "global" ) ) goto error;
     EM_log( CK_LOG_SEVERE, "module 'osc'" );
     load_module( compiler, env, osc_query, "osc", "global" );
     EM_log( CK_LOG_SEVERE, "module 'ai'" );
-    if( !load_module( compiler, env, libai_query, "AI", "global" ) ) goto error;
+    if( !load_module( compiler, env, libai_query, "ai", "global" ) ) goto error;
     EM_log( CK_LOG_SEVERE, "module 'extract'" );
     load_module( compiler, env, extract_query, "extract", "global" );
     EM_log( CK_LOG_SEVERE, "module 'filter'" );
@@ -734,11 +734,11 @@ t_CKBOOL load_internal_modules( Chuck_Compiler * compiler )
     EM_log( CK_LOG_SEVERE, "module 'xxx'" );
     load_module( compiler, env, xxx_query, "xxx", "global" );
     EM_log( CK_LOG_SEVERE, "module 'std'" );
-    if( !load_module( compiler, env, libstd_query, "Std", "global" ) ) goto error;
+    if( !load_module( compiler, env, libstd_query, "std", "global" ) ) goto error;
 
     // load
     EM_log( CK_LOG_SEVERE, "module 'machine'" );
-    if( !load_module( compiler, env, machine_query, "Machine", "global" ) ) goto error;
+    if( !load_module( compiler, env, machine_query, "machine", "global" ) ) goto error;
 
     #ifndef __DISABLE_NETWORK__
     EM_log( CK_LOG_SEVERE, "module 'opsc'" );
@@ -759,7 +759,7 @@ t_CKBOOL load_internal_modules( Chuck_Compiler * compiler )
     #endif
 
     EM_log( CK_LOG_SEVERE, "module 'CKDoc'" );
-    if( !load_module( compiler, env, ckdoc_query, "CKDoc", "global" ) ) goto error;
+    if( !load_module( compiler, env, ckdoc_query, "ckdoc", "global" ) ) goto error;
 
     // clear context
     type_engine_unload_context( env );

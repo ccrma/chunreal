@@ -1,25 +1,25 @@
 /*----------------------------------------------------------------------------
- ChucK Concurrent, On-the-fly Audio Programming Language
-   Compiler and Virtual Machine
+  ChucK Strongly-timed Audio Programming Language
+    Compiler and Virtual Machine
 
- Copyright (c) 2003 Ge Wang and Perry R. Cook.  All rights reserved.
-   http://chuck.stanford.edu/
-   http://chuck.cs.princeton.edu/
+  Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
+    http://chuck.stanford.edu/
+    http://chuck.cs.princeton.edu/
 
- This program is free software; you can redistribute it and/or modify
- it under the terms of the GNU General Public License as published by
- the Free Software Foundation; either version 2 of the License, or
- (at your option) any later version.
+  This program is free software; you can redistribute it and/or modify
+  it under the terms of the GNU General Public License as published by
+  the Free Software Foundation; either version 2 of the License, or
+  (at your option) any later version.
 
- This program is distributed in the hope that it will be useful,
- but WITHOUT ANY WARRANTY; without even the implied warranty of
- MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU General Public License for more details.
 
- You should have received a copy of the GNU General Public License
- along with this program; if not, write to the Free Software
- Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
- U.S.A.
+  You should have received a copy of the GNU General Public License
+  along with this program; if not, write to the Free Software
+  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
+  U.S.A.
  -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -718,24 +718,32 @@ t_CKBOOL ChucK::initChugins()
 
         //---------------------------------------------------------------------
         // set origin hint | 1.5.0.0 (ge) added
-        m_carrier->compiler->m_originHint = te_originChugin;
+        m_carrier->compiler->m_originHint = ckte_origin_CHUGIN;
         //---------------------------------------------------------------------
         // log
         EM_log( CK_LOG_SYSTEM, "loading chugins..." );
         // push indent level
         // EM_pushlog();
+
+        // chugin extension
+        std::string extension = ".chug";
+#ifdef __EMSCRIPTEN__
+        // webchugins have extension ".chug.wasm" | 1.5.2.0 (terryzfeng) added
+        extension = "chug.wasm";
+#endif
         // load external libs | 1.5.0.4 (ge) enabled recursive search
-        if( !compiler()->load_external_modules( ".chug", dl_search_path, named_dls, TRUE ) )
+        if( !compiler()->load_external_modules( extension.c_str(), dl_search_path, named_dls, TRUE ) )
         {
             // clean up
             goto error;
         }
+
         // pop log
         // EM_poplog();
 
         //---------------------------------------------------------------------
         // set origin hint | 1.5.0.0 (ge) added
-        m_carrier->compiler->m_originHint = te_originImport;
+        m_carrier->compiler->m_originHint = ckte_origin_IMPORT;
         //---------------------------------------------------------------------
         // log
         EM_log( CK_LOG_SYSTEM, "loading chuck extensions..." );
@@ -764,8 +772,8 @@ t_CKBOOL ChucK::initChugins()
                 compiler()->env()->op_registry.preserve();
                 // get the code
                 code = compiler()->output();
-                // name it - TODO?
-                // code->name = string(argv[i]);
+                // name it | 1.5.2.0 (ge)
+                code->name = std::string("pre-load ck file: ") + filename;
 
                 // spork it
                 shred = vm()->spork( code, NULL, TRUE );
@@ -798,14 +806,14 @@ t_CKBOOL ChucK::initChugins()
     m_carrier->env->load_user_namespace();
 
     // unset origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUnknown;
+    m_carrier->compiler->m_originHint = ckte_origin_UNKNOWN;
 
     return true;
 
 error: // 1.4.1.0 (ge) added
 
     // unset origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUnknown;
+    m_carrier->compiler->m_originHint = ckte_origin_UNKNOWN;
 
     return false;
 }
@@ -850,8 +858,16 @@ void ChucK::probeChugins()
     EM_log( CK_LOG_SYSTEM, "probing chugins (.chug)..." );
     // push indent level
     // EM_pushlog();
+
+    // chugin extension
+    std::string extension = ".chug";
+#ifdef __EMSCRIPTEN__
+    // webchugins have extension ".chug.wasm" | 1.5.2.0 (terryzfeng) added
+    extension = "chug.wasm";
+#endif
+
     // load external libs
-    if( !Chuck_Compiler::probe_external_modules( ".chug", dl_search_path, named_dls, TRUE, ck_libs_to_preload ) )
+    if( !Chuck_Compiler::probe_external_modules( extension.c_str(), dl_search_path, named_dls, TRUE, ck_libs_to_preload ) )
     {
         // warning
         EM_log( CK_LOG_SYSTEM, "error probing chugins..." );
@@ -1102,7 +1118,7 @@ t_CKBOOL ChucK::compileFile( const std::string & path,
 
     //-------------------------------------------------------------------------
     // set origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUserDefined;
+    m_carrier->compiler->m_originHint = ckte_origin_USERDEFINED;
     //-------------------------------------------------------------------------
 
     // log
@@ -1181,7 +1197,7 @@ t_CKBOOL ChucK::compileFile( const std::string & path,
     // pop indent
     EM_poplog();
     // unset origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUnknown;
+    m_carrier->compiler->m_originHint = ckte_origin_UNKNOWN;
 
     return TRUE;
 
@@ -1190,7 +1206,7 @@ error: // 1.5.0.0 (ge) added
     // pop indent
     EM_poplog();
     // unset origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUnknown;
+    m_carrier->compiler->m_originHint = ckte_origin_UNKNOWN;
 
     return FALSE;
 }
@@ -1234,7 +1250,7 @@ t_CKBOOL ChucK::compileCode( const std::string & code,
 
     //-------------------------------------------------------------------------
     // set origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUserDefined;
+    m_carrier->compiler->m_originHint = ckte_origin_USERDEFINED;
     //-------------------------------------------------------------------------
 
     // log
@@ -1295,7 +1311,7 @@ t_CKBOOL ChucK::compileCode( const std::string & code,
     // pop indent
     EM_poplog();
     // unset origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUnknown;
+    m_carrier->compiler->m_originHint = ckte_origin_UNKNOWN;
 
     return TRUE;
 
@@ -1304,7 +1320,7 @@ error: // 1.5.0.0 (ge) added
     // pop indent
     EM_poplog();
     // unset origin hint | 1.5.0.0 (ge) added
-    m_carrier->compiler->m_originHint = te_originUnknown;
+    m_carrier->compiler->m_originHint = ckte_origin_UNKNOWN;
 
     return FALSE;
 }
