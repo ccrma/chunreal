@@ -52,6 +52,7 @@ class UChunrealBlueprint : public UBlueprintFunctionLibrary
         * Set ChucK global int variable
         * @param ID ChucK ID
         * @param paramName Name of the ChucK global int variable
+        * @param val int value
         */
         UFUNCTION(BlueprintCallable, Category = "Chunreal", meta = (keywords = "Set ChucK Int"))
             static bool SetChuckGlobalInt(FString id, FString paramName, int val);
@@ -66,6 +67,7 @@ class UChunrealBlueprint : public UBlueprintFunctionLibrary
         * Set ChucK global float variable 
         * @param ID ChucK ID
         * @param paramName Name of the ChucK global float variable
+        * @param val float value
         */
         UFUNCTION(BlueprintCallable, Category = "Chunreal", meta = (keywords = "Set ChucK Float"))
             static bool SetChuckGlobalFloat(FString id, FString paramName, float val);
@@ -80,9 +82,31 @@ class UChunrealBlueprint : public UBlueprintFunctionLibrary
         * Set ChucK global string variable
         * @param ID ChucK ID
         * @param paramName Name of the ChucK global string variable
+        * @param val string
         */
         UFUNCTION(BlueprintCallable, Category = "Chunreal", meta = (keywords = "Set ChucK String"))
             static bool SetChuckGlobalString(FString id, FString paramName, FString val);
+
+        /**
+        * Set ChucK global int array variable
+        * @param ID ChucK ID
+        * @param paramName Name of the ChucK global string variable
+        * @param intArray integer array
+        * @param arraySize size of array
+        */
+        UFUNCTION(BlueprintCallable, Category = "Chunreal", meta = (keywords = "Set ChucK Int Array"))
+            static bool SetChuckGlobalIntArray(FString id, FString paramName, TArray<int64> intArray, int arraySize);
+
+        /**
+        * Set ChucK global float array variable
+        * @param ID ChucK ID
+        * @param paramName Name of the ChucK global string variable
+        * @param floatArray float array
+        * @param arraySize size of array
+        */
+        UFUNCTION(BlueprintCallable, Category = "Chunreal", meta = (keywords = "Set ChucK Float Array"))
+            static bool SetChuckGlobalFloatArray(FString id, FString paramName, TArray<double> floarArray, int arraySize);
+
         /**
         * Broadcast ChucK global event
         * @param ID ChucK ID

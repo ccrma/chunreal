@@ -43,8 +43,8 @@ void FChunrealModule::StartupModule()
 
     //Set log
 #if PRINT_CHUCK_LOG
-    //chuckParent->setStdoutCallback(printThisFromChuck);
-    //chuckParent->setStderrCallback(printThisFromChuck);
+    chuckParent->setStdoutCallback(printThisFromChuck);
+    chuckParent->setStderrCallback(printThisFromChuck);
     //theChuck->setLogLevel(CK_LOG_INFO);
 #endif
 
@@ -65,25 +65,37 @@ void FChunrealModule::ShutdownModule()
     chuckParent = nullptr;  
 }
 
-//Get ChucK sample rate
+/// <summary>
+/// Get ChucK sample rate
+/// </summary>
+/// <returns></returns>
 int FChunrealModule::GetChuckSampleRate()
 {
     return chuckSampleRate;
 }
 
-//Set ChucK sample rate
+/// <summary>
+/// Set ChucK sample rate
+/// </summary>
+/// <param name="sampleRate"></param>
 void FChunrealModule::SetChuckSampleRate(int sampleRate)
 {
     chuckSampleRate = sampleRate;
 }
 
-//static function to output custom log
+/// <summary>
+/// static function to output custom log
+/// </summary>
+/// <param name="message"></param>
 void FChunrealModule::Log(FString message)
 {
     UE_LOG(LogChunreal, Log, TEXT("%s"), *message);
 }
 
-//Receive message from Chuck with a mutex
+/// <summary>
+/// Receive message from Chuck with a mutex
+/// </summary>
+/// <param name="msg"></param>
 void FChunrealModule::printThisFromChuck(const char* msg)
 {
     printMutex.Lock();
@@ -93,7 +105,12 @@ void FChunrealModule::printThisFromChuck(const char* msg)
     printMutex.Unlock();
 }
 
-//Compile ChucK code with a mutex
+/// <summary>
+/// Compile ChucK code with a mutex
+/// </summary>
+/// <param name="chuckRef"></param>
+/// <param name="code"></param>
+/// <param name="shredIDs"></param>
 void FChunrealModule::CompileChuckCode(ChucK* chuckRef, const std::string& code, std::vector<t_CKUINT>* shredIDs)
 {
     compilerMutex.Lock();
@@ -101,7 +118,13 @@ void FChunrealModule::CompileChuckCode(ChucK* chuckRef, const std::string& code,
     compilerMutex.Unlock();
 }
 
-//Run ChucK with a mutex
+/// <summary>
+/// Run ChucK with a mutex
+/// </summary>
+/// <param name="chuckRef"></param>
+/// <param name="input"></param>
+/// <param name="output"></param>
+/// <param name="numFrames"></param>
 void FChunrealModule::RunChuck(ChucK* chuckRef, const float* input, float* output, long long numFrames)
 {
     runMutex.Lock();
@@ -109,7 +132,12 @@ void FChunrealModule::RunChuck(ChucK* chuckRef, const float* input, float* outpu
     runMutex.Unlock();
 }
 
-//Store ChucK reference with ID with a mutex
+/// <summary>
+/// Store ChucK reference with ID with a mutex
+/// </summary>
+/// <param name="chuck"></param>
+/// <param name="id"></param>
+/// <returns></returns>
 bool FChunrealModule::StoreChuckRef(ChucK* chuck, FString id)
 {
     refMutex.Lock();
@@ -126,7 +154,11 @@ bool FChunrealModule::StoreChuckRef(ChucK* chuck, FString id)
     }
 }
 
-//Remove ChucK reference with ID with a mutex
+/// <summary>
+/// Remove ChucK reference with ID with a mutex
+/// </summary>
+/// <param name="id"></param>
+/// <returns></returns>
 bool FChunrealModule::RemoveChuckRef(FString id)
 {
     refMutex.Lock();
@@ -143,13 +175,21 @@ bool FChunrealModule::RemoveChuckRef(FString id)
     }
 }
 
-//Get ChucK sub index
+/// <summary>
+/// Get ChucK sub index
+/// </summary>
+/// <returns></returns>
 int FChunrealModule::GetChuckSubIndex()
 {
     return ++subIndex;
 }
 
-//Get global int
+/// <summary>
+/// Get global int
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <returns></returns>
 int FChunrealModule::GetChuckGlobalInt(FString id, FString paramName)
 {
     if (!ChuckMap.Contains(id))
@@ -162,7 +202,13 @@ int FChunrealModule::GetChuckGlobalInt(FString id, FString paramName)
         return chuck->globals()->get_global_int_value(TCHAR_TO_ANSI(*paramName));;
     }
 }
-//Set global int
+/// <summary>
+/// Set global int
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <param name="val"></param>
+/// <returns></returns>
 bool FChunrealModule::SetChuckGlobalInt(FString id, FString paramName, int val)
 {
     if (!ChuckMap.Contains(id))
@@ -177,7 +223,12 @@ bool FChunrealModule::SetChuckGlobalInt(FString id, FString paramName, int val)
     }
 }
 
-//Get global float
+/// <summary>
+/// Get global float
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <returns></returns>
 float FChunrealModule::GetChuckGlobalFloat(FString id, FString paramName)
 {
     if (!ChuckMap.Contains(id))
@@ -190,7 +241,13 @@ float FChunrealModule::GetChuckGlobalFloat(FString id, FString paramName)
         return chuck->globals()->get_global_float_value(TCHAR_TO_ANSI(*paramName));;
     }
 }
-//Set global float
+/// <summary>
+/// Set global float
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <param name="val"></param>
+/// <returns></returns>
 bool FChunrealModule::SetChuckGlobalFloat(FString id, FString paramName, float val)
 {
     if (!ChuckMap.Contains(id))
@@ -205,7 +262,12 @@ bool FChunrealModule::SetChuckGlobalFloat(FString id, FString paramName, float v
     }
 }
 
-//Get global string
+/// <summary>
+/// Get global string
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <returns></returns>
 FString FChunrealModule::GetChuckGlobalString(FString id, FString paramName)
 {
     if (!ChuckMap.Contains(id))
@@ -219,7 +281,13 @@ FString FChunrealModule::GetChuckGlobalString(FString id, FString paramName)
         return ANSI_TO_TCHAR(string);
     }
 }
-//Set global string
+/// <summary>
+/// Set global string
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <param name="val"></param>
+/// <returns></returns>
 bool FChunrealModule::SetChuckGlobalString(FString id, FString paramName, FString val)
 {
     if (!ChuckMap.Contains(id))
@@ -234,7 +302,56 @@ bool FChunrealModule::SetChuckGlobalString(FString id, FString paramName, FStrin
     }
 }
 
-//Broadcast global event
+/// <summary>
+/// Set global int array
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <param name="intArray"></param>
+/// <param name="arraySize"></param>
+/// <returns></returns>
+bool FChunrealModule::SetChuckGlobalIntArray(FString id, FString paramName, long long intArray[], int arraySize)
+{
+    if (!ChuckMap.Contains(id))
+    {
+        return false;
+    }
+    else
+    {
+        ChucK* chuck = *ChuckMap.Find(id);
+        chuck->globals()->setGlobalIntArray(TCHAR_TO_ANSI(*paramName), intArray, arraySize);
+        return true;
+    }
+}
+
+/// <summary>
+/// Set global float array
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <param name="floatArray"></param>
+/// <param name="arraySize"></param>
+/// <returns></returns>
+bool FChunrealModule::SetChuckGlobalFloatArray(FString id, FString paramName, double floatArray[], int arraySize)
+{
+    if (!ChuckMap.Contains(id))
+    {
+        return false;
+    }
+    else
+    {
+        ChucK* chuck = *ChuckMap.Find(id);
+        chuck->globals()->setGlobalFloatArray(TCHAR_TO_ANSI(*paramName), floatArray, arraySize);
+        return true;
+    }
+}
+
+/// <summary>
+/// Broadcast global event
+/// </summary>
+/// <param name="id"></param>
+/// <param name="paramName"></param>
+/// <returns></returns>
 bool FChunrealModule::BroadcastChuckGlobalEvent(FString id, FString paramName)
 {
     if (!ChuckMap.Contains(id))

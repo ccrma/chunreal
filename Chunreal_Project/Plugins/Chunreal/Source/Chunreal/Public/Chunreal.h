@@ -65,9 +65,14 @@ public:
     //Global string
     static FString GetChuckGlobalString(FString id, FString paramName);
     static bool SetChuckGlobalString(FString id, FString paramName, FString val);
+    //Global int array
+    static bool SetChuckGlobalIntArray(FString id, FString paramName, long long intArray[], int arraySize);
+    //Global float array
+    static bool SetChuckGlobalFloatArray(FString id, FString paramName, double floatArray[], int arraySize);
     //Global event
     static bool BroadcastChuckGlobalEvent(FString id, FString paramName);
-    //TODO-global arrays & event listener
+
+    //TODO-global array getters & event listener
 
 private:
     inline static int chuckSampleRate = 44100;

@@ -58,6 +58,16 @@ bool UChunrealBlueprint::SetChuckGlobalString(FString id, FString paramName, FSt
 {
 	return FChunrealModule::SetChuckGlobalString(id, paramName, val);
 }
+//Set ChucK global int array variable
+bool UChunrealBlueprint::SetChuckGlobalIntArray(FString id, FString paramName, TArray<int64> intArray, int arraySize)
+{
+	return FChunrealModule::SetChuckGlobalIntArray(id, paramName, intArray.GetData(), arraySize);
+}
+//Set ChucK global float array variable
+bool UChunrealBlueprint::SetChuckGlobalFloatArray(FString id, FString paramName, TArray<double> floatArray, int arraySize)
+{
+	return FChunrealModule::SetChuckGlobalFloatArray(id, paramName, floatArray.GetData(), arraySize);
+}
 //Broadcast ChucK global event
 bool UChunrealBlueprint::BroadcastChuckGlobalEvent(FString id, FString paramName)
 {
