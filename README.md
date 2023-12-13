@@ -4,15 +4,19 @@
 
 Developed by [Eito Murakami](https://ccrma.stanford.edu/~eitom) and [Ge Wang](https://ccrma.stanford.edu/~ge) at [CCRMA | Stanford University](https://ccrma.stanford.edu/).
 
+## Wiki Tutorial!
+The Wiki page contains a step-by-step tutorial that demonstrates how to set up the Chunreal plugin in your Unreal Engine project.
+
+https://github.com/ccrma/chunreal/wiki
 
 ## Template Project
 
-This git repository hosts a template Unreal Engine 5.2 project that includes example scenes, Blueprints, MetaSound sources, and materials. Clone or fork the repository and generate Visual Studio project files. 
+This git repository hosts a template Unreal Engine 5.3 project that includes example scenes, Blueprints, MetaSound sources, and materials. Clone or fork the repository and generate Visual Studio project files. 
 If this is your first time compiling a Unreal Engine project, set up your IDE by following these tutorials:
 
-https://docs.unrealengine.com/5.2/en-US/setting-up-visual-studio-development-environment-for-cplusplus-projects-in-unreal-engine/
+https://docs.unrealengine.com/5.3/en-US/setting-up-visual-studio-development-environment-for-cplusplus-projects-in-unreal-engine/
 
-https://docs.unrealengine.com/5.2/en-US/how-to-generate-unreal-engine-project-files-for-your-ide/
+https://docs.unrealengine.com/5.3/en-US/how-to-generate-unreal-engine-project-files-for-your-ide/
 
 ### Try Example Scenes!
 Try opening the following example levels and playing in the editor viewport!
