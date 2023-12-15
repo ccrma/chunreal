@@ -61,7 +61,7 @@ bool UChunrealBlueprint::SetChuckGlobalString(FString id, FString paramName, FSt
 //Set ChucK global int array variable
 bool UChunrealBlueprint::SetChuckGlobalIntArray(FString id, FString paramName, TArray<int64> intArray, int arraySize)
 {
-	return FChunrealModule::SetChuckGlobalIntArray(id, paramName, intArray.GetData(), arraySize);
+	return FChunrealModule::SetChuckGlobalIntArray(id, paramName, (t_CKINT *)intArray.GetData(), arraySize);
 }
 //Set ChucK global float array variable
 bool UChunrealBlueprint::SetChuckGlobalFloatArray(FString id, FString paramName, TArray<double> floatArray, int arraySize)
