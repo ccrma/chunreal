@@ -69,7 +69,7 @@ void FChunrealModule::ShutdownModule()
 /// Get ChucK sample rate
 /// </summary>
 /// <returns></returns>
-int FChunrealModule::GetChuckSampleRate()
+t_CKINT FChunrealModule::GetChuckSampleRate()
 {
     return chuckSampleRate;
 }
@@ -78,7 +78,7 @@ int FChunrealModule::GetChuckSampleRate()
 /// Set ChucK sample rate
 /// </summary>
 /// <param name="sampleRate"></param>
-void FChunrealModule::SetChuckSampleRate(int sampleRate)
+void FChunrealModule::SetChuckSampleRate(t_CKINT sampleRate)
 {
     chuckSampleRate = sampleRate;
 }
@@ -125,7 +125,7 @@ void FChunrealModule::CompileChuckCode(ChucK* chuckRef, const std::string& code,
 /// <param name="input"></param>
 /// <param name="output"></param>
 /// <param name="numFrames"></param>
-void FChunrealModule::RunChuck(ChucK* chuckRef, const float* input, float* output, long long numFrames)
+void FChunrealModule::RunChuck(ChucK* chuckRef, const float* input, float* output, t_CKINT numFrames)
 {
     runMutex.Lock();
     chuckRef->run(input, output, numFrames);
@@ -209,7 +209,7 @@ int FChunrealModule::GetChuckGlobalInt(FString id, FString paramName)
 /// <param name="paramName"></param>
 /// <param name="val"></param>
 /// <returns></returns>
-bool FChunrealModule::SetChuckGlobalInt(FString id, FString paramName, int val)
+bool FChunrealModule::SetChuckGlobalInt(FString id, FString paramName, t_CKINT val)
 {
     if (!ChuckMap.Contains(id))
     {
@@ -248,7 +248,7 @@ float FChunrealModule::GetChuckGlobalFloat(FString id, FString paramName)
 /// <param name="paramName"></param>
 /// <param name="val"></param>
 /// <returns></returns>
-bool FChunrealModule::SetChuckGlobalFloat(FString id, FString paramName, float val)
+bool FChunrealModule::SetChuckGlobalFloat(FString id, FString paramName, t_CKFLOAT val)
 {
     if (!ChuckMap.Contains(id))
     {
@@ -310,7 +310,7 @@ bool FChunrealModule::SetChuckGlobalString(FString id, FString paramName, FStrin
 /// <param name="intArray"></param>
 /// <param name="arraySize"></param>
 /// <returns></returns>
-bool FChunrealModule::SetChuckGlobalIntArray(FString id, FString paramName, long long intArray[], int arraySize)
+bool FChunrealModule::SetChuckGlobalIntArray(FString id, FString paramName, t_CKINT intArray[], t_CKUINT arraySize)
 {
     if (!ChuckMap.Contains(id))
     {
@@ -332,7 +332,7 @@ bool FChunrealModule::SetChuckGlobalIntArray(FString id, FString paramName, long
 /// <param name="floatArray"></param>
 /// <param name="arraySize"></param>
 /// <returns></returns>
-bool FChunrealModule::SetChuckGlobalFloatArray(FString id, FString paramName, double floatArray[], int arraySize)
+bool FChunrealModule::SetChuckGlobalFloatArray(FString id, FString paramName, t_CKFLOAT floatArray[], t_CKUINT arraySize)
 {
     if (!ChuckMap.Contains(id))
     {

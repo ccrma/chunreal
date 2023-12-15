@@ -33,9 +33,9 @@ public:
     inline static ChucK* chuckParent = nullptr;
 
     //Get ChucK sample rate
-    static int GetChuckSampleRate();
+    static t_CKINT GetChuckSampleRate();
     //Set ChucK sample rate
-    static void SetChuckSampleRate(int sampleRate);
+    static void SetChuckSampleRate(t_CKINT sampleRate);
     
     //static function to output custom log
     static void Log(FString message);
@@ -58,24 +58,24 @@ public:
     
     //Global int
     static int GetChuckGlobalInt(FString id, FString paramName);
-    static bool SetChuckGlobalInt(FString id, FString paramName, int val);
+    static bool SetChuckGlobalInt(FString id, FString paramName, t_CKINT val);
     //Global float
     static float GetChuckGlobalFloat(FString id, FString paramName);
-    static bool SetChuckGlobalFloat(FString id, FString paramName, float val);
+    static bool SetChuckGlobalFloat(FString id, FString paramName, t_CKFLOAT val);
     //Global string
     static FString GetChuckGlobalString(FString id, FString paramName);
     static bool SetChuckGlobalString(FString id, FString paramName, FString val);
     //Global int array
-    static bool SetChuckGlobalIntArray(FString id, FString paramName, long long intArray[], int arraySize);
+    static bool SetChuckGlobalIntArray(FString id, FString paramName, t_CKINT intArray[], t_CKUINT arraySize);
     //Global float array
-    static bool SetChuckGlobalFloatArray(FString id, FString paramName, double floatArray[], int arraySize);
+    static bool SetChuckGlobalFloatArray(FString id, FString paramName, t_CKFLOAT floatArray[], t_CKUINT arraySize);
     //Global event
     static bool BroadcastChuckGlobalEvent(FString id, FString paramName);
 
     //TODO-global array getters & event listener
 
 private:
-    inline static int chuckSampleRate = 44100;
+    inline static t_CKINT chuckSampleRate = 44100;
     inline static TMap<FString, ChucK*> ChuckMap;
     inline static int subIndex = 0;
 
