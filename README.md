@@ -2,7 +2,7 @@
 ## ChucK - Strongly-timed Music Programming Language - in Unreal Engine 5
 **_Chunreal_** is a plugin for [Unreal Engine 5](https://www.unrealengine.com/)  that allows users to compile [ChucK](https://github.com/ccrma/chuck) code at runtime. Multiple ChuckMain nodes can be chained in a MetaSound graph using stereo input & output to perform modular synthesis style digital signal processing. 
 
-Developed by [Eito Murakami](https://ccrma.stanford.edu/~eitom) and [Ge Wang](https://ccrma.stanford.edu/~ge) at [CCRMA | Stanford University](https://ccrma.stanford.edu/).
+Developed by [Eito Murakami](https://ccrma.stanford.edu/~eitom) and [Ge Wang](https://ccrma.stanford.edu/~ge) with the help of Max Jardetzky at [CCRMA | Stanford University](https://ccrma.stanford.edu/).
 
 ## Wiki Tutorial!
 The Wiki page contains a step-by-step tutorial that demonstrates how to set up the Chunreal plugin in your Unreal Engine project.
