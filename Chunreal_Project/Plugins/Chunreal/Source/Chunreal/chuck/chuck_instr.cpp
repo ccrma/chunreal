@@ -4077,10 +4077,15 @@ void call_all_parent_pre_constructors( Chuck_VM * vm, Chuck_VM_Shred * shred,
     {
         call_all_parent_pre_constructors( vm, shred, type->parent, stack_offset );
     }
-    // now, call my ctor
+    // next, call my pre-ctor
     if( type->has_pre_ctor )
     {
         call_pre_constructor( vm, shred, type->info->pre_ctor, stack_offset );
+    }
+    // next, call my default ctor | 1.5.2.2 (ge)
+    if( type->ctor_default && type->ctor_default->code )
+    {
+        call_pre_constructor( vm, shred, type->ctor_default->code, stack_offset );
     }
 }
 
@@ -4341,12 +4346,12 @@ t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_S
             // cast to ugen
             ugen->m_multi_chan[i] = (Chuck_UGen *)obj;
             // additional reference count
-            ugen->m_multi_chan[i]->add_ref();
+            CK_SAFE_ADD_REF(obj);
             // owner
-            ugen->m_multi_chan[i]->owner = ugen;
+            ugen->m_multi_chan[i]->owner_ugen = ugen;
             // ref count
             // spencer 2013-5-20: don't add extra ref, to avoid a ref cycle
-            //ugen->add_ref();
+            // ugen->add_ref();
         }
         // TODO: alloc channels for uana
     }
@@ -6112,7 +6117,7 @@ void Chuck_Instr_Time_Advance::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     t_CKTIME *& sp = (t_CKTIME *&)shred->reg->sp;
 
-    // pop word from reg stack
+    // pop time value from reg stack
     pop_( sp, 1 );
 
     // check for immediate mode exception | 1.5.1.5 (ge)
@@ -6143,10 +6148,14 @@ void Chuck_Instr_Time_Advance::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
     vm->shreduler()->shredule( shred, *sp );
     // suspend
     shred->is_running = FALSE;
+    // increment towards per-shred garbage collection | 1.5.2.0 (ge)
+    // NOTE 0-dur advance possible; but inc at least 1::samp
+    // shred->gc_inc( ck_max((*sp)-shred->now,1) );
 
     // track time advance
     CK_TRACK( Chuck_Stats::instance()->advance_time( shred, *sp ) );
 
+    // push time value on stack
     push_( sp, *sp );
 }
 
@@ -6499,6 +6508,7 @@ Chuck_Object * do_alloc_array(
             // initialize object | 1.5.0.0 (ge) use array type instead of base t_array
             // for the object->type_ref to contain more specific information
             initialize_object( baseX, type, shred, vm );
+
             // initialize_object( baseX, vm->env()->ckt_array );
             return baseX;
         }
@@ -6978,8 +6988,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
             push_( sp, val );
         } else {
             // get the value
-            if( !arr->get( key->str(), &val ) )
-                goto error;
+            arr->get( key->str(), &val );
             // push the value
             push_( sp, val );
         }
@@ -7000,8 +7009,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
             push_( sp, val );
         } else {
             // get the value
-            if( !arr->get( key->str(), &fval ) )
-                goto error;
+            arr->get( key->str(), &fval );
             // push the value
             push_( ((t_CKFLOAT *&)sp), fval );
         }
@@ -7022,8 +7030,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
             push_( sp, val );
         } else {
             // get the value
-            if( !arr->get( key->str(), &v2 ) )
-                goto error;
+            arr->get( key->str(), &v2 );
             // push the value
             push_( ((t_CKVEC2 *&)sp), v2 );
         }
@@ -7044,8 +7051,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
             push_( sp, val );
         } else {
             // get the value
-            if( !arr->get( key->str(), &v3 ) )
-                goto error;
+            arr->get( key->str(), &v3 );
             // push the value
             push_( ((t_CKVEC3 *&)sp), v3 );
         }
@@ -7066,8 +7072,7 @@ void Chuck_Instr_Array_Map_Access::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
             push_( sp, val );
         } else {
             // get the value
-            if( !arr->get( key->str(), &v4 ) )
-                goto error;
+            arr->get( key->str(), &v4 );
             // push the value
             push_( ((t_CKVEC4 *&)sp), v4 );
         }
@@ -8334,7 +8339,7 @@ void Chuck_Instr_UGen_Array_Link::execute( Chuck_VM * vm, Chuck_VM_Shred * shred
 {
     Chuck_Object **& sp = (Chuck_Object **&)shred->reg->sp;
     Chuck_Object * src_obj = NULL, * dst_obj = NULL;
-    t_CKINT num_in;
+    t_CKINT num_out = 1, num_in = 1;
 
     // pop
     pop_( sp, 2 );
@@ -8345,14 +8350,51 @@ void Chuck_Instr_UGen_Array_Link::execute( Chuck_VM * vm, Chuck_VM_Shred * shred
     dst_obj = (*(sp + 1));
 
     // go for it
-    num_in = ugen_generic_num_in(dst_obj, m_dstIsArray);
-    for( int i = 0; i < num_in; i++ )
+    // 1.5.2.2 (ge) semantic update: default num_out and num_in to 1,
+    // only update if actually an array; let ugen->add() sort out channels
+    num_out = ugen_generic_num_out_nochan( src_obj, m_srcIsArray );
+    num_in = ugen_generic_num_in_nochan( dst_obj, m_dstIsArray );
+
+    // check for different combos, similar to ugen->add() | 1.5.2.2 (ge)
+    if( num_out == 1 && num_in == 1 )
     {
-        Chuck_UGen *dst_ugen = ugen_generic_get_dst( dst_obj, i, m_dstIsArray );
-        Chuck_UGen *src_ugen = ugen_generic_get_src( src_obj, i, m_srcIsArray );
-        if( dst_ugen == NULL || src_ugen == NULL )
-            goto null_pointer;
-        dst_ugen->add( src_ugen, FALSE);
+        Chuck_UGen * dst_ugen = ugen_generic_get_dst_nochan( dst_obj, 0, m_dstIsArray );
+        Chuck_UGen * src_ugen = ugen_generic_get_src_nochan( src_obj, 0, m_srcIsArray );
+        if( dst_ugen == NULL || src_ugen == NULL ) goto null_pointer;
+        dst_ugen->add( src_ugen, m_isUpChuck );
+    }
+    else if( num_out == 1 && num_in > 1 )
+    {
+        Chuck_UGen * src_ugen = ugen_generic_get_src_nochan( src_obj, 0, m_srcIsArray );
+        for( t_CKINT i = 0; i < num_in; i++ )
+        {
+            Chuck_UGen * dst_ugen = ugen_generic_get_dst_nochan( dst_obj, i, m_dstIsArray );
+            if( dst_ugen == NULL || src_ugen == NULL ) goto null_pointer;
+            dst_ugen->add( src_ugen, m_isUpChuck );
+        }
+    }
+    else if( num_out > 1 && num_in == 1 )
+    {
+        Chuck_UGen * dst_ugen = ugen_generic_get_dst_nochan( dst_obj, 0, m_dstIsArray );
+        for( t_CKINT i = 0; i < num_out; i++ )
+        {
+            Chuck_UGen * src_ugen = ugen_generic_get_src_nochan( src_obj, i, m_srcIsArray );
+            if( dst_ugen == NULL || src_ugen == NULL ) goto null_pointer;
+            dst_ugen->add( src_ugen, m_isUpChuck );
+        }
+    }
+    else if( num_out > 1 && num_in > 1 )
+    {
+        // find greater
+        t_CKINT greater = ck_max( num_out, num_in );
+        // map one to one, up to greater (lesser should modulo)
+        for( t_CKINT i = 0; i < greater; i++ )
+        {
+            Chuck_UGen * src_ugen = ugen_generic_get_src_nochan( src_obj, i, m_srcIsArray );
+            Chuck_UGen * dst_ugen = ugen_generic_get_dst_nochan( dst_obj, i, m_dstIsArray );
+            if( dst_ugen == NULL || src_ugen == NULL ) goto null_pointer;
+            dst_ugen->add( src_ugen, m_isUpChuck );
+        }
     }
 
     // push the second

@@ -47,7 +47,7 @@
 #define CK_LOG_DEBUG            6  // 1.5.0.5 was: CK_LOG_CONFIG
 #define CK_LOG_INFO             5
 #define CK_LOG_WARNING          4
-#define CK_LOG_SEVERE           3
+#define CK_LOG_HERALD           3
 #define CK_LOG_SYSTEM           2
 #define CK_LOG_CORE             1
 #define CK_LOG_NONE             0  // set this to log nothing
@@ -95,6 +95,8 @@ void EM_error2( t_CKINT, c_constr, ... );
 void EM_error2b( t_CKINT, c_constr, ... );
 // prints message, no line number
 void EM_error3( c_constr, ... );
+// prints message, no line number, no color
+void EM_error3b( c_constr, ... );
 // prints exception message
 void EM_exception( c_constr, ... );
 // generate and return error string | 1.5.2.0 (ge)

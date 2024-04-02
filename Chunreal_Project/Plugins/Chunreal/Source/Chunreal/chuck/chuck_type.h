@@ -582,7 +582,7 @@ protected:
     // the operator
     ae_Operator m_op;
     // which kind of overload?
-    te_Op_OverloadKind m_kind;
+    ckte_Op_OverloadKind m_kind;
     // the function to call
     Chuck_Func * m_func;
     // left hand side
@@ -628,7 +628,7 @@ public:
     // get op
     ae_Operator op() const { return m_op; }
     // get the kind of overload
-    te_Op_OverloadKind kind() const { return m_kind; }
+    ckte_Op_OverloadKind kind() const { return m_kind; }
     // get func
     Chuck_Func * func() const { return m_func; }
     // get left hand side type
@@ -867,7 +867,7 @@ public:
     void clear();
     // look for a dependency that occurs AFTER a particular code position
     // this function crawls the graph, taking care in the event of cycles
-    const Chuck_Value_Dependency * locate( t_CKUINT pos, t_CKBOOL isClassDef = FALSE );
+    const Chuck_Value_Dependency * locate( t_CKUINT pos, Chuck_Type * fromClassDef = NULL );
 
 public:
     // constructor
@@ -884,11 +884,11 @@ protected:
 
 protected:
     // locate non-recursive
-    const Chuck_Value_Dependency * locateLocal( t_CKUINT pos, t_CKBOOL isClassDef );
+    const Chuck_Value_Dependency * locateLocal( t_CKUINT pos, Chuck_Type * fromClassDef );
     // reset search tokens
     void resetRecursive( t_CKUINT value = 0 );
     // locate recursive
-    const Chuck_Value_Dependency * locateRecursive( t_CKUINT pos, t_CKBOOL isClassDef, t_CKUINT searchToken = 1 );
+    const Chuck_Value_Dependency * locateRecursive( t_CKUINT pos, Chuck_Type * fromClassDef, t_CKUINT searchToken = 1 );
 };
 
 
@@ -944,6 +944,8 @@ struct Chuck_Type : public Chuck_Object
     f_alloc allocator;
     // origin hint
     ckte_Origin originHint;
+    // offsets of mvars that are Objects
+    std::vector<t_CKUINT> obj_mvars_offsets;
 
     // (within-context, e.g., a ck file) dependency tracking | 1.5.0.8
     Chuck_Value_Dependency_Graph depends;
@@ -1112,6 +1114,8 @@ struct Chuck_Func : public Chuck_VM_Object
     std::string signature( t_CKBOOL incFunDef = TRUE, t_CKBOOL incRetType = TRUE ) const;
     // code (included imported)
     Chuck_VM_Code * code;
+    // get owner type: if func part of a class
+    Chuck_Type * ownerType() const;
     // member (inside class)
     t_CKBOOL is_member;
     // static (inside class)
@@ -1233,9 +1237,10 @@ t_CKBOOL type_engine_add_class_from_dl( Chuck_Env * env, Chuck_DL_Class * c );
 // type equality
 t_CKBOOL operator ==( const Chuck_Type & lhs, const Chuck_Type & rhs );
 t_CKBOOL operator !=( const Chuck_Type & lhs, const Chuck_Type & rhs );
-t_CKBOOL equals( Chuck_Type * lhs, Chuck_Type * rhs );
 t_CKBOOL operator <=( const Chuck_Type & lhs, const Chuck_Type & rhs );
-t_CKBOOL isa( Chuck_Type * lhs, Chuck_Type * rhs );
+t_CKBOOL equals( Chuck_Type * lhs, Chuck_Type * rhs );
+t_CKBOOL isa( const Chuck_Type * lhs, const Chuck_Type * rhs );
+t_CKBOOL isa_levels( const Chuck_Type & lhs, const Chuck_Type & rhs, t_CKUINT & levels ); // 1.5.2.0 (ge) return how many levels of inheritance from lhs to rhs
 t_CKBOOL isprim( Chuck_Env * env, Chuck_Type * type );
 t_CKBOOL isobj( Chuck_Env * env, Chuck_Type * type );
 t_CKBOOL isfunc( Chuck_Env * env, Chuck_Type * type );

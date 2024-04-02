@@ -64,7 +64,7 @@ t_CKBOOL init_class_object( Chuck_Env * env, Chuck_Type * type )
     Chuck_Value * value = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'Object'" );
+    EM_log( CK_LOG_HERALD, "class 'Object'" );
 
     const char * doc = "base class for all class types in ChucK.";
 
@@ -127,7 +127,7 @@ t_CKBOOL init_class_ugen( Chuck_Env * env, Chuck_Type * type )
 {
     Chuck_DL_Func * func = NULL;
 
-    EM_log( CK_LOG_SEVERE, "class 'UGen'" );
+    EM_log( CK_LOG_HERALD, "class 'UGen'" );
 
     // add ugen info
     type->ugen_info = new Chuck_UGen_Info;
@@ -190,8 +190,8 @@ t_CKBOOL init_class_ugen( Chuck_Env * env, Chuck_Type * type )
 
     // add isConnectedTo
     func = make_new_mfun( "int", "isConnectedTo", ugen_connected );
-    func->add_arg( "UGen", "right" );
-    func->doc = "return true if this UGen's output is connected to the input of the argument; return false otherwise.";
+    func->add_arg( "UGen", "rhs" );
+    func->doc = "return true if this UGen's output is connected to the input of rhs; if either this UGen or rhs has more than one channel, this function returns true if any connections exist between the channels; return false if there are no connections.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add buffered
@@ -229,7 +229,7 @@ t_CKBOOL init_class_uana( Chuck_Env * env, Chuck_Type * type )
 {
     Chuck_DL_Func * func = NULL;
 
-    EM_log( CK_LOG_SEVERE, "class 'UAna'" );
+    EM_log( CK_LOG_HERALD, "class 'UAna'" );
 
     // add uana info
     type->ugen_info = new Chuck_UGen_Info;
@@ -246,7 +246,7 @@ t_CKBOOL init_class_uana( Chuck_Env * env, Chuck_Type * type )
         return FALSE;
 
     // add variables
-    uana_offset_blob = type_engine_import_mvar( env, "UAnaBlob", "m_blob", FALSE );
+    uana_offset_blob = type_engine_import_mvar( env, "int", "@m_blobproxy", FALSE );
     if( uana_offset_blob == CK_INVALID_OFFSET ) goto error;
 
     // add upchuck
@@ -320,7 +320,7 @@ t_CKBOOL init_class_blob( Chuck_Env * env, Chuck_Type * type )
     // Chuck_Value * value = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'UAnaBlob'" );
+    EM_log( CK_LOG_HERALD, "class 'UAnaBlob'" );
 
     const char * doc = "a data structure that contains results associated with UAna analysis. There is a UAnaBlob associated with every UAna. As a UAna is upchucked (using .upchuck()), the result is stored in the UAnaBlob's floating point vector and/or complex vector. The interpretation of the results depends on the specific UAna.";
 
@@ -393,7 +393,7 @@ t_CKBOOL init_class_event( Chuck_Env * env, Chuck_Type * type )
     Chuck_Value * value = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'Event'" );
+    EM_log( CK_LOG_HERALD, "class 'Event'" );
 
     const char *doc = "a mechanism for precise synchronization across shreds.";
 
@@ -485,7 +485,7 @@ t_CKBOOL init_class_shred( Chuck_Env * env, Chuck_Type * type )
     Chuck_DL_Func * func = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'Shred'" );
+    EM_log( CK_LOG_HERALD, "class 'Shred'" );
 
     const char *doc = "a strongly-timed ChucK thread of execution.";
 
@@ -524,12 +524,12 @@ t_CKBOOL init_class_shred( Chuck_Env * env, Chuck_Type * type )
 
     // add running()
     func = make_new_mfun( "int", "running", shred_running );
-    func->doc = "is the Shred currently running?";
+    func->doc = "is the Shred currently actively running in the VM?";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add done()
     func = make_new_mfun( "int", "done", shred_done );
-    func->doc = "is the Shred done running?";
+    func->doc = "has the Shred reached the end of its execution?";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add nargs()
@@ -610,6 +610,11 @@ t_CKBOOL init_class_shred( Chuck_Env * env, Chuck_Type * type )
     func->doc = "get the calling shred's \"ancestor\" shred (i.e., the top-level shred). Returns itself if the calling shred is the top-level shred. (Related: see Shred.parent())";
     if( !type_engine_import_sfun( env, func ) ) goto error;
 
+    // add gc() | 1.5.2.0 (ge) added
+    // func = make_new_mfun( "void", "gc", shred_gc );
+    // func->doc = "manually trigger a per-shred garbage collection pass; can be used to clean up certain UGens/objects without waiting for the shred to complete; use with care.";
+    // if( !type_engine_import_mfun( env, func ) ) goto error;
+
     // add examples
     if( !type_engine_import_add_ex( env, "shred/spork.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "shred/spork2.ck" ) ) goto error;
@@ -648,7 +653,7 @@ t_CKBOOL init_class_vec2( Chuck_Env * env, Chuck_Type * type )
     Chuck_DL_Func * func = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'vec2' (primitive)" );
+    EM_log( CK_LOG_HERALD, "class 'vec2' (primitive)" );
 
     // document
     const char * doc = "a primitive type for a 2-dimensional vector; potentially useful for 2D and UV coordinates.";
@@ -701,7 +706,7 @@ t_CKBOOL init_class_vec3( Chuck_Env * env, Chuck_Type * type )
     Chuck_DL_Func * func = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'vec3' (primitive)" );
+    EM_log( CK_LOG_HERALD, "class 'vec3' (primitive)" );
 
     // document
     const char *doc = "a primitive type for a 3-dimensional vector; potentially useful for 3D coordinate, RGB color, or as a value/goal/slew interpolator.";
@@ -791,7 +796,7 @@ t_CKBOOL init_class_vec4( Chuck_Env * env, Chuck_Type * type )
     Chuck_DL_Func * func = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'vec4' (primitive)" );
+    EM_log( CK_LOG_HERALD, "class 'vec4' (primitive)" );
 
     // document
     const char *doc = "a primitive type for a 4-dimensional vector; potentially useful for 4D coordinate and RGBA color.";
@@ -846,14 +851,20 @@ t_CKBOOL init_class_string( Chuck_Env * env, Chuck_Type * type )
     Chuck_DL_Func * func = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'string'" );
+    EM_log( CK_LOG_HERALD, "class 'string'" );
 
     const char * doc = "textual data as a sequence of characters, along with functions for manipulating text.";
 
     // init as base class
-    // TODO: ctor/dtor
+    // NOTE: explicitly instantiated in instantiate_and_initialize_object()
     if( !type_engine_import_class_begin( env, type, env->global(), NULL, NULL, doc ) )
         return FALSE;
+
+    // add contructor
+    func = make_new_ctor( string_ctor_str );
+    func->add_arg( "string", "str" );
+    func->doc = "construct a string as a copy of another string.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // add length()
     func = make_new_mfun( "int", "length", string_length );
@@ -1070,7 +1081,7 @@ t_CKBOOL init_class_array( Chuck_Env * env, Chuck_Type * type )
     Chuck_DL_Func * func = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'array'" );
+    EM_log( CK_LOG_HERALD, "class 'array'" );
 
     // init as base class
     // TODO: ctor/dtor?
@@ -1245,7 +1256,7 @@ error:
 t_CKBOOL init_class_function( Chuck_Env * env, Chuck_Type * type )
 {
     // log
-    EM_log( CK_LOG_SEVERE, "class '@function'" );
+    EM_log( CK_LOG_HERALD, "class '@function'" );
     const char * doc = "the base function Type.";
 
     // init as base class
@@ -1279,7 +1290,7 @@ t_CKBOOL init_class_type( Chuck_Env * env, Chuck_Type * type )
     Chuck_DL_Func * func = NULL;
 
     // log
-    EM_log( CK_LOG_SEVERE, "class 'Type'" );
+    EM_log( CK_LOG_HERALD, "class 'Type'" );
     const char * doc = "a representation of a ChucK type.";
 
     // init as base class
@@ -1540,10 +1551,8 @@ CK_DLL_DTOR( object_dtor )
     // log
     EM_log( CK_LOG_ALL, "Object destructor..." );
 
-    // get the string
-    Chuck_String * str = (Chuck_String *)OBJ_MEMBER_UINT(SELF, Object_offset_string);
-    // release
-    CK_SAFE_RELEASE( str );
+    // NOTE the garbage collector should take care of
+    // string reference at offset Object_offset_string
 }
 
 
@@ -2021,34 +2030,26 @@ CK_DLL_CTOR( uanablob_ctor )
     OBJ_MEMBER_TIME(SELF, uanablob_offset_when) = 0;
 
     // fvals
-    Chuck_ArrayFloat * arr8 = new Chuck_ArrayFloat( 8 );
-    initialize_object( arr8, SHRED->vm_ref->env()->ckt_array, SHRED, VM );
-    arr8->add_ref();
-    OBJ_MEMBER_INT(SELF, uanablob_offset_fvals) = (t_CKINT)arr8;
+    Chuck_ArrayFloat * arrF = new Chuck_ArrayFloat( 8 );
+    initialize_object( arrF, SHRED->vm_ref->env()->ckt_array, SHRED, VM );
+    CK_SAFE_ADD_REF( arrF );
+    OBJ_MEMBER_INT(SELF, uanablob_offset_fvals) = (t_CKINT)arrF;
 
-    // cvals
-    Chuck_ArrayVec2 * arr16 = new Chuck_ArrayVec2( 8 );
-    initialize_object( arr16, SHRED->vm_ref->env()->ckt_array, SHRED, VM );
-    arr16->add_ref();
-    OBJ_MEMBER_INT(SELF, uanablob_offset_cvals) = (t_CKINT)arr16;
+    // cvals (complex)
+    Chuck_ArrayVec2 * arrC = new Chuck_ArrayVec2( 8 );
+    initialize_object( arrC, SHRED->vm_ref->env()->ckt_array, SHRED, VM );
+    CK_SAFE_ADD_REF( arrC );
+    OBJ_MEMBER_INT(SELF, uanablob_offset_cvals) = (t_CKINT)arrC;
 }
 
 // dtor
 CK_DLL_DTOR( uanablob_dtor )
 {
-    // get array
-    Chuck_ArrayFloat * arr8 = (Chuck_ArrayFloat *)OBJ_MEMBER_INT(SELF, uanablob_offset_fvals);
-    // release it
-    arr8->release();
-    OBJ_MEMBER_INT(SELF, uanablob_offset_fvals) = 0;
-
-    // get array
-    Chuck_ArrayVec2 * arr16 = (Chuck_ArrayVec2 *)OBJ_MEMBER_INT(SELF, uanablob_offset_cvals);
-    // release it
-    arr16->release();
-    OBJ_MEMBER_INT(SELF, uanablob_offset_cvals) = 0;
-
+    // set when to 0 for good measure
     OBJ_MEMBER_TIME(SELF, uanablob_offset_when) = 0;
+
+    // typed object mvars are auto-released | 1.5.2.0
+    // include uanablob_offset_fvals and uanablob_offset_cvals
 }
 
 CK_DLL_MFUN( uanablob_when )
@@ -2567,9 +2568,29 @@ CK_DLL_SFUN( shred_ancestor ) // added 1.5.2.0 (nshaheed)
     RETURN->v_object = curr;
 }
 
+
+CK_DLL_MFUN( shred_gc ) // added 1.5.2.0 (ge)
+{
+    // invoke manual per-shred GC pass
+    SHRED->gc();
+}
+
+
+
+
 //-----------------------------------------------------------------------------
 // string API
 //-----------------------------------------------------------------------------
+CK_DLL_CTOR( string_ctor_str )
+{
+    // self (the string being constructed)
+    Chuck_String * self = (Chuck_String *)SELF;
+    // get arg
+    Chuck_String * rhs = GET_NEXT_STRING(ARGS);
+    // set it
+    self->set( rhs ? rhs->str() : "" );
+}
+
 CK_DLL_MFUN( string_length )
 {
     Chuck_String * s = (Chuck_String *)SELF;

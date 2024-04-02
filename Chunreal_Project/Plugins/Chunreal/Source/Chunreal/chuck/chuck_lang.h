@@ -163,6 +163,7 @@ CK_DLL_MFUN( shred_id );
 CK_DLL_MFUN( shred_yield );
 CK_DLL_MFUN( shred_running );
 CK_DLL_MFUN( shred_done );
+CK_DLL_MFUN( shred_gc ); // added 1.5.2.0 (ge)
 CK_DLL_MFUN( shred_numArgs );
 CK_DLL_MFUN( shred_getArg );
 CK_DLL_MFUN( shred_sourcePath ); // added 1.3.0.0
@@ -220,8 +221,7 @@ CK_DLL_MFUN( event_waiting_on );
 //-----------------------------------------------------------------------------
 // string API
 //-----------------------------------------------------------------------------
-CK_DLL_CTOR( string_ctor );
-CK_DLL_DTOR( string_dtor );
+CK_DLL_CTOR( string_ctor_str );
 CK_DLL_MFUN( string_length );
 CK_DLL_MFUN( string_upper );
 CK_DLL_MFUN( string_lower );

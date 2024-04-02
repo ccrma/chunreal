@@ -1050,7 +1050,8 @@ static const char * op_str[] = {
   "!",
   "@=>",
   "=<",
-  "^=>",
+  "=^",
+  "=v",
   "=",
   "$",
   "@@",
@@ -1089,7 +1090,6 @@ const char * op2str( ae_Operator op )
 ae_Operator str2op( const char * str )
 {
     std::string s(str);
-
     for( t_CKUINT i = 1; i < ae_op_count; i++ )
         if( s == op_str[i] ) return (ae_Operator)i;
 

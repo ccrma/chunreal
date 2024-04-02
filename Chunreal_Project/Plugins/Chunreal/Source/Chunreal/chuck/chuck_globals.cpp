@@ -2196,6 +2196,9 @@ t_CKBOOL Chuck_Globals_Manager::init_global_array( const std::string & name, Chu
 //-----------------------------------------------------------------------------
 Chuck_Object * Chuck_Globals_Manager::get_global_array( const std::string & name )
 {
+    // ensure has entry with name | 1.5.2.2 (ge, eito, nick, andrew)
+    if( m_global_arrays.count(name) == 0 ) return NULL;
+
     return m_global_arrays[name]->array;
 }
 
@@ -2210,6 +2213,11 @@ t_CKINT Chuck_Globals_Manager::get_global_int_array_value( const std::string & n
                                                            t_CKUINT index )
 {
     t_CKUINT result = 0;
+
+    // ensure has entry with name | 1.5.2.2 (ge, eito, nick, andrew)
+    if( m_global_arrays.count(name) == 0 ) return result;
+
+    // get the array from corresponding container
     Chuck_Object * array = m_global_arrays[name]->array;
     if( array != NULL &&
        m_global_arrays[name]->array_type == te_globalInt )
@@ -2232,6 +2240,11 @@ t_CKINT Chuck_Globals_Manager::get_global_associative_int_array_value(
     const std::string & name, const std::string & key )
 {
     t_CKUINT result = 0;
+
+    // ensure has entry with name | 1.5.2.2 (ge, eito, nick, andrew)
+    if( m_global_arrays.count(name) == 0 ) return result;
+
+    // get the array from corresponding container
     Chuck_Object * array = m_global_arrays[name]->array;
     if( array != NULL &&
        m_global_arrays[name]->array_type == te_globalInt )
@@ -2254,6 +2267,11 @@ t_CKFLOAT Chuck_Globals_Manager::get_global_float_array_value( const std::string
                                                                t_CKUINT index )
 {
     t_CKFLOAT result = 0;
+
+    // ensure has entry with name | 1.5.2.2 (ge, eito, nick, andrew)
+    if( m_global_arrays.count(name) == 0 ) return result;
+
+    // get the array from corresponding container
     Chuck_Object * array = m_global_arrays[name]->array;
     if( array != NULL &&
        m_global_arrays[name]->array_type == te_globalFloat )
@@ -2275,6 +2293,11 @@ t_CKFLOAT Chuck_Globals_Manager::get_global_associative_float_array_value(
     const std::string & name, const std::string & key )
 {
     t_CKFLOAT result = 0;
+
+    // ensure has entry with name | 1.5.2.2 (ge, eito, nick, andrew)
+    if( m_global_arrays.count(name) == 0 ) return result;
+
+    // get the array from corresponding container
     Chuck_Object * array = m_global_arrays[name]->array;
     if( array != NULL &&
        m_global_arrays[name]->array_type == te_globalFloat )
@@ -2294,7 +2317,132 @@ t_CKFLOAT Chuck_Globals_Manager::get_global_associative_float_array_value(
 //-----------------------------------------------------------------------------
 Chuck_Object * * Chuck_Globals_Manager::get_ptr_to_global_array( const std::string & name )
 {
+    // ensure has entry with name | 1.5.2.2 (ge, eito, nick, andrew)
+    if( m_global_arrays.count(name) == 0 ) return NULL;
+
     return &( m_global_arrays[name]->array );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: set_global_int_array()
+// desc: global array set (internal; audio thread)
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_Globals_Manager::set_global_int_array( const std::string & name,
+                                                      t_CKINT arrayValues[],
+                                                      t_CKUINT numValues )
+{
+    // look for global array with the specified name
+    if( m_global_arrays.count(name) == 0 )
+        return FALSE;
+    // get chuck array object
+    Chuck_Object * array = m_global_arrays[name]->array;
+    // check if array exists and is float array
+    if( array == NULL || m_global_arrays[name]->array_type != te_globalInt )
+        return FALSE;
+
+    // get chuck int array
+    Chuck_ArrayInt * intArray = (Chuck_ArrayInt *)array;
+    // resize array if necessary
+    if( intArray->size() < numValues )
+        intArray->set_size( numValues );
+    // copy elements
+    for( t_CKUINT i = 0; i < numValues; i++ )
+         intArray->set( i, arrayValues[i] );
+
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: set_global_int_array()
+// desc: global array set (internal; audio thread)
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_Globals_Manager::set_global_int_array_value( const std::string & name,
+                                                            t_CKUINT index, t_CKINT value )
+{
+    // look for global array with the specified name
+    if( m_global_arrays.count(name) == 0 )
+        return FALSE;
+    // get chuck array object
+    Chuck_Object * array = m_global_arrays[name]->array;
+    // check if array exists and is int array
+    if( array == NULL || m_global_arrays[name]->array_type != te_globalInt )
+        return FALSE;
+
+    // get chuck int array
+    Chuck_ArrayInt * intArray = (Chuck_ArrayInt *)array;
+    // resize array if necessary
+    if( intArray->size() <= index ) return FALSE;
+    // set element at index
+    intArray->set( index, value );
+
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: set_global_int_array()
+// desc: global array set (internal; audio thread)
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_Globals_Manager::set_global_float_array( const std::string & name,
+                                                        t_CKFLOAT arrayValues[],
+                                                        t_CKUINT numValues )
+{
+    // look for global array with the specified name
+    if( m_global_arrays.count(name) == 0 )
+        return FALSE;
+    // get chuck array object
+    Chuck_Object * array = m_global_arrays[name]->array;
+    // check if array exists and is float array
+    if( array == NULL || m_global_arrays[name]->array_type != te_globalFloat )
+        return FALSE;
+
+    // get chuck float array
+    Chuck_ArrayFloat * floatArray = (Chuck_ArrayFloat *)array;
+    // resize array if necessary
+    if( floatArray->size() < numValues )
+        floatArray->set_size( numValues );
+    // copy elements
+    for( t_CKUINT i = 0; i < numValues; i++ )
+         floatArray->set( i, arrayValues[i] );
+
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: set_global_int_array()
+// desc: global array set (internal; audio thread)
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_Globals_Manager::set_global_float_array_value( const std::string & name,
+                                                              t_CKUINT index, t_CKFLOAT value )
+{
+    // look for global array with the specified name
+    if( m_global_arrays.count(name) == 0 )
+        return FALSE;
+    // get chuck array object
+    Chuck_Object * array = m_global_arrays[name]->array;
+    // check if array exists and is float array
+    if( array == NULL || m_global_arrays[name]->array_type != te_globalFloat )
+        return FALSE;
+
+    // get chuck float array
+    Chuck_ArrayFloat * floatArray = (Chuck_ArrayFloat *)array;
+    // resize array if necessary
+    if( floatArray->size() <= index ) return FALSE;
+    // set element at index
+    floatArray->set( index, value );
+
+    return TRUE;
 }
 
 

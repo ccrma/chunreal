@@ -1041,8 +1041,69 @@ t_CKBOOL type_engine_scan1_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
 //-----------------------------------------------------------------------------
 t_CKBOOL type_engine_scan1_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
 {
-    return TRUE;
-}
+    // check syntax
+    switch( exp->s_type )
+    {
+        // variable
+        case ae_primary_var:
+        case ae_primary_num:
+        case ae_primary_float:
+        case ae_primary_str:
+        case ae_primary_char:
+            break;
+
+        // array literal
+        case ae_primary_array:
+            type_engine_scan1_exp_array_lit( env, exp );
+        break;
+
+        // complex literal
+        case ae_primary_complex:
+            // if( !type_engine_scan1_exp_complex_lit( env, exp ) ) return FALSE;
+        break;
+
+        // polar literal
+        case ae_primary_polar:
+            // if( !type_engine_scan1_exp_polar_lit( env, exp ) ) return FALSE;
+        break;
+
+        // vector literal, ge: added 1.3.5.3
+        case ae_primary_vec:
+            // if( !type_engine_scan1_exp_vec_lit( env, exp ) ) return FALSE;
+        break;
+
+        // expression
+        case ae_primary_exp:
+            if( !type_engine_scan1_exp( env, exp->exp ) ) return FALSE;
+        break;
+
+        // hack
+        case ae_primary_hack:
+            // make sure not l-value
+            if( exp->exp->s_type == ae_exp_decl )
+            {
+                EM_error2( exp->where,
+                    "cannot use <<< >>> on variable declarations" );
+                return FALSE;
+            }
+
+            // scan
+            if( !type_engine_scan1_exp( env, exp->exp ) ) return FALSE;
+        break;
+
+        // nil (void)
+        case ae_primary_nil:
+        break;
+
+        // no match
+        default:
+            EM_error2( exp->where,
+                "(internal error) unrecognized primary type '%i'", exp->s_type );
+            return FALSE;
+            break;
+    }
+
+    return TRUE;}
 
 
 
@@ -2202,6 +2263,62 @@ t_CKBOOL type_engine_scan2_exp_unary( Chuck_Env * env, a_Exp_Unary unary )
 //-----------------------------------------------------------------------------
 t_CKBOOL type_engine_scan2_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
 {
+    // check syntax
+    switch( exp->s_type )
+    {
+        // variable
+        case ae_primary_var:
+        case ae_primary_num:
+        case ae_primary_float:
+        case ae_primary_str:
+        case ae_primary_char:
+            break;
+
+        // array literal
+        case ae_primary_array:
+            type_engine_scan2_exp_array_lit( env, exp );
+        break;
+
+        // complex literal
+        case ae_primary_complex:
+            // if( !type_engine_scan2_exp_complex_lit( env, exp ) ) return FALSE;
+        break;
+
+        // polar literal
+        case ae_primary_polar:
+            // if( !type_engine_scan2_exp_polar_lit( env, exp ) ) return FALSE;
+        break;
+
+        // vector literal, ge: added 1.3.5.3
+        case ae_primary_vec:
+            // if( !type_engine_scan2_exp_vec_lit( env, exp ) ) return FALSE;
+        break;
+
+        // expression
+        case ae_primary_exp:
+            if( !type_engine_scan2_exp( env, exp->exp ) ) return FALSE;
+        break;
+
+        // hack
+        case ae_primary_hack:
+            // make sure not l-value (this should be checked in type_engine_scan1_exp_primary()
+            assert( exp->exp->s_type != ae_exp_decl );
+            // scan
+            if( !type_engine_scan2_exp( env, exp->exp ) ) return FALSE;
+        break;
+
+        // nil (void)
+        case ae_primary_nil:
+        break;
+
+        // no match
+        default:
+            EM_error2( exp->where,
+                "internal error - unrecognized primary type '%i'", exp->s_type );
+            return FALSE;
+            break;
+    }
+
     return TRUE;
 }
 
@@ -2407,11 +2524,23 @@ t_CKBOOL type_engine_scan2_exp_decl_create( Chuck_Env * env, a_Exp_Decl decl )
     // primitive
     if( (isprim( env, type ) || isa( type, env->ckt_string )) && decl->type->ref )  // TODO: string
     {
+        // check for string type
+        t_CKBOOL isaStr = isa( type, env->ckt_string );
+        // error
         EM_error2( decl->where,
-            "cannot declare references (@) of primitive type '%s'...",
+            "cannot declare references (@) of%s type '%s'...",  isaStr ? "" : " primitive",
             type->c_name() );
-        EM_error2( decl->where,
-            "...(primitive types: 'int', 'float', 'time', 'dur')" );
+        // more info
+        if( !isaStr )
+        {
+            EM_error2( 0,
+                       "...(primitive types: 'int', 'float', 'time', 'dur', 'vec3', etc.)" );
+        }
+        else
+        {
+            EM_error2( 0,
+                       "...(NOTE 'string' is a special Object whose operational semantics resemble both Object types and primitive types; e.g., instantiation and function argument-passing are like any other Object; however assignment '@=>' and '=>' are carried out by-value, as with primitive types such as 'int', 'float', 'time', 'dur', 'vec3', etc.)" );
+        }
         return FALSE;
     }
 
@@ -2509,8 +2638,8 @@ t_CKBOOL type_engine_scan2_exp_decl_create( Chuck_Env * env, a_Exp_Decl decl )
         value->is_const = decl->is_const;
 
         // dependency tracking: remember the code position of the DECL | 1.5.0.8
-        // do only if file-top-level or class-top-level, but not global
-        if( (value->is_member || value->is_context_global) && !value->is_global )
+        // NOTE track if context-global and not global, or class-member
+        if( (value->is_context_global && !value->is_global ) || value->is_member )
             value->depend_init_where = var_decl->where;
 
         // remember the value
@@ -2761,7 +2890,7 @@ t_CKBOOL type_engine_scan2_class_def( Chuck_Env * env, a_Class_Def class_def )
                 EM_error2( class_def->ext->extend_id->where,
                     "cannot extend primitive type '%s'",
                     t_parent->c_name() );
-                EM_error2( 0, "...(primitive types: 'int', 'float', 'time', 'dur', etc.)" );
+                EM_error2( 0, "...(primitive types: 'int', 'float', 'time', 'dur', 'vec3', etc.)" );
                 return FALSE;
             }
         }
@@ -2892,6 +3021,8 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
     func->code = new Chuck_VM_Code;
     // add reference
     CK_SAFE_ADD_REF( func->code );
+    // add name | 1.5.2.0
+    func->code->name = S_name(f->name);
     // copy the native code, for imported functions
     if( f->s_type == ae_func_builtin )
     {
@@ -2950,7 +3081,7 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
             "cannot declare references (@) of primitive type '%s'...",
             f->ret_type->c_name() );
         EM_error2( f->type_decl->where,
-            "...(primitive types: 'int', 'float', 'time', 'dur')" );
+            "...(primitive types: 'int', 'float', 'time', 'dur', 'vec3', etc.)" );
         goto error;
     }
 
@@ -3008,7 +3139,7 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
                 "cannot declare references (@) of primitive type '%s'...",
                 arg_list->type->c_name() );
             EM_error2( arg_list->type_decl->where,
-                "...(primitive types: 'int', 'float', 'time', 'dur')" );
+                "...(primitive types: 'int', 'float', 'time', 'dur', 'vec3', etc.)" );
             goto error;
         }
 
@@ -3076,29 +3207,32 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
     if( overload != NULL )
     {
         // -----------------------
+        // 1.5.2.0 (ge) reinstating ability for overloaded funcs
+        // (including operators) to return different types
+        // -----------------------
         // make sure return types match
         // 1.5.0.0 (ge) more precise error reporting
         // -----------------------
-        if( *(f->ret_type) != *(overload->func_ref->def()->ret_type) )
-        {
-            EM_error2( f->where, "overloaded functions require matching return types..." );
-            // check if in class definition
-            if( env->class_def )
-            {
-                EM_error3( "    |- function in question: %s %s.%s(...)",
-                           func->def()->ret_type->base_name.c_str(), env->class_def->c_name(), S_name(f->name) );
-                EM_error3( "    |- previous defined as: %s %s.%s(...)",
-                           overload->func_ref->def()->ret_type->base_name.c_str(), env->class_def->c_name(), S_name(f->name) );
-            }
-            else
-            {
-                EM_error3( "    |- function in question: %s %s(...)",
-                           func->def()->ret_type->base_name.c_str(), S_name(f->name) );
-                EM_error3( "    |- previous defined as: %s %s(...)",
-                           overload->func_ref->def()->ret_type->base_name.c_str(), S_name(f->name) );
-            }
-            goto error;
-        }
+        // if( *(f->ret_type) != *(overload->func_ref->def()->ret_type) )
+        // {
+        //    EM_error2( f->where, "overloaded functions require matching return types..." );
+        //    // check if in class definition
+        //    if( env->class_def )
+        //    {
+        //        EM_error3( "    |- function in question: %s %s.%s(...)",
+        //                   func->def()->ret_type->base_name.c_str(), env->class_def->c_name(), S_name(f->name) );
+        //        EM_error3( "    |- previous defined as: %s %s.%s(...)",
+        //                   overload->func_ref->def()->ret_type->base_name.c_str(), env->class_def->c_name(), S_name(f->name) );
+        //    }
+        //    else
+        //    {
+        //        EM_error3( "    |- function in question: %s %s(...)",
+        //                   func->def()->ret_type->base_name.c_str(), S_name(f->name) );
+        //        EM_error3( "    |- previous defined as: %s %s(...)",
+        //                   overload->func_ref->def()->ret_type->base_name.c_str(), S_name(f->name) );
+        //    }
+        //    goto error;
+        // }
 
         // -----------------------
         // make sure not duplicate

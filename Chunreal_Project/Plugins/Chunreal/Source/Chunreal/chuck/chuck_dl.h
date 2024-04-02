@@ -37,13 +37,15 @@
 // authors: Ge Wang (ge@ccrma.stanford.edu | gewang@cs.princeton.edu)
 //          Ari Lazier (alazier@cs.princeton.edu)
 //          Spencer Salazar (spencer@ccrma.stanford.edu)
+//          macOS code based on apple's open source
 //
-// macOS code based on apple's open source
-//
-// date: spring 2004 - 1.1
+// date: spring 2004 - 1.1 - internal modules interface
 //       spring 2005 - 1.2
 //       ...
+//        circa 2013 - support for chugins
+//       ...
 //       summer 2023 - chugins DL api v9
+//         fall 2023 - transition to single-header `chugin.h` | 1.5.2.0
 //         fall 2023 - chugins DL api v10
 //-----------------------------------------------------------------------------
 #ifndef __CHUCK_DL_H__
@@ -53,13 +55,15 @@
 #include "chuck_absyn.h"
 #include <string>
 #include <vector>
+#include <map>
 
 
-// major version must be the same between chuck:chugin
-// v10.0 -- transition to single-header `chugin.h` | 1.5.2.0
+// major API version: significant semantic and/or API update
+// major API version must be the same between chuck:chugin
 #define CK_DLL_VERSION_MAJOR (10)
-// minor version of chugin must be less than or equal to chuck's
-#define CK_DLL_VERSION_MINOR (0)
+// minor API version: revisions
+// minor API version of chuck must >= API version of chugin
+#define CK_DLL_VERSION_MINOR (1)
 #define CK_DLL_VERSION_MAKE(maj,min) ((t_CKUINT)(((maj) << 16) | (min)))
 #define CK_DLL_VERSION_GETMAJOR(v) (((v) >> 16) & 0xFFFF)
 #define CK_DLL_VERSION_GETMINOR(v) ((v) & 0xFFFF)
@@ -124,7 +128,6 @@ class CBufferSimple;
 #define GET_CK_VECTOR(ptr)     (*(t_CKVECTOR *)ptr)
 #define GET_CK_OBJECT(ptr)     (*(Chuck_Object **)ptr)
 #define GET_CK_STRING(ptr)     (*(Chuck_String **)ptr)
-#define GET_CK_STRING_SAFE(ptr) std::string( GET_CK_STRING(ptr)->c_str() )
 
 // param conversion with pointer advance
 #define GET_NEXT_FLOAT(ptr)    (*((t_CKFLOAT *&)ptr)++)
@@ -142,7 +145,17 @@ class CBufferSimple;
 #define GET_NEXT_VECTOR(ptr)   (*((t_CKVECTOR *&)ptr)++)
 #define GET_NEXT_OBJECT(ptr)   (*((Chuck_Object **&)ptr)++)
 #define GET_NEXT_STRING(ptr)   (*((Chuck_String **&)ptr)++)
+
+// string-specific operations
+#ifndef __CHUCK_CHUGIN__ // CHUGIN flag NOT present
+// assume macro used from host
+#define GET_CK_STRING_SAFE(ptr) std::string( GET_CK_STRING(ptr)->c_str() )
 #define GET_NEXT_STRING_SAFE(ptr) std::string( GET_NEXT_STRING(ptr)->c_str() )
+#else // CHUGIN flag is present
+// assume macro used from chugin; use chugins runtime API for portability
+#define GET_CK_STRING_SAFE(ptr) std::string( API->object->str((Chuck_String *)ptr) )
+#define GET_NEXT_STRING_SAFE(ptr) std::string( API->object->str(GET_NEXT_STRING(ptr) ) )
+#endif
 
 // param conversion
 #define SET_CK_FLOAT(ptr,v)      (*(t_CKFLOAT *&)ptr=v)
@@ -229,6 +242,8 @@ typedef const Chuck_DL_Api * CK_DL_API;
 // macro for declaring version of ChucK DL a given DLL links to
 // example: CK_DLL_DECLVERSION
 #define CK_DLL_DECLVERSION CK_DLL_EXPORT(t_CKUINT) ck_version() { return CK_DLL_VERSION; }
+// macro for defining a DLL info func
+#define CK_DLL_INFO(name) CK_DLL_EXPORT(void) ck_info( Chuck_DL_Query * QUERY )
 // naming convention for static query functions
 #define CK_DLL_QUERY_STATIC_NAME(name) ck_##name##_query
 // macro for defining ChucK DLL export query-functions (static version)
@@ -302,7 +317,7 @@ typedef const Chuck_DL_Api * CK_DL_API;
 extern "C" {
 // query
 typedef t_CKUINT (CK_DLL_CALL * f_ck_declversion)();
-typedef const char * (CK_DLL_CALL * f_ck_info)( const char * key );
+typedef t_CKVOID (CK_DLL_CALL * f_ck_info)( Chuck_DL_Query * QUERY );
 typedef t_CKBOOL (CK_DLL_CALL * f_ck_query)( Chuck_DL_Query * QUERY );
 // object
 typedef Chuck_Object * (CK_DLL_CALL * f_alloc)( Chuck_VM * VM, Chuck_VM_Shred * SHRED, CK_DL_API API );
@@ -332,10 +347,12 @@ typedef void (CK_DLL_CALL * f_callback_on_instantiate)( Chuck_Object * OBJECT, C
 }
 
 
-// default name in DLL/ckx to look for
-#define CK_QUERY_FUNC        "ck_query"
-// default name in DLL/ckx to look for
-#define CK_DECLVERSION_FUNC  "ck_version"
+// default name in DLL/ckx to look for host/chugin compatibility version func
+#define CK_DECLVERSION_FUNC "ck_version"
+// default name in DLL/ckx to look for info func
+#define CK_INFO_FUNC        "ck_info"
+// default name in DLL/ckx to look for for query func
+#define CK_QUERY_FUNC       "ck_query"
 // bad object data offset
 #define CK_INVALID_OFFSET    0xffffffff
 
@@ -351,8 +368,12 @@ typedef Chuck_Env * (CK_DLL_CALL * f_get_env)( Chuck_DL_Query * query );
 typedef Chuck_Compiler * (CK_DLL_CALL * f_get_compiler)( Chuck_DL_Query * query );
 typedef Chuck_Carrier * (CK_DLL_CALL * f_get_carrier)( Chuck_DL_Query * query );
 
-// set name of ckx
+// set name of module / chugin
 typedef void (CK_DLL_CALL * f_setname)( Chuck_DL_Query * query, const char * name );
+// set info of module / chugin by (key,value)
+typedef void (CK_DLL_CALL * f_setinfo)( Chuck_DL_Query * query, const char * key, const char * value );
+// set info of module / chugin by (key,value)
+typedef const char * (CK_DLL_CALL * f_getinfo)( Chuck_DL_Query * query, const char * key );
 
 // begin class/namespace, can be nested
 typedef void (CK_DLL_CALL * f_begin_class)( Chuck_DL_Query * query, const char * name, const char * parent );
@@ -408,9 +429,15 @@ typedef t_CKBOOL (CK_DLL_CALL * f_doc_func)( Chuck_DL_Query * query, const char 
 // set last mvar documentation
 typedef t_CKBOOL (CK_DLL_CALL * f_doc_var)( Chuck_DL_Query * query, const char * doc );
 
+} // end extern "C"
+
+
+
+
 //-----------------------------------------------------------------------------
-// shreds watcher flags; meant to bitwise-OR together in options
-// these will also be passed back to the callback...
+// name: enum ckvm_ShredsWatcherFlag | 1.5.1.5 (ge & andrew) added
+// desc: shreds watcher flags; meant to bitwise-OR together in options
+//       these will also be passed back to the callback...
 //-----------------------------------------------------------------------------
 typedef enum {
     ckvm_shreds_watch_NONE = 0,
@@ -434,37 +461,78 @@ typedef enum {
     ckte_origin_GENERATED    // generated (e.g., array types like int[][][][])
 } ckte_Origin;
 
-} // end extern "C"
+//-----------------------------------------------------------------------------
+// name: enum ckte_Op_OverloadKind | 1.5.1.5 (ge) added
+// desc: enumeration for kinds of operator overload
+//-----------------------------------------------------------------------------
+typedef enum
+{
+    ckte_op_overload_NONE,
+    ckte_op_overload_BINARY,    // LHS op RHS
+    ckte_op_overload_UNARY_PRE, //     op RHS
+    ckte_op_overload_UNARY_POST // LHS op
+} ckte_Op_OverloadKind;
+
+//-----------------------------------------------------------------------------
+// key strings for QUERY->setname(...) and QUERY->getinfo(...)
+//-----------------------------------------------------------------------------
+#define CHUGIN_INFO_NAME           "CHUGIN_INFO_NAME" // same as QUERY->setname()
+#define CHUGIN_INFO_AUTHORS        "CHUGIN_INFO_AUTHORS"
+#define CHUGIN_INFO_CHUGIN_VERSION "CHUGIN_INFO_CHUGIN_VERSION"
+#define CHUGIN_INFO_DESCRIPTION    "CHUGIN_INFO_DESCRIPTION"
+#define CHUGIN_INFO_URL            "CHUGIN_INFO_URL"
+#define CHUGIN_INFO_EMAIL          "CHUGIN_INFO_EMAIL"
+#define CHUGIN_INFO_ID             "CHUGIN_INFO_ID"
+#define CHUGIN_INFO_EXTRA          "CHUGIN_INFO_EXTRA"
 
 
 
 
 //-----------------------------------------------------------------------------
 // name: struct Chuck_DL_Query
-// desc: passed to module
+// desc: data structure passed from chuck host to chugin to query its contents:
+//       include 1) chugin/module info; 2) classes and operator-overloadings
+//       to add to chuck's type system; 3) the chugin can also use the query
+//       to get data from from the host, including VM / host sample rate, and
+//       a Chuck_DL_Api handle for accessing the chugin-to-host runtime DL API
 //-----------------------------------------------------------------------------
 struct Chuck_DL_Query
 {
+//-------------------------------------------------------------------------
+// function pointers: to be called from CHUGIN / module
+//-------------------------------------------------------------------------
 public:
-    // function pointers - to be called from client module
-    //   Chuck_VM * vm = QUERY->get_vm( QUERY );
-    //   Chuck_VM * api = QUERY->get_api( QUERY );
-    //
-    // get_vm(), get_api(), etc.
-    // REFACTOR-2017: get compiler, vm, etc. asoociated with the QUERY
-    f_get_vm get_vm;
-    f_get_api get_api;
-    f_get_env get_env;
-    f_get_compiler get_compiler;
-    f_get_carrier get_carrier;
+    // -------------
+    // functions for accessing useful host-side objects
+    // -------------
+    // get Chuck_DL_Api for accessing chugin DL runtime API
+    // CK_DL_API api = QUERY->ck_api( QUERY );
+    f_get_api ck_api;
+    // get a handle to host's VM
+    // Chuck_VM * vm = QUERY->ck_vm( QUERY );
+    f_get_vm ck_vm;
 
 public:
-    // function pointers - to be called from client module
-    //   QUERY->setname( QUERY, ... );
-    //
-    // set the name of the module
+    // -------------
+    // functions for registering chugin info such as name, author, URL, etc.
+    // -------------
+    // set the name of the module, typically the name of the Chugin
+    // QUERY->setname( QUERY, "TheChuginName" );
     f_setname setname;
-    // begin class/namespace, can be nexted
+    // set additional info by key | 1.5.2.0 (ge) added
+    // see CHUGIN_INFO_* above for info keys
+    // QUERY->setinfo( QUERY, key_cstring, value_cstring );
+    f_setinfo setinfo;
+    // get info by key (do not keep returned pointer; always make a copy):
+    // see CHUGIN_INFO_* above for info keys
+    // std::string str = QUERY->setinfo( QUERY, key_cstring, value_cstring );
+    f_getinfo getinfo;
+
+public:
+    // -------------
+    // functions for creating new types in chuck's type system, from a chugin
+    // -------------
+    // begin class/namespace, can be nested
     f_begin_class begin_class;
     // add constructor, can be followed by add_arg
     f_add_ctor add_ctor;
@@ -488,19 +556,13 @@ public:
     f_add_ugen_funcf_auto_num_channels add_ugen_funcf_auto_num_channels;
     // (ugen only) add ctrl parameters
     // f_add_ugen_ctrl add_ugen_ctrl;  // not used but needed for import for now
-    // end class/namespace, compile it
+    // end class/namespace; compile it
     f_end_class end_class;
 
-    // added 1.3.5
-    Chuck_DL_Value * last_var;
-    f_doc_class doc_class;
-    f_doc_func doc_func;
-    f_doc_var doc_var;
-    f_add_example add_ex;
-
-    // re-added 1.4.0.1
-    f_create_main_thread_hook create_main_thread_hook;
-
+public:
+    // -------------
+    // functions for overloading operators in the type system, from a chugin
+    // -------------
     // add binary operator overload; args included | 1.5.1.5 (ge & andrew)
     f_add_op_overload_binary add_op_overload_binary;
     // add unary (prefix) operator overload; arg included
@@ -508,47 +570,70 @@ public:
     // add unary (postfix) operator overload; arg included
     f_add_op_overload_postfix add_op_overload_postfix;
 
-    // register shred notifcations | 1.5.1.5 (ge & andrew)
-    f_register_shreds_watcher register_shreds_watcher;
-    // un-register shred notifcations | 1.5.1.5 (ge & andrew)
-    f_unregister_shreds_watcher unregister_shreds_watcher;
+public:
+    // -------------
+    // these are used to document functions and variables added above
+    // the are used for ckdoc generations and .help runtime help
+    // -------------
+    f_doc_class doc_class;
+    f_doc_func doc_func;
+    f_doc_var doc_var;
+    f_add_example add_ex;
 
 public:
+    // -------------
+    // register a function to be run on the main thread of chuck host
+    // * no more than ONE main thread hooks can be active
+    // * typically used by special chugins such as ChuGL or MAUI that
+    // deals with graphics or windowing | re-added 1.4.0.1
+    // -------------
+    f_create_main_thread_hook create_main_thread_hook;
+
+public:
+    // -------------
+    // register callback to be invoked by chuck host at various
+    // stages of a shred's operation | 1.5.1.5 (ge & andrew) added
+    // * see `ckvm_ShredsWatcherFlag` enums
+    // -------------
+    // register shred notifcations
+    f_register_shreds_watcher register_shreds_watcher;
+    // un-register shred notifcations
+    f_unregister_shreds_watcher unregister_shreds_watcher;
+
+
+//-------------------------------------------------------------------------
+// HOST ONLY beyond this point...
+//-------------------------------------------------------------------------
+public:
     //-------------------------------------------------------------------------
-    // NOTE: everything below std::anything cannot be reliably accessed
-    // by offset between dynamic modules, since std::anything could be variable
-    // size -- put everything need to be accessed across modules above here!
-    // discovered by the vigilant and forever traumatized Jack Atherton,
-    // fixed during REFACTOR-2017; warning by the guilt-ridden Ge Wang
+    // NOTE: everything below std::anything cannot be reliably accessed by
+    // offset across DLL/shared-library boundaries, since std::anything could
+    // be variable size;
     //-------------------------------------------------------------------------
-    // dll
+    // *** put everything to be accessed from chugins ABOVE this point! ***
+    //-------------------------------------------------------------------------
+    // * discovered by the vigilant and forever traumatized Jack Atherton,
+    // * fixed during REFACTOR-2017; warning by guilt-ridden Ge Wang
+    //-------------------------------------------------------------------------
+    // DLL reference
     Chuck_DLL * dll_ref;
-    // reserved
-    void * reserved;
-    // sample rate
-    t_CKUINT srate;
-    // line pos
-    int linepos;
     // name of dll
     std::string dll_name;
+    // DL API reference | 1.5.1.5
+    CK_DL_API m_api;
+    // info map | 1.5.2.0
+    std::map<std::string, std::string> dll_info;
 
     // current class
     Chuck_DL_Class * curr_class;
     // current function
     Chuck_DL_Func * curr_func;
-    // name
-    std::string name;
-    // collection of class
+    // current variable | added 1.3.5.0
+    Chuck_DL_Value * curr_var;
+    // collection of classes
     std::vector<Chuck_DL_Class *> classes;
-    // stack
+    // stack of classes
     std::vector<Chuck_DL_Class * > stack;
-
-    // flag any error encountered during the query | 1.5.0.5 (ge) added
-    t_CKBOOL errorEncountered;
-
-    // DL API reference | 1.5.1.5
-    CK_DL_API m_api;
-
     // collection of operator overloads
     std::vector<Chuck_DL_Func *> op_overloads;
 
@@ -559,12 +644,20 @@ public: // host-side functions (not to be called from chugins)
     ~Chuck_DL_Query() { this->clear(); }
     // clear
     void clear();
-    // access to various functions
+
+public:
+    // access to various functions: called from host
     Chuck_VM * vm() const;
     CK_DL_API api() const;
     Chuck_Env * env() const;
     Chuck_Compiler * compiler() const;
     Chuck_Carrier * carrier() const;
+
+public:
+    // flag any error encountered during the query | 1.5.0.5 (ge) added
+    t_CKBOOL errorEncountered;
+    // host sample rate
+    t_CKUINT srate;
 
 protected:
     // REFACTOR-2017: carrier ref
@@ -655,21 +748,6 @@ struct Chuck_DL_Value
 
 
 //-----------------------------------------------------------------------------
-// name: enum te_Op_OverloadKind | 1.5.1.5 (ge) added
-// desc: enumeration for kinds of operator overload
-//-----------------------------------------------------------------------------
-enum te_Op_OverloadKind
-{
-    te_op_overload_none,
-    te_op_overload_binary,    // LHS op RHS
-    te_op_overload_unary_pre, //     op RHS
-    te_op_overload_unary_post // LHS op
-};
-
-
-
-
-//-----------------------------------------------------------------------------
 // name: struct Chuck_DL_Func
 // desc: function from module
 //-----------------------------------------------------------------------------
@@ -688,14 +766,14 @@ struct Chuck_DL_Func
     // description
     std::string doc;
     // is this an operator overload? if so, which kind? | 1.5.1.5
-    te_Op_OverloadKind opOverloadKind;
+    ckte_Op_OverloadKind opOverloadKind;
     // operator to overload | 1.5.1.5
     ae_Operator op2overload;
 
     // constructor
-    Chuck_DL_Func() { ctor = NULL; fpKind = ae_fp_unknown; opOverloadKind = te_op_overload_none; op2overload = ae_op_none; }
+    Chuck_DL_Func() { ctor = NULL; fpKind = ae_fp_unknown; opOverloadKind = ckte_op_overload_NONE; op2overload = ae_op_none; }
     Chuck_DL_Func( const char * t, const char * n, t_CKUINT a, ae_FuncPointerKind kind )
-    { name = n?n:""; type = t?t:""; addr = a; fpKind = kind; opOverloadKind = te_op_overload_none; op2overload = ae_op_none; }
+    { name = n?n:""; type = t?t:""; addr = a; fpKind = kind; opOverloadKind = ckte_op_overload_NONE; op2overload = ae_op_none; }
     // destructor
     ~Chuck_DL_Func();
     // add arg
@@ -936,26 +1014,31 @@ public:
         t_CKINT (CK_DLL_CALL * const array_int_get_idx)( ArrayInt array, t_CKINT idx );
         t_CKBOOL (CK_DLL_CALL * const array_int_get_key)( ArrayInt array, const char * key, t_CKINT & value  );
         t_CKBOOL (CK_DLL_CALL * const array_int_push_back)( ArrayInt array, t_CKINT value );
+        void (CK_DLL_CALL * const array_int_clear)( ArrayInt array );
         // array_float operations
         t_CKINT (CK_DLL_CALL * const array_float_size)( ArrayFloat array );
         t_CKFLOAT (CK_DLL_CALL * const array_float_get_idx)( ArrayFloat array, t_CKINT idx );
         t_CKBOOL (CK_DLL_CALL * const array_float_get_key)( ArrayFloat array, const char * key, t_CKFLOAT & value );
         t_CKBOOL (CK_DLL_CALL * const array_float_push_back)( ArrayFloat array, t_CKFLOAT value );
+        void (CK_DLL_CALL * const array_float_clear)(ArrayFloat array);
         // array_vec2/complex/polar/16 operations | 1.5.2.0 (ge) added
         t_CKINT (CK_DLL_CALL * const array_vec2_size)( ArrayVec2 array );
         t_CKVEC2 (CK_DLL_CALL * const array_vec2_get_idx)( ArrayVec2 array, t_CKINT idx );
         t_CKBOOL (CK_DLL_CALL * const array_vec2_get_key)( ArrayVec2 array, const char * key, t_CKVEC2 & value );
         t_CKBOOL (CK_DLL_CALL * const array_vec2_push_back)( ArrayVec2 array, const t_CKVEC2 & value );
+        void (CK_DLL_CALL * const array_vec2_clear)(ArrayVec2 array);
         // array_vec3/24 operations | 1.5.2.0 (ge) added
         t_CKINT (CK_DLL_CALL * const array_vec3_size)( ArrayVec3 array );
         t_CKVEC3 (CK_DLL_CALL * const array_vec3_get_idx)( ArrayVec3 array, t_CKINT idx );
         t_CKBOOL (CK_DLL_CALL * const array_vec3_get_key)( ArrayVec3 array, const char * key, t_CKVEC3 & value );
         t_CKBOOL (CK_DLL_CALL * const array_vec3_push_back)( ArrayVec3 array, const t_CKVEC3 & value );
+        void (CK_DLL_CALL * const array_vec3_clear)(ArrayVec3 array);
         // array_vec4/32 operations | 1.5.2.0 (ge) added
         t_CKINT (CK_DLL_CALL * const array_vec4_size)( ArrayVec4 array );
         t_CKVEC4 (CK_DLL_CALL * const array_vec4_get_idx)( ArrayVec4 array, t_CKINT idx );
         t_CKBOOL (CK_DLL_CALL * const array_vec4_get_key)( ArrayVec4 array, const char * key, t_CKVEC4 & value );
         t_CKBOOL (CK_DLL_CALL * const array_vec4_push_back)( ArrayVec4 array, const t_CKVEC4 & value );
+        void (CK_DLL_CALL * const array_vec4_clear)(ArrayVec4 array);
         // (UNSAFE) get c++ vector pointers from chuck arrays | 1.5.2.0
         // std::vector<t_CKUINT> * (CK_DLL_CALL * const array_int_vector)( ArrayInt array );
         // std::vector<t_CKFLOAT> * (CK_DLL_CALL * const array_float_vector)( ArrayFloat array );
@@ -980,6 +1063,10 @@ public:
         void (CK_DLL_CALL * const callback_on_instantiate)( f_callback_on_instantiate callback, Type base_type, Chuck_VM * vm, t_CKBOOL shouldSetShredOrigin );
         // get origin hint ("where did this type originate?")
         ckte_Origin (CK_DLL_CALL * const origin_hint)(Type type);
+        // get type name (full, with decorations) (NOTE do not save a reference to the return value; make a copy if needed) | 1.5.2.0
+        const char * (CK_DLL_CALL * const name)(Type type);
+        // get type base name (no decorations) (NOTE do not save a reference to the return value; make a copy if needed) | 1.5.2.0
+        const char * (CK_DLL_CALL * const base_name)(Type type);
     } * const type;
 
     // api to access host-side shreds | 1.5.2.0
@@ -1020,10 +1107,11 @@ private:
 struct Chuck_DLL /* : public Chuck_VM_Object */
 {
 public:
-    // load dynamic ckx/dll from filename
+    // load module (chugin/dll) from filename
     t_CKBOOL load( const char * filename,
                    const char * func = CK_QUERY_FUNC,
                    t_CKBOOL lazy = FALSE );
+    // load module (internal) from query func
     t_CKBOOL load( f_ck_query query_func, t_CKBOOL lazy = FALSE );
     // get address in loaded ckx
     void * get_addr( const char * symbol );
@@ -1049,6 +1137,10 @@ public:
     // major version must be same between chugin and host
     // chugin minor version must less than or equal host minor version
     t_CKBOOL compatible();
+
+public:
+    // get info from query
+    std::string getinfo( const std::string & key );
 
 public:
     // constructor

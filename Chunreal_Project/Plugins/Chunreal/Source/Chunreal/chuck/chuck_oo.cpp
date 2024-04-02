@@ -204,7 +204,7 @@ void Chuck_VM_Object::unlock()
 void Chuck_VM_Object::lock_all()
 {
     // log
-    EM_log( CK_LOG_SEVERE, "locking down special objects..." );
+    EM_log( CK_LOG_HERALD, "locking down special objects..." );
     // set flag
     our_locks_in_effect = TRUE;
 }
@@ -219,7 +219,7 @@ void Chuck_VM_Object::lock_all()
 void Chuck_VM_Object::unlock_all()
 {
     // log
-    EM_log( CK_LOG_SEVERE, "unlocking special objects..." );
+    EM_log( CK_LOG_HERALD, "unlocking special objects..." );
     // set flag
     our_locks_in_effect = FALSE;
 }
@@ -330,15 +330,36 @@ Chuck_Object::~Chuck_Object()
         type = type->parent;
     }
 
-    // release
+    // release class-scope member vars | 1.5.2.0 (ge) added
+    type = this->type_ref; Chuck_Object * obj = NULL;
+    // for each type in the inheritance chain
+    while( type )
+    {
+        // for each mvar directly in the class
+        for( t_CKUINT i = 0; i < type->obj_mvars_offsets.size(); i++ )
+        {
+            // get the object reference from the offsets
+            obj = OBJ_MEMBER_OBJECT( this, type->obj_mvars_offsets[i] );
+            // release
+            CK_SAFE_RELEASE(obj);
+        }
+
+        // go up to parent type
+        type = type->parent;
+    }
+
+    // release origin shred
     CK_SAFE_RELEASE( origin_shred );
+    // release type reference
     CK_SAFE_RELEASE( type_ref );
+
     // CK_SAFE_RELEASE( origin_vm );
     // just zero out | 1.5.1.8 (ge)
     origin_vm = NULL;
 
-    // free
+    // free virtual table
     CK_SAFE_DELETE( vtable );
+    // free data segment
     CK_SAFE_DELETE_ARRAY( data );
 }
 
@@ -754,7 +775,7 @@ t_CKINT Chuck_ArrayInt::pop_front()
     if( m_is_obj )
     {
         // get pointer
-        Chuck_Object * v = (Chuck_Object *)m_vector[m_vector.size()-1];
+        Chuck_Object * v = (Chuck_Object *)m_vector[0];
         // if not null, release
         if( v ) v->release();
     }
@@ -2662,7 +2683,7 @@ t_CKINT Chuck_ArrayVec4::get( t_CKINT i, t_CKVEC4 * val )
 t_CKINT Chuck_ArrayVec4::get( const string & key, t_CKVEC4 * val )
 {
     // set to zero
-    val->x = val->y = val->z = val->w;
+    val->x = val->y = val->z = val->w = 0;
 
     // iterator
     map<string, t_CKVEC4>::iterator iter = m_map.find( key );

@@ -48,7 +48,7 @@
 // 1.5.0.0 (ge) | moved to chuck.h for at-a-glance visibility
 // 1.5.2.0 (ge) | moved to chuck_def.h for chugins headers streamlining
 //-----------------------------------------------------------------------------
-#define CHUCK_VERSION_STRING        "1.5.2.0-dev (chai)"
+#define CHUCK_VERSION_STRING        "1.5.2.2 (chai)"
 //-----------------------------------------------------------------------------
 
 
@@ -260,13 +260,13 @@ typedef struct { SAMPLE re ; SAMPLE im ; } t_CKCOMPLEX_SAMPLE;
 // platform: linux
 // related macros: __LINUX_ALSA__ __LINUX_PULSE__ __LINUX_OSS__ __LINUX_JACK__ __UNIX_JACK__
 //-------------------------------------------
-#if defined(__linux__)
+#if defined(__linux__) || defined(__FreeBSD__)
 //-------------------------------------------
   #ifndef __PLATFORM_LINUX__
   #define __PLATFORM_LINUX__
   #endif
 //-------------------------------------------
-#endif // defined(__linux__)
+#endif // defined(__linux__) || defined(__FreeBSD__)
 //-------------------------------------------
 
 

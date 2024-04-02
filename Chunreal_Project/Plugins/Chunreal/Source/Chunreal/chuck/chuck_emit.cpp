@@ -119,7 +119,7 @@ void emit_engine_track_stmt_refs_cleanup( Chuck_Emitter * emit, Chuck_Instr_Stmt
 Chuck_Emitter * emit_engine_init( Chuck_Env * env )
 {
     // log
-    EM_log( CK_LOG_SEVERE, "initializing emitter..." );
+    EM_log( CK_LOG_HERALD, "initializing emitter..." );
 
     // TODO: ensure this in a better way?
     // whatever t_CKUINT is defined as, it must be the same size as a pointer
@@ -3193,7 +3193,7 @@ t_CKBOOL emit_engine_emit_op_chuck( Chuck_Emitter * emit, a_Exp lhs, a_Exp rhs, 
     // ugen => ugen
     if( isa( left, emit->env->ckt_ugen ) && isa( right, emit->env->ckt_ugen ) )
     {
-        // link, flag as NOT unchuck
+        // link, flag as NOT upchuck
         emit->append( instr = new Chuck_Instr_UGen_Link( FALSE ) );
         instr->set_linepos( lhs->line );
         // done
@@ -3204,8 +3204,8 @@ t_CKBOOL emit_engine_emit_op_chuck( Chuck_Emitter * emit, a_Exp lhs, a_Exp rhs, 
     if( ( isa( left, emit->env->ckt_ugen ) || ( isa( left, emit->env->ckt_array ) && isa( left->array_type, emit->env->ckt_ugen ) ) ) &&
         ( isa( right, emit->env->ckt_ugen ) || ( isa( right, emit->env->ckt_array ) && isa( right->array_type, emit->env->ckt_ugen ) ) ) )
     {
-        // link, flag as NOT unchuck
-        emit->append( instr = new Chuck_Instr_UGen_Array_Link( isa( left, emit->env->ckt_array ), isa( right, emit->env->ckt_array ) ) );
+        // link, flag as NOT upchuck
+        emit->append( instr = new Chuck_Instr_UGen_Array_Link( isa( left, emit->env->ckt_array ), isa( right, emit->env->ckt_array ), FALSE ) );
         instr->set_linepos( lhs->line );
         // done
         return TRUE;
@@ -3347,6 +3347,17 @@ t_CKBOOL emit_engine_emit_op_upchuck( Chuck_Emitter * emit, a_Exp lhs, a_Exp rhs
         Chuck_Instr * instr = NULL;
         emit->append( instr = new Chuck_Instr_UGen_Link( TRUE ) );
         instr->set_linepos( lhs->line );
+    }
+    // uana[] =^ uana[] (or permutation)
+    else if( ( isa( left, emit->env->ckt_uana ) || ( isa( left, emit->env->ckt_array ) && isa( left->array_type, emit->env->ckt_uana ) ) ) &&
+        ( isa( right, emit->env->ckt_uana ) || ( isa( right, emit->env->ckt_array ) && isa( right->array_type, emit->env->ckt_uana ) ) ) )
+    {
+        // link, flag as upchuck
+        Chuck_Instr * instr = NULL;
+        emit->append( instr = new Chuck_Instr_UGen_Array_Link( isa( left, emit->env->ckt_array ), isa( right, emit->env->ckt_array ), TRUE ) );
+        instr->set_linepos( lhs->line );
+        // done
+        return TRUE;
     }
     else
     {
@@ -4247,12 +4258,13 @@ t_CKBOOL emit_engine_emit_exp_func_call( Chuck_Emitter * emit,
 
     // only check dependency violations if we are at a context-top-level
     // or class-top-level scope, i.e., not in a function definition
-    // also, once sporked,  it will be up the programmer to ensure intention
+    // also, once sporked, it will be up the programmer to ensure intention
     if( !emit->env->func && !spork )
     {
         // dependency tracking: check if we invoke func before all its deps are initialized | 1.5.0.8 (ge) added
         // NOTE if func originates from another file, this should behave correctly and return NULL | 1.5.1.1 (ge) fixed
-        const Chuck_Value_Dependency * unfulfilled = func->depends.locate( where, emit->env->class_def != NULL );
+        // NOTE passing in emit->env->class_def, to differentiate dependencies across class definitions | 1.5.2.0 (ge) fixed
+        const Chuck_Value_Dependency * unfulfilled = func->depends.locate( where, emit->env->class_def );
         // at least one unfulfilled dependency
         if( unfulfilled )
         {

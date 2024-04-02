@@ -84,14 +84,14 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // overload constructor (float freq)
     func = make_new_ctor( oscx_ctor_1 );
     func->add_arg( "float", "freq" );
-    func->doc = "Constructor to initialize a Osc at specified frequency.";
+    func->doc = "construct Osc at specified frequency.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // overload constructor (float freq, float phase)
     func = make_new_ctor( oscx_ctor_2 );
     func->add_arg( "float", "freq" );
     func->add_arg( "float", "phase" );
-    func->doc = "Constructor to initialize a Osc at specified frequency and phase.";
+    func->doc = "construct Osc at specified frequency and phase.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // add ctrl: freq
@@ -152,14 +152,14 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // overload constructor (float freq)
     func = make_new_ctor( oscx_ctor_1 );
     func->add_arg( "float", "freq" );
-    func->doc = "Constructor to initialize a Phasor at specified frequency.";
+    func->doc = "construct Phasor at specified frequency.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // overload constructor (float freq, float phase)
     func = make_new_ctor( oscx_ctor_2 );
     func->add_arg( "float", "freq" );
     func->add_arg( "float", "phase" );
-    func->doc = "Constructor to initialize a Phasor at specified frequency and phase.";
+    func->doc = "construct Phasor at specified frequency and phase.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // add examples | 1.5.0.0 added
@@ -180,14 +180,14 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // overload constructor (float freq)
     func = make_new_ctor( oscx_ctor_1 );
     func->add_arg( "float", "freq" );
-    func->doc = "Constructor to initialize a SinOsc at specified frequency.";
+    func->doc = "construct SinOsc at specified frequency.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // overload constructor (float freq, float phase)
     func = make_new_ctor( oscx_ctor_2 );
     func->add_arg( "float", "freq" );
     func->add_arg( "float", "phase" );
-    func->doc = "Constructor to initialize a SinOsc at specified frequency and phase.";
+    func->doc = "construct SinOsc at specified frequency and phase.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // add examples | 1.5.0.0 (ge)
@@ -216,14 +216,14 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // overload constructor (float freq)
     func = make_new_ctor( oscx_ctor_1 );
     func->add_arg( "float", "freq" );
-    func->doc = "Constructor to initialize a TriOsc at specified frequency.";
+    func->doc = "construct TriOsc at specified frequency.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // overload constructor (float freq, float phase)
     func = make_new_ctor( oscx_ctor_2 );
     func->add_arg( "float", "freq" );
     func->add_arg( "float", "phase" );
-    func->doc = "Constructor to initialize a TriOsc at specified frequency and phase.";
+    func->doc = "construct TriOsc at specified frequency and phase.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     func = make_new_mfun( "float", "width", osc_ctrl_width );
@@ -255,14 +255,14 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // overload constructor (float freq)
     func = make_new_ctor( oscx_ctor_1 );
     func->add_arg( "float", "freq" );
-    func->doc = "Constructor to initialize a SawOsc at specified frequency.";
+    func->doc = "construct SawOsc at specified frequency.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // overload constructor (float freq, float phase)
     func = make_new_ctor( oscx_ctor_2 );
     func->add_arg( "float", "freq" );
     func->add_arg( "float", "phase" );
-    func->doc = "Constructor to initialize a SawOsc at specified frequency and phase.";
+    func->doc = "construct SawOsc at specified frequency and phase.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     func = make_new_mfun( "float", "width", sawosc_ctrl_width );
@@ -294,14 +294,14 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // overload constructor (float freq)
     func = make_new_ctor( oscx_ctor_1 );
     func->add_arg( "float", "freq" );
-    func->doc = "Constructor to initialize a PulseOsc at specified frequency.";
+    func->doc = "construct PulseOsc at specified frequency.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // overload constructor (float freq, float phase)
     func = make_new_ctor( oscx_ctor_2 );
     func->add_arg( "float", "freq" );
     func->add_arg( "float", "phase" );
-    func->doc = "Constructor to initialize a PulseOsc at specified frequency and phase.";
+    func->doc = "construct PulseOsc at specified frequency and phase.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     func = make_new_mfun( "float", "width", osc_ctrl_width );
@@ -332,14 +332,14 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // overload constructor (float freq)
     func = make_new_ctor( oscx_ctor_1 );
     func->add_arg( "float", "freq" );
-    func->doc = "Constructor to initialize a SqrOsc at specified frequency.";
+    func->doc = "construct SqrOsc at specified frequency.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // overload constructor (float freq, float phase)
     func = make_new_ctor( oscx_ctor_2 );
     func->add_arg( "float", "freq" );
     func->add_arg( "float", "phase" );
-    func->doc = "Constructor to initialize a SqrOsc at specified frequency and phase.";
+    func->doc = "construct SqrOsc at specified frequency and phase.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     func = make_new_mfun( "float", "width", sqrosc_ctrl_width );
@@ -441,7 +441,9 @@ CK_DLL_CTOR( oscx_ctor_2 )
     Chuck_DL_Return r;
     // set freq
     osc_ctrl_freq( SELF, ARGS, &r, VM, SHRED, API );
-    // set freq
+    // advance
+    GET_NEXT_FLOAT(ARGS);
+    // set phase
     osc_ctrl_phase( SELF, ARGS, &r, VM, SHRED, API );
 }
 
