@@ -145,6 +145,8 @@ CK_DLL_CTOR( ADSR_ctor );
 CK_DLL_DTOR( ADSR_dtor );
 CK_DLL_TICK( ADSR_tick );
 CK_DLL_PMSG( ADSR_pmsg );
+CK_DLL_CTOR( ADSR_ctor_floats );
+CK_DLL_CTOR( ADSR_ctor_durs );
 CK_DLL_CTRL( ADSR_ctrl_attackTime );
 CK_DLL_CTRL( ADSR_ctrl_attackRate );
 CK_DLL_CTRL( ADSR_ctrl_decayTime );
@@ -208,9 +210,12 @@ CK_DLL_CGET( Chorus_cget_mix );
 
 // Delay
 CK_DLL_CTOR( Delay_ctor );
+CK_DLL_CTOR( Delay_ctor_delay );
+CK_DLL_CTOR( Delay_ctor_delay_max );
 CK_DLL_DTOR( Delay_dtor );
 CK_DLL_TICK( Delay_tick );
 CK_DLL_PMSG( Delay_pmsg );
+CK_DLL_CTRL( Delay_ctrl_set );
 CK_DLL_CTRL( Delay_ctrl_delay );
 CK_DLL_CTRL( Delay_ctrl_max );
 CK_DLL_CGET( Delay_cget_delay );
@@ -219,9 +224,12 @@ CK_DLL_CGET( Delay_clear );
 
 // DelayA
 CK_DLL_CTOR( DelayA_ctor );
+CK_DLL_CTOR( DelayA_ctor_delay );
+CK_DLL_CTOR( DelayA_ctor_delay_max );
 CK_DLL_DTOR( DelayA_dtor );
 CK_DLL_TICK( DelayA_tick );
 CK_DLL_PMSG( DelayA_pmsg );
+CK_DLL_CTRL( DelayA_ctrl_set );
 CK_DLL_CTRL( DelayA_ctrl_delay );
 CK_DLL_CTRL( DelayA_ctrl_max );
 CK_DLL_CGET( DelayA_cget_delay );
@@ -230,9 +238,12 @@ CK_DLL_CGET( DelayA_clear );
 
 // DelayL
 CK_DLL_CTOR( DelayL_ctor );
+CK_DLL_CTOR( DelayL_ctor_delay );
+CK_DLL_CTOR( DelayL_ctor_delay_max );
 CK_DLL_DTOR( DelayL_dtor );
 CK_DLL_TICK( DelayL_tick );
 CK_DLL_PMSG( DelayL_pmsg );
+CK_DLL_CTRL( DelayL_ctrl_set );
 CK_DLL_CTRL( DelayL_ctrl_delay );
 CK_DLL_CTRL( DelayL_ctrl_max );
 CK_DLL_CGET( DelayL_cget_delay );
@@ -241,9 +252,12 @@ CK_DLL_CGET( DelayL_clear );
 
 // Echo
 CK_DLL_CTOR( Echo_ctor );
+CK_DLL_CTOR( Echo_ctor_delay );
+CK_DLL_CTOR( Echo_ctor_delay_max );
 CK_DLL_DTOR( Echo_dtor );
 CK_DLL_TICK( Echo_tick );
 CK_DLL_PMSG( Echo_pmsg );
+CK_DLL_CTRL( Echo_ctrl_set );
 CK_DLL_CTRL( Echo_ctrl_delay );
 CK_DLL_CTRL( Echo_ctrl_max );
 CK_DLL_CTRL( Echo_ctrl_mix );
@@ -256,6 +270,12 @@ CK_DLL_CTOR( Envelope_ctor );
 CK_DLL_DTOR( Envelope_dtor );
 CK_DLL_TICK( Envelope_tick );
 CK_DLL_PMSG( Envelope_pmsg );
+CK_DLL_CTOR( Envelope_ctor_duration );
+CK_DLL_CTOR( Envelope_ctor_float );
+CK_DLL_CTOR( Envelope_ctor_duration_target );
+CK_DLL_CTOR( Envelope_ctor_float_target );
+CK_DLL_MFUN( Envelope_mfun_duration_target );
+CK_DLL_MFUN( Envelope_mfun_float_target );
 CK_DLL_CTRL( Envelope_ctrl_rate );
 CK_DLL_CTRL( Envelope_ctrl_target );
 CK_DLL_CTRL( Envelope_cget_target );
@@ -3516,6 +3536,25 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
     // member variable
     Delay_offset_data = type_engine_import_mvar ( env, "int", "@Delay_data", FALSE );
     if( Delay_offset_data == CK_INVALID_OFFSET ) goto error;
+
+    // add ctor( dur delay )
+    func = make_new_ctor( Delay_ctor_delay );
+    func->add_arg( "dur", "delay" );
+    func->doc = "construct a Delay with delay length and, implicitly, delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_ctor( Delay_ctor_delay_max );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "construct a Delay with delay length and delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_mfun( "void", "set", Delay_ctrl_set );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "set delay length and delay max; delay should be <= max";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
     func = make_new_mfun( "dur", "delay", Delay_ctrl_delay ); //! length of delay
     func->add_arg( "dur", "value" );
     func->doc = "set length of delay.";
@@ -3557,12 +3596,30 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
     if( !type_engine_import_ugen_begin( env, "DelayA", "UGen", env->global(),
                         DelayA_ctor, DelayA_dtor,
                         DelayA_tick, DelayA_pmsg, doc.c_str() ) ) return FALSE;
+    // add examples
+    if( !type_engine_import_add_ex( env, "deep/ks-chord.ck" ) ) goto error;
+
     // member variable
     DelayA_offset_data = type_engine_import_mvar ( env, "int", "@DelayA_data", FALSE );
     if( DelayA_offset_data == CK_INVALID_OFFSET ) goto error;
 
-    // add examples
-    if( !type_engine_import_add_ex( env, "deep/ks-chord.ck" ) ) goto error;
+    // add ctor( dur delay )
+    func = make_new_ctor( DelayA_ctor_delay );
+    func->add_arg( "dur", "delay" );
+    func->doc = "construct a DelayA with delay length and, implicitly, delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_ctor( DelayA_ctor_delay_max );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "construct a DelayA with delay length and delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_mfun( "void", "set", DelayA_ctrl_set );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "set delay length and delay max; delay should be <= max";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
 
     func = make_new_mfun( "dur", "delay", DelayA_ctrl_delay ); //! length of delay
     func->add_arg( "dur", "value" );
@@ -3606,6 +3663,7 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
                         DelayL_tick, DelayL_pmsg, doc.c_str() ) ) return FALSE;
 
     type_engine_import_add_ex(env, "basic/delay.ck");
+    type_engine_import_add_ex(env, "basic/delay2.ck");
     type_engine_import_add_ex(env, "basic/i-robot.ck");
     type_engine_import_add_ex(env, "multi/we-robot.ck");
     type_engine_import_add_ex(env, "analysis/xcorr.ck");
@@ -3614,6 +3672,25 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
     // member variable
     DelayL_offset_data = type_engine_import_mvar ( env, "int", "@DelayL_data", FALSE );
     if( DelayL_offset_data == CK_INVALID_OFFSET ) goto error;
+
+    // add ctor( dur delay )
+    func = make_new_ctor( DelayL_ctor_delay );
+    func->add_arg( "dur", "delay" );
+    func->doc = "construct a DelayL with delay length and, implicitly, delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_ctor( DelayL_ctor_delay_max );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "construct a DelayL with delay length and delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_mfun( "void", "set", DelayL_ctrl_set );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "set delay length and delay max; delay should be <= max";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
     func = make_new_mfun( "dur", "delay", DelayL_ctrl_delay ); //! length of delay
     func->add_arg( "dur", "value" );
     func->doc = "set length of delay.";
@@ -3660,6 +3737,25 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
     //member variable
     Echo_offset_data = type_engine_import_mvar ( env, "int", "@Echo_data", FALSE );
     if( Echo_offset_data == CK_INVALID_OFFSET ) goto error;
+
+    // add ctor( dur delay )
+    func = make_new_ctor( Echo_ctor_delay );
+    func->add_arg( "dur", "delay" );
+    func->doc = "construct an Echo with delay length and, implicitly, delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_ctor( Echo_ctor_delay_max );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "construct an Echo with delay length and delay max";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    func = make_new_mfun( "void", "set", Echo_ctrl_set );
+    func->add_arg( "dur", "delay" );
+    func->add_arg( "dur", "max" );
+    func->doc = "set delay length and delay max; delay should be <= max";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
     func = make_new_mfun( "dur", "delay", Echo_ctrl_delay ); //! length of echo
     func->add_arg( "dur", "value" );
     func->doc = "set length of echo.";
@@ -3707,12 +3803,53 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
                         Envelope_tick, Envelope_pmsg, doc.c_str() ) ) return FALSE;
 
     type_engine_import_add_ex(env, "basic/envelope.ck");
+    type_engine_import_add_ex(env, "basic/envelope2.ck");
     type_engine_import_add_ex(env, "basic/chirp2.ck");
     type_engine_import_add_ex(env, "deep/say-chu.ck");
 
-    //member variable
+    // member variable
     Envelope_offset_data = type_engine_import_mvar ( env, "int", "@Envelope_data", FALSE );
     if( Envelope_offset_data == CK_INVALID_OFFSET ) goto error;
+
+    // add constructor Envelope( dur durationToTarget ) | 1.5.2.5 (added) ge & eito
+    func = make_new_ctor( Envelope_ctor_duration );
+    func->add_arg( "dur", "durationToTarget" );
+    func->doc = "construct an Envelope with duration to reach target (assumed to be 1.0); FYI this does not start the Envelope until .keyOn() is called.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // add constructor Envelope( float secondsToTarget ) | 1.5.2.5 (added) ge & eito
+    func = make_new_ctor( Envelope_ctor_float );
+    func->add_arg( "float", "secondsToTarget" );
+    func->doc = "construct an Envelope with duration (in seconds) to reach target (assumed to be 1.0); FYI this does not start the Envelope until .keyOn() is called.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // add constructor Envelope( dur durationToTarget, float target ) | 1.5.2.5 (added) ge & eito
+    func = make_new_ctor( Envelope_ctor_duration_target );
+    func->add_arg( "dur", "durationToTarget" );
+    func->add_arg( "float", "target" );
+    func->doc = "construct an Envelope with duration to reach target; FYI this does not start the Envelope until .keyOn() is called.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // add constructor Envelope( float durationToTarget, float target ) | 1.5.2.5 (added) ge & eito
+    func = make_new_ctor( Envelope_ctor_float_target );
+    func->add_arg( "float", "secondsToTarget" );
+    func->add_arg( "float", "target" );
+    func->doc = "construct an Envelope with duration (in seconds) to reach target; FYI this does not start the Envelope until .keyOn() is called.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // add ramp( dur durationToTarget, float target ) | 1.5.2.5 (added) ge
+    func = make_new_mfun( "dur", "ramp", Envelope_mfun_duration_target );
+    func->add_arg( "dur", "durationToTarget" );
+    func->add_arg( "float", "target" );
+    func->doc = "over the given duration, ramp toward the specified target; returns the given duration.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    // add ramp( float durationToTarget, float target ) | 1.5.2.5 (added) ge
+    func = make_new_mfun( "dur", "ramp", Envelope_mfun_float_target );
+    func->add_arg( "float", "secondsToTarget" );
+    func->add_arg( "float", "target" );
+    func->doc = "over the given duration (in seconds), ramp toward the specified target; returns the given duration.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
 
     func = make_new_mfun( "int", "keyOn", Envelope_ctrl_keyOn0 ); //! ramp to 1.0
     func->doc = "get keyOn state.";
@@ -3797,6 +3934,24 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
 
     type_engine_import_add_ex(env, "basic/adsr.ck");
     type_engine_import_add_ex(env, "basic/blit2.ck");
+
+    // add construtor ADSR( dur attack, dur decay, float sustain, dur release ) | 1.5.2.5 (added) ge & eito
+    func = make_new_ctor( ADSR_ctor_floats );
+    func->add_arg( "dur", "attack" );
+    func->add_arg( "dur", "decay" );
+    func->add_arg( "float", "sustain" );
+    func->add_arg( "dur", "release" );
+    func->doc = "construct an ADSR with attack, decay, sustain, and release values. Attack, decay, and release values are durations; sustain is a float value typically between 0 and 1.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
+
+    // add constructor ADSR( float attack, float decay, float sustain, float release ) | 1.5.2.5 (added) ge & eito
+    func = make_new_ctor( ADSR_ctor_durs );
+    func->add_arg( "float", "attack" );
+    func->add_arg( "float", "decay" );
+    func->add_arg( "float", "sustain" );
+    func->add_arg( "float", "release" );
+    func->doc = "construct an ADSR with attack, decay, sustain, and release values. Attack, decay, and release values are in seconds; sustain is a float value typically between 0 and 1.";
+    if( !type_engine_import_ctor( env, func ) ) goto error;
 
     func = make_new_mfun( "dur", "attackTime", ADSR_ctrl_attackTime ); //! attack time
     func->add_arg( "dur", "value" );
@@ -5086,7 +5241,7 @@ Modified algorithm code by Gary Scavone, 2005.";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     // add examples | 1.5.0.0
-    type_engine_import_add_ex( env, "midi/midiplay-play.ck" );
+    type_engine_import_add_ex( env, "midi/midifile-play.ck" );
     type_engine_import_add_ex( env, "midi/bwv772.mid" );
 
     // end the class import
@@ -8647,6 +8802,22 @@ int Envelope :: getState(void) const
   return state;
 }
 
+void Envelope :: prepTarget(MY_FLOAT aTarget)
+{
+    m_target = aTarget;
+}
+
+void Envelope :: prepTime(MY_FLOAT aTime)
+{
+    if (aTime < 0.0) {
+      printf("[chuck](via Envelope): negative times not allowed ... correcting!\n");
+      aTime = -aTime;
+    }
+
+    // should >= 0
+    m_time = aTime;
+}
+
 MY_FLOAT Envelope :: tick(void)
 {
   if (state) {
@@ -11719,7 +11890,7 @@ Moog :: Moog()
   adsr->setAllTimes((MY_FLOAT) 0.001,(MY_FLOAT) 1.5,(MY_FLOAT) 0.6,(MY_FLOAT) 0.250);
   filterQ = (MY_FLOAT) 0.85;
   filterRate = (MY_FLOAT) 0.0001;
-  filterStartFreq = (MY_FLOAT) 0.0;
+  filterStartFreq = (MY_FLOAT) 2000.0; // 1.5.2.5 (prc) updated to 2000.0; was 0.0;
   modDepth = (MY_FLOAT) 0.0;
 
   // chuck
@@ -11833,7 +12004,7 @@ void Moog :: controlChange(int number, MY_FLOAT value)
   if (number == __SK_FilterQ_) // 2
     filterQ = 0.80 + ( 0.1 * norm );
   else if (number == __SK_FilterSweepRate_) // 4
-    filterRate = norm * 0.002; // 1.4.1.0 (prc) was .0002
+    filterRate = norm * 0.0002; // 1.5.2.5 (prc) was .002 // 1.4.1.0 (prc) was .0002
   else if (number == __SK_ModFrequency_) { // 11
      this->setModulationSpeed( norm * 12.0 );
      }
@@ -23554,6 +23725,38 @@ CK_DLL_CTOR( Delay_ctor )
 
 
 //-----------------------------------------------------------------------------
+// name: Delay_ctor_delay()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Delay_ctor_delay )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // instantiate
+    DelayBase * d = new DelayBase( (long)(delay+.5), (long)(delay+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, Delay_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Delay_ctor_delay_max()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Delay_ctor_delay_max )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // instantiate
+    DelayBase * d = new DelayBase( (long)(delay+.5), (long)(max+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, Delay_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
 // name: Delay_dtor()
 // desc: DTOR function ...
 //-----------------------------------------------------------------------------
@@ -23561,6 +23764,23 @@ CK_DLL_DTOR( Delay_dtor )
 {
     delete (DelayBase *)OBJ_MEMBER_UINT(SELF, Delay_offset_data);
     OBJ_MEMBER_UINT(SELF, Delay_offset_data) = 0;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Delay_ctrl_set()
+// desc: set function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTRL( Delay_ctrl_set )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // get the object
+    DelayBase * d = (DelayBase *)OBJ_MEMBER_UINT(SELF, Delay_offset_data);
+    // set it
+    d->set( (long)(delay+.5), (long)(max+.5) );
 }
 
 
@@ -23655,6 +23875,38 @@ CK_DLL_CTOR( DelayA_ctor )
 
 
 //-----------------------------------------------------------------------------
+// name: DelayA_ctor_delay()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( DelayA_ctor_delay )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // instantiate
+    DelayA * d = new DelayA( (long)(delay+.5), (long)(delay+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, DelayA_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: DelayA_ctor_delay_max()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( DelayA_ctor_delay_max )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // instantiate
+    DelayA * d = new DelayA( (long)(delay+.5), (long)(max+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, DelayA_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
 // name: DelayA_dtor()
 // desc: DTOR function ...
 //-----------------------------------------------------------------------------
@@ -23662,6 +23914,23 @@ CK_DLL_DTOR( DelayA_dtor )
 {
     delete (DelayA *)OBJ_MEMBER_UINT(SELF, DelayA_offset_data);
     OBJ_MEMBER_UINT(SELF, DelayA_offset_data) = 0;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: DelayA_ctrl_set()
+// desc: set function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTRL( DelayA_ctrl_set )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // get the object
+    DelayA * d = (DelayA *)OBJ_MEMBER_UINT(SELF, DelayA_offset_data);
+    // set it
+    d->set( delay, (long)(max+.5) );
 }
 
 
@@ -23752,6 +24021,55 @@ CK_DLL_CGET( DelayA_clear )
 CK_DLL_CTOR( DelayL_ctor )
 {
     OBJ_MEMBER_UINT(SELF, DelayL_offset_data) = (t_CKUINT)new DelayL;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: DelayL_ctor_delay()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( DelayL_ctor_delay )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // instantiate
+    DelayL * d = new DelayL( (long)(delay+.5), (long)(delay+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, DelayL_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: DelayL_ctor_delay_max()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( DelayL_ctor_delay_max )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // instantiate
+    DelayL * d = new DelayL( (long)(delay+.5), (long)(max+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, DelayL_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: DelayL_ctrl_set()
+// desc: set function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTRL( DelayL_ctrl_set )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // get the object
+    DelayL * d = (DelayL *)OBJ_MEMBER_UINT(SELF, DelayL_offset_data);
+    // set it
+    d->set( delay, (long)(max+.5) );
 }
 
 
@@ -23858,6 +24176,42 @@ CK_DLL_CTOR( Echo_ctor )
 
 
 //-----------------------------------------------------------------------------
+// name: Echo_ctor_delay()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Echo_ctor_delay )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // instantiate
+    Echo * d = new Echo( (long)(delay+.5) );
+    // set delay
+    d->setDelay( (long)(delay+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, Echo_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Echo_ctor_delay_max()
+// desc: CTOR function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Echo_ctor_delay_max )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // instantiate
+    Echo * d = new Echo( (long)(max+.5) );
+    // set delay
+    d->setDelay( (long)(delay+.5) );
+    // set pointer as member
+    OBJ_MEMBER_UINT(SELF, Echo_offset_data) = (t_CKUINT)d;
+}
+
+
+//-----------------------------------------------------------------------------
 // name: Echo_dtor()
 // desc: DTOR function ...
 //-----------------------------------------------------------------------------
@@ -23865,6 +24219,25 @@ CK_DLL_DTOR( Echo_dtor )
 {
     delete (Echo *)OBJ_MEMBER_UINT(SELF, Echo_offset_data);
     OBJ_MEMBER_UINT(SELF, Echo_offset_data) = 0;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Echo_ctrl_set()
+// desc: set function ...
+//-----------------------------------------------------------------------------
+CK_DLL_CTRL( Echo_ctrl_set )
+{
+    // get delay
+    t_CKDUR delay = GET_NEXT_DUR(ARGS);
+    // get delay max
+    t_CKDUR max = GET_NEXT_DUR(ARGS);
+    // get the object
+    Echo * d = (Echo *)OBJ_MEMBER_UINT(SELF, Echo_offset_data);
+    // set max
+    d->set( (long)(max+.5) );
+    // set delay
+    d->setDelay( delay );
 }
 
 
@@ -24000,6 +24373,82 @@ CK_DLL_PMSG( Envelope_pmsg )
 
 
 //-----------------------------------------------------------------------------
+// name: Envelope_ctor_duration()
+// desc: ctor( dur durationToTarget )
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Envelope_ctor_duration )
+{
+    Envelope * d = (Envelope *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    // prep (without triggering envelope)
+    d->prepTime( GET_NEXT_DUR(ARGS) / Stk::sampleRate() );
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Envelope_ctor_float()
+// desc: ctor( float secondsToTarget )
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Envelope_ctor_float )
+{
+    Envelope * d = (Envelope *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    // prep (without triggering envelope)
+    d->prepTime( GET_NEXT_FLOAT(ARGS) );
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Envelope_ctor_duration_target()
+// desc: ctor( dur durationToTarget, float target )
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Envelope_ctor_duration_target )
+{
+    Envelope * d = (Envelope *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    d->prepTime( GET_NEXT_DUR(ARGS) / Stk::sampleRate() );
+    d->prepTarget( GET_NEXT_FLOAT(ARGS) );
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Envelope_ctor_float_target()
+// desc: ctor( float secondsToTarget, float target )
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( Envelope_ctor_float_target )
+{
+    Envelope * d = (Envelope *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    d->prepTime( GET_NEXT_FLOAT(ARGS) );
+    d->prepTarget( GET_NEXT_FLOAT(ARGS) );
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Envelope_mfun_duration_target()
+// desc: ramp( dur durationToTarget, float target )
+//-----------------------------------------------------------------------------
+CK_DLL_MFUN( Envelope_mfun_duration_target )
+{
+    Envelope * d = (Envelope *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    t_CKDUR vdur = GET_NEXT_DUR(ARGS);
+    d->prepTime( vdur / Stk::sampleRate() );
+    d->setTarget( GET_NEXT_FLOAT(ARGS) );
+    RETURN->v_dur = vdur;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: Envelope_mfun_float_target()
+// desc: ramp( float secondsToTarget, float target )
+//-----------------------------------------------------------------------------
+CK_DLL_MFUN( Envelope_mfun_float_target )
+{
+    Envelope * d = (Envelope *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    t_CKFLOAT s = GET_NEXT_FLOAT(ARGS);
+    d->prepTime( s );
+    d->setTarget( GET_NEXT_FLOAT(ARGS) );
+    RETURN->v_dur = s * Stk::sampleRate();
+}
+
+
+//-----------------------------------------------------------------------------
 // name: Envelope_ctrl_time()
 // desc: CTRL function ...
 //-----------------------------------------------------------------------------
@@ -24029,7 +24478,7 @@ CK_DLL_CGET( Envelope_cget_time )
 CK_DLL_CTRL( Envelope_ctrl_duration )
 {
     Envelope * d = (Envelope *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
-    d->setTime( GET_NEXT_FLOAT(ARGS) / Stk::sampleRate() );
+    d->setTime( GET_NEXT_DUR(ARGS) / Stk::sampleRate() );
     RETURN->v_float = d->m_time * Stk::sampleRate();
 }
 
@@ -24226,6 +24675,40 @@ CK_DLL_TICK( ADSR_tick )
 CK_DLL_PMSG( ADSR_pmsg )
 {
     return FALSE;
+}
+
+
+//-----------------------------------------------------------------------------
+// name: ADSR_ctor_floats()
+// desc: ctor( float attack, float decay, float sustain, float release )
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( ADSR_ctor_floats )
+{
+    ADSR * e = (ADSR *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    t_CKFLOAT a = GET_NEXT_FLOAT(ARGS);
+    t_CKFLOAT d = GET_NEXT_FLOAT(ARGS);
+    t_CKFLOAT s = GET_NEXT_FLOAT(ARGS);
+    t_CKFLOAT r = GET_NEXT_FLOAT(ARGS);
+
+    // set A D S R
+    e->setAllTimes( a, d, s, r );
+}
+
+
+//-----------------------------------------------------------------------------
+// name: ADSR_ctor_durs()
+// desc: ctor( dur attack, dur decay, dur sustain, dur release )
+//-----------------------------------------------------------------------------
+CK_DLL_CTOR( ADSR_ctor_durs )
+{
+    ADSR * e = (ADSR *)OBJ_MEMBER_UINT(SELF, Envelope_offset_data);
+    t_CKDUR a = GET_NEXT_DUR(ARGS);
+    t_CKDUR d = GET_NEXT_DUR(ARGS);
+    t_CKFLOAT s = GET_NEXT_FLOAT(ARGS);
+    t_CKDUR r = GET_NEXT_DUR(ARGS);
+
+    // set A D S R
+    e->setAllTimes( a/Stk::sampleRate(), d/Stk::sampleRate(), s, r/Stk::sampleRate() );
 }
 
 
@@ -26440,7 +26923,9 @@ CK_DLL_CTRL( Mandolin_ctrl_bodyIR )
 {
     Mandolin * m = (Mandolin *)OBJ_MEMBER_UINT(SELF, Instrmnt_offset_data);
     Chuck_String * str = GET_NEXT_STRING(ARGS);
-    m->setBodyIR( str->str().c_str(), strstr(str->str().c_str(), ".raw") != NULL );
+    if( str != NULL ) {
+        m->setBodyIR( str->str().c_str(), strstr(str->str().c_str(), ".raw") != NULL );
+    }
     RETURN->v_string = str;
 }
 

@@ -671,6 +671,7 @@ t_CKBOOL type_engine_init( Chuck_Carrier * carrier )
     env->key_values["week"] = TRUE;
     env->key_values["adc"] = TRUE;
     env->key_values["dac"] = TRUE;
+    env->key_values["bunghole"] = TRUE;
     env->key_values["blackhole"] = TRUE;
     env->key_values["global"] = TRUE;
     env->key_values["chout"] = TRUE;
@@ -1118,7 +1119,9 @@ t_CKBOOL type_engine_check_stmt( Chuck_Env * env, a_Stmt stmt )
 
         case ae_stmt_code:
             env->class_scope++;
+            env->curr->value.push(); // 1.5.2.5 (ge) added
             ret = type_engine_check_code_segment( env, &stmt->stmt_code );
+            env->curr->value.pop(); // 1.5.2.5 (ge) added
             env->class_scope--;
             break;
 
@@ -3294,6 +3297,13 @@ t_CKTYPE type_engine_check_exp_primary( Chuck_Env * env, a_Exp_Primary exp )
                 // ugen
                 t = env->ckt_adc;
             }
+            else if( str == "bunghole" ) // bunghole | reinstated 1.5.2.4 (ge)
+            {
+                // non assignable
+                exp->self->s_meta = ae_meta_value;
+                // ugen
+                t = env->ckt_ugen;
+            }
             else if( str == "blackhole" ) // blackhole
             {
                 // non assignable
@@ -4572,6 +4582,13 @@ t_CKTYPE type_engine_check_exp_func_call( Chuck_Env * env, a_Exp exp_func, a_Exp
     {
         EM_error2( exp_func->where,
             "function call using a non-function value" );
+        // check if f is of type Type | 1.5.2.5 (ge) added
+        if( equals( f, env->ckt_class ) )
+        {
+            // provide hopefully helpful hint
+            EM_error2( 0, " |- (hint: creating an Object variable with a constructor?)" );
+            EM_error2( 0, " |- (...if so, try using the form `%s VARNAME(...)` instead)", f->actual_type->name().c_str() );
+        }
         return NULL;
     }
 
