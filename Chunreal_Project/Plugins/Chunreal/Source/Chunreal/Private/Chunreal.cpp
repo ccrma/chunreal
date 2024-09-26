@@ -13,15 +13,15 @@
 
 #define LOCTEXT_NAMESPACE "FChunrealModule"
 
-//Define custom log category "LogChunreal"
+// Define custom log category "LogChunreal"
 DEFINE_LOG_CATEGORY(LogChunreal);
 
 void FChunrealModule::StartupModule()
 {
-    //Create Chuck
+    // Create Chuck
     chuckParent = new ChucK();
 
-    //Initialize Chuck params
+    // Initialize Chuck params
     chuckParent->setParam(CHUCK_PARAM_SAMPLE_RATE, FChunrealModule::GetChuckSampleRate());
     chuckParent->setParam(CHUCK_PARAM_INPUT_CHANNELS, 2);
     chuckParent->setParam(CHUCK_PARAM_OUTPUT_CHANNELS, 2);
@@ -37,30 +37,30 @@ void FChunrealModule::StartupModule()
     //chuckParent->setParam(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES, dl_search_path);
     chuckParent->setParam(CHUCK_PARAM_HINT_IS_REALTIME_AUDIO, true);
 
-    //Start ChucK parent
+    // Start ChucK parent
     chuckParent->init();
     chuckParent->start();
 
-    //Set log
+    // Set log
 #if PRINT_CHUCK_LOG
     chuckParent->setStdoutCallback(printThisFromChuck);
     chuckParent->setStderrCallback(printThisFromChuck);
     //theChuck->setLogLevel(CK_LOG_INFO);
 #endif
 
-    //Store as "ChuckParent"
+    // Store as "ChuckParent"
     StoreChuckRef(chuckParent, "ChuckParent");
 
-    //Register MetaSound Nodes
+    // Register MetaSound Nodes
     FMetasoundFrontendRegistryContainer::Get()->RegisterPendingNodes();
 }
 
 void FChunrealModule::ShutdownModule()
 {
-    //Clear array
+    // Clear array
     ChuckMap.Empty();
 
-    //Delete ChucK parent
+    // Delete ChucK parent
     delete chuckParent;
     chuckParent = nullptr;  
 }
@@ -162,7 +162,7 @@ bool FChunrealModule::StoreChuckRef(ChucK* chuck, FString id)
 bool FChunrealModule::RemoveChuckRef(FString id)
 {
     refMutex.Lock();
-    if(id.IsEmpty() || !ChuckMap.Contains(id))
+    if (id.IsEmpty() || !ChuckMap.Contains(id))
     {
         refMutex.Unlock();
         return false;

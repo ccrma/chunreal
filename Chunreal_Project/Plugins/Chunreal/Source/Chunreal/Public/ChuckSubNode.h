@@ -45,7 +45,7 @@ namespace Metasound
         void Execute();
 
     private:
-        //local variables
+        // local variables
         FTriggerReadRef Trigger;
         FStringReadRef Code;
 

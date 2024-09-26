@@ -24,7 +24,7 @@ namespace Metasound
     }
     FChuckSubOperator::~FChuckSubOperator()
     {
-        //Remove sporked shread
+        // Remove sporked shread
         if (shredIDs.size() > 0)
         {
             FString removeShred = "Machine.remove(shredID); Machine.remove(me.id());";
@@ -69,12 +69,12 @@ namespace Metasound
     {
         const FTrigger& trigger = *Trigger;
 
-        //Run ChucK Code
+        // Run ChucK Code
         if (trigger.IsTriggered())
         {
             if (hasSporkedOnce)
             {
-                //Remove sporked shread
+                // Remove sporked shread
                 if (shredIDs.size() > 0)
                 {
                     FString removeShred = "Machine.remove(shredID); Machine.remove(me.id());";

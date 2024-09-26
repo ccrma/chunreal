@@ -17,10 +17,10 @@
 #include "Chunreal/chuck/chuck_globals.h"
 #include "Chunreal/chuck/chuck_vm.h"
 
-//whether to print chuck log
+// whether to print chuck log
 #define PRINT_CHUCK_LOG true
 
-//Declare custom log category "LogChunreal"
+// Declare custom log category "LogChunreal"
 DECLARE_LOG_CATEGORY_EXTERN(LogChunreal, Log, All);
 
 class FChunrealModule : public IModuleInterface
@@ -29,47 +29,47 @@ public:
     virtual void StartupModule() override;
     virtual void ShutdownModule() override;
 
-    //reference to ChucK parent
+    // reference to ChucK parent
     inline static ChucK* chuckParent = nullptr;
 
-    //Get ChucK sample rate
+    // Get ChucK sample rate
     static t_CKINT GetChuckSampleRate();
-    //Set ChucK sample rate
+    // Set ChucK sample rate
     static void SetChuckSampleRate(t_CKINT sampleRate);
     
-    //static function to output custom log
+    // static function to output custom log
     static void Log(FString message);
 
-    //Receive message from Chuck with a mutex
+    // Receive message from Chuck with a mutex
     static void printThisFromChuck(const char* msg);
 
-    //Compile ChucK code with a mutex
+    // Compile ChucK code with a mutex
     static void CompileChuckCode(ChucK* chuckRef, const std::string& code, std::vector<t_CKUINT>* shredIDs = nullptr);
 
-    //Run ChucK with a mutex
+    // Run ChucK with a mutex
     static void RunChuck(ChucK* chuckRef, const float* input, float* output, t_CKINT numFrames);
 
-    //Store and Remove ChucK ref with a mutex
+    // Store and Remove ChucK ref with a mutex
     static bool StoreChuckRef(ChucK* chuck, FString id);
     static bool RemoveChuckRef(FString id);
 
-    //Get next available ChucK sub index
+    // Get next available ChucK sub index
     static int GetChuckSubIndex();
     
-    //Global int
+    // Global int
     static int GetChuckGlobalInt(FString id, FString paramName);
     static bool SetChuckGlobalInt(FString id, FString paramName, t_CKINT val);
-    //Global float
+    // Global float
     static float GetChuckGlobalFloat(FString id, FString paramName);
     static bool SetChuckGlobalFloat(FString id, FString paramName, t_CKFLOAT val);
-    //Global string
+    // Global string
     static FString GetChuckGlobalString(FString id, FString paramName);
     static bool SetChuckGlobalString(FString id, FString paramName, FString val);
-    //Global int array
+    // Global int array
     static bool SetChuckGlobalIntArray(FString id, FString paramName, t_CKINT intArray[], t_CKUINT arraySize);
-    //Global float array
+    // Global float array
     static bool SetChuckGlobalFloatArray(FString id, FString paramName, t_CKFLOAT floatArray[], t_CKUINT arraySize);
-    //Global event
+    // Global event
     static bool BroadcastChuckGlobalEvent(FString id, FString paramName);
 
     //TODO-global array getters & event listener

@@ -28,10 +28,10 @@ namespace Metasound
         , AudioOutputRight(FAudioBufferWriteRef::CreateNew(InSettings))
         
     { 
-        //Create Chuck
+        // Create Chuck
         theChuck = new ChucK();
 
-        //Initialize Chuck params
+        // Initialize Chuck params
         theChuck->setParam(CHUCK_PARAM_SAMPLE_RATE, FChunrealModule::GetChuckSampleRate());
         theChuck->setParam(CHUCK_PARAM_INPUT_CHANNELS, 2);
         theChuck->setParam(CHUCK_PARAM_OUTPUT_CHANNELS, 2);
@@ -47,18 +47,18 @@ namespace Metasound
         //theChuck->setParam(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES, dl_search_path);
         theChuck->setParam(CHUCK_PARAM_HINT_IS_REALTIME_AUDIO, true);
 
-        //Set log
+        // Set log
         #if PRINT_CHUCK_LOG
         theChuck->setStdoutCallback(FChunrealModule::printThisFromChuck);
         theChuck->setStderrCallback(FChunrealModule::printThisFromChuck);
         //theChuck->setLogLevel(CK_LOG_INFO);
         #endif
 
-        //Start Chuck
+        // Start Chuck
         theChuck->init();
         theChuck->start();
 
-        //Store ChucK reference with ID
+        // Store ChucK reference with ID
         if (!((FString)(**ID)).IsEmpty())
         {
             FChunrealModule::StoreChuckRef(theChuck, **ID);
@@ -67,18 +67,18 @@ namespace Metasound
     }
     FChuckMainOperator::~FChuckMainOperator()
     {
-        //Remove ChucK reference with ID
+        // Remove ChucK reference with ID
         if (!((FString)(**ID)).IsEmpty())
         {
             FChunrealModule::RemoveChuckRef(**ID);
             //FChunrealModule::Log(FString("Removed ChucK ID: ") + **ID);
         }
 
-        //Delete allocated memory
+        // Delete allocated memory
         delete inBufferInterleaved;
         delete outBufferInterleaved;
 
-        //Delete ChucK
+        // Delete ChucK
         delete theChuck;
         theChuck = nullptr;
     }
@@ -131,13 +131,13 @@ namespace Metasound
         float* outBufferRight = AudioOutputRight->GetData();
         const int32 numSamples = AudioInputLeft->Num();
 
-        //Run ChucK code
+        // Run ChucK code
         if (trigger.IsTriggered())
         {
             if (hasSporkedOnce)
             {
                 Chuck_Msg* msg = new Chuck_Msg;
-                msg->type = 3;  //MSG_REMOVEALL
+                msg->type = 3;  // MSG_REMOVEALL
                 theChuck->vm()->process_msg(msg);
             }
             else
@@ -147,7 +147,7 @@ namespace Metasound
             FChunrealModule::CompileChuckCode(theChuck, TCHAR_TO_UTF8(**Code));
         }
 
-        //Make interleaved buffers
+        // Make interleaved buffers
         if (!bufferInitialized)
         {
             inBufferInterleaved = new float[numSamples * 2];
@@ -161,10 +161,10 @@ namespace Metasound
             *(inBufferInterleaved + i * 2 + 1) = *(inBufferRight + i);
         }
 
-        //Process samples by ChucK
+        // Process samples by ChucK
         FChunrealModule::RunChuck(theChuck, (float*)inBufferInterleaved, outBufferInterleaved, numSamples);
 
-        //Retrive each output channel and apply volume multiplier
+        // Retrive each output channel and apply volume multiplier
         for (int i = 0; i < numSamples; i++)
         {
             *(outBufferLeft + i) = *(outBufferInterleaved + i * 2) * (*Amplitude);

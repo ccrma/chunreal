@@ -27,7 +27,7 @@ namespace Metasound
     }
     FChuckParentOperator::~FChuckParentOperator()
     {
-        //Delete allocated memory
+        // Delete allocated memory
         delete inBufferInterleaved;
         delete outBufferInterleaved;
     }
@@ -90,10 +90,10 @@ namespace Metasound
             *(inBufferInterleaved + i * 2 + 1) = *(inBufferRight + i);
         }
 
-        //Process samples by ChucK
+        // Process samples by ChucK
         FChunrealModule::RunChuck(FChunrealModule::chuckParent, (float*)inBufferInterleaved, outBufferInterleaved, numSamples);
 
-        //Retrive each output channel and apply volume multiplier
+        // Retrive each output channel and apply volume multiplier
         for (int i = 0; i < numSamples; i++)
         {
             *(outBufferLeft + i) = *(outBufferInterleaved + i * 2) * (*Amplitude);

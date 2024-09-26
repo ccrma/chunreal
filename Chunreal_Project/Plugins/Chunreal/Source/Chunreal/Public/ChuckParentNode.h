@@ -48,18 +48,18 @@ namespace Metasound
         void Execute();
 
     private:
-        //audio input
+        // audio input
         FAudioBufferReadRef  AudioInputLeft;
         FAudioBufferReadRef  AudioInputRight;
 
-        //amplitude
+        // amplitude
         FFloatReadRef Amplitude;
 
-        //audio output
+        // audio output
         FAudioBufferWriteRef AudioOutputLeft;
         FAudioBufferWriteRef AudioOutputRight;
 
-        //interleaved buffers
+        // interleaved buffers
         float* inBufferInterleaved;
         float* outBufferInterleaved;
 
