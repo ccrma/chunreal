@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -31,6 +32,7 @@
 // date: Summer 2005
 //-----------------------------------------------------------------------------
 #include "util_string.h"
+#include "util_platforms.h"
 #include "chuck_errmsg.h"
 
 #ifdef __PLATFORM_WINDOWS__
@@ -403,7 +405,7 @@ t_CKBOOL extract_args( const string & token,
     // copy and trim
     string s = trim( token );
 
-    // ignore second character as arg separator if its : on Windows
+    // ignore second character as arg separator if its : on Windows (e.g., for C:\)
     t_CKBOOL ignoreSecond = FALSE;
 #ifdef __PLATFORM_WINDOWS__
     ignoreSecond = TRUE;
@@ -413,6 +415,7 @@ t_CKBOOL extract_args( const string & token,
     t_CKBOOL scan = FALSE;
     t_CKBOOL ret = TRUE;
     t_CKBOOL ignoreNext = FALSE;
+
     char * mask = NULL;
     for( i = 0; i < s.length(); i++ )
         if( s[i] == '\\' )
@@ -476,8 +479,8 @@ t_CKBOOL extract_args( const string & token,
             continue;
         }
 
-        // look for :
-        if( !ignoreNext && s[i] == ':' && !(ignoreSecond && i == 1))
+        // look for : (also test for windows drive letter, e.g., X:\ or X:/)
+        if( !ignoreNext && s[i] == ':' && !(ignoreSecond && i == 1 && s.length() > 2 && ( s[2] == '\\' || s[2] == '/' ) ) )
         {
             // sanity
             if( i == 0 )
@@ -757,10 +760,10 @@ std::string expandFilePathWindows( const string & path )
 
 
 //-----------------------------------------------------------------------------
-// name: get_full_path()
-// desc: get full path to file
+// name: normalize_filepath_append_ck()
+// desc: get full path to file; if treatAsDir is TRUE, then don't auto-match .ck
 //-----------------------------------------------------------------------------
-std::string get_full_path( const std::string & fp )
+std::string normalize_filepath_append_ck( const std::string & fp )
 {
 #ifndef __PLATFORM_WINDOWS__
 
@@ -771,10 +774,10 @@ std::string get_full_path( const std::string & fp )
     if( result == NULL && !extension_matches(fp, ".ck") )
         result = realpath((fp + ".ck").c_str(), buf);
 
-    if(result == NULL)
-        return fp;
-    else
-        return buf;
+    // get the return value
+    string ret = result ? buf : fp;
+    // return
+    return ret;
 
 #else // windows
 
@@ -785,6 +788,13 @@ std::string get_full_path( const std::string & fp )
     // #chunreal explicitly use ASCII version
     DWORD result = GetFullPathNameA(fp.c_str(), MAX_PATH, buf, NULL);
 #endif
+
+    // if successful
+    if( result )
+    {
+        // check if file exists; if not reset result
+        result = ck_fileexists( fp ) ? result : 0;
+    }
 
     // try with .ck extension
     if( result == 0 && !extension_matches(fp, ".ck") )
@@ -797,14 +807,62 @@ std::string get_full_path( const std::string & fp )
 #endif
     }
 
-    if(result == 0)
-        return fp;
-    else
-        return normalize_directory_separator(buf);
+    // get the return value
+    string ret = result ? normalize_directory_separator(buf) : fp;
+    // return
+    return ret;
 
 #endif // __PLATFORM_WINDOWS__
 }
 
+
+
+
+//-----------------------------------------------------------------------------
+// name: normalize_filepath()
+// desc: normalize file path e.g., using realpath() on macOS and linux, and
+//       GetFullPathName() on windows | 1.5.4.5 (ge & nshaheed) added
+//-----------------------------------------------------------------------------
+std::string normalize_filepath( const std::string & fp, t_CKBOOL treatAsDir )
+{
+#ifndef __PLATFORM_WINDOWS__
+
+    char buf[PATH_MAX];
+    char * result = realpath(fp.c_str(), buf);
+
+    // get the return value
+    string ret = result ? buf : fp;
+    // in case fp names a directory, this ensures trailing /
+    if( treatAsDir ) ret = normalize_directory_name(ret);
+    // return
+    return ret;
+
+#else // windows
+
+    char buf[MAX_PATH];
+#ifndef __CHUNREAL_ENGINE__
+    DWORD result = GetFullPathName(fp.c_str(), MAX_PATH, buf, NULL);
+#else
+    // #chunreal explicitly use ASCII version
+    DWORD result = GetFullPathNameA(fp.c_str(), MAX_PATH, buf, NULL);
+#endif
+
+    // if successful
+    if( result )
+    {
+        // check if file exists; if not reset result
+        result = ck_fileexists( fp ) ? result : 0;
+    }
+
+    // get the return value
+    string ret = result ? normalize_directory_separator(buf) : fp;
+    // if treat as dir, ensure trailing / 1.5.4.2 (ge & nshaheed) added
+    if( treatAsDir ) ret = normalize_directory_name(ret);
+    // return
+    return ret;
+
+#endif // __PLATFORM_WINDOWS__
+}
 
 
 
@@ -884,6 +942,69 @@ std::string extract_filepath_file( const std::string & filepath )
 
 
 
+//-----------------------------------------------------------------------------
+// name: extract_filepath_ext() | 1.5.4.0 (ge) added
+// desc: return the extension portion of a file path, including the .
+//-----------------------------------------------------------------------------
+std::string extract_filepath_ext( const std::string & filepath )
+{
+    // normalized internal file path separator
+    char path_separator = '/';
+    // extension separator
+    char ext_separator = '.';
+
+    // normalize for searching, e.g., \ replaced with /
+    string normalize = normalize_directory_separator( trim(filepath) );
+
+    // look for ext separator from the right
+    size_t extPos = normalize.rfind( ext_separator );
+    // if no ext separator found
+    if( extPos == std::string::npos ) return "";
+
+    // look for separator from the right
+    size_t pathPos = normalize.rfind( path_separator );
+    // if path separator found after the rightmost ext separator
+    if( (pathPos != std::string::npos) && (pathPos > extPos) ) return "";
+
+    // substring after the rightmost ext separator
+    return std::string( normalize, extPos );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: transplant_filepath()
+// desc: synthesize absolute path using existing filepath and incoming path
+// EG: existing == "foo/bar.ck", incoming == "thing/poo.ck" => returns foo/thing/poo.ck
+// NOTE: if incoming is detected as absolute path, incoming is returned without change
+// (intended for use with import paths being relative to the file importing them)
+//-----------------------------------------------------------------------------
+std::string transplant_filepath( const std::string & existing, const std::string & incoming )
+{
+    // expand e.g., ~
+    std::string base = expand_filepath( existing );
+    std::string inc = expand_filepath( incoming );
+    std::string ret = "";
+
+    // check if already absolute path
+    if( is_absolute_path(inc) )
+    {
+        // return inc
+        ret = inc;
+    }
+    else // if not absolute path
+    {
+        // generate absolute path relative to target that is importing it
+        ret = extract_filepath_dir(existing) + inc;
+    }
+
+    // normalize_filepath() will also resolve symlinks . and ..
+    return normalize_filepath_append_ck( ret );
+}
+
+
+
 
 //-----------------------------------------------------------------------------
 // file: dir_go_up()
@@ -938,9 +1059,9 @@ string dir_go_up( const string & dir, t_CKINT numUp )
 
 //-----------------------------------------------------------------------------
 // name: parse_path_list()
-// desc: split "x:y:z"-style path list into {"x","y","z"}
+// desc: split "x:y:z"-style path list into {"x","y","z"}, with trailing '/'
 //-----------------------------------------------------------------------------
-void parse_path_list( std::string & str, std::list<std::string> & lst )
+void parse_path_list( const std::string & str, std::list<std::string> & lst )
 {
 #if defined(__PLATFORM_WINDOWS__)
     const char separator = ';';
@@ -951,11 +1072,33 @@ void parse_path_list( std::string & str, std::list<std::string> & lst )
     while( last < str.size() &&
           ( i = str.find( separator, last ) ) != std::string::npos )
     {
-        lst.push_back( str.substr( last, i - last ) );
+        // add to list
+        lst.push_back( normalize_directory_name(str.substr(last,i-last)) );
         last = i + 1;
     }
 
-    lst.push_back( str.substr( last, str.size() - last ) );
+    // push the final path
+    lst.push_back( normalize_directory_name(str.substr(last,str.size()-last)) );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: append_path_list()
+// desc: append a list (appendThis) to a list (list)
+//-----------------------------------------------------------------------------
+void append_path_list( std::list<std::string> & list,
+                       const std::list<std::string> & appendMe )
+{
+    // first
+    std::list<std::string>::const_iterator it = appendMe.begin();
+    // iterate
+    for( ; it != appendMe.end(); it ++ )
+    {
+        // append element
+        list.push_back( *it );
+    }
 }
 
 
@@ -966,27 +1109,54 @@ void parse_path_list( std::string & str, std::list<std::string> & lst )
 // desc: unify directory separator to be consistent across platforms;
 //       inside chuck, we are going with the single forward slash '/'
 //       as the generic directory separator; other separators will
-//       be converted to it
+//       be converted to it, including multiple consecutive ///
 //-----------------------------------------------------------------------------
 std::string normalize_directory_separator( const std::string & filepath )
 {
-#ifdef __PLATFORM_WINDOWS__
     // make a copy
     std::string new_filepath = filepath;
     // string length
     size_t len = new_filepath.size();
+
+#ifdef __PLATFORM_WINDOWS__
     // iterate over characters
     for( long i = 0; i < len; i++ )
     {
         // replace \ with /
         if( new_filepath[i] == '\\' ) new_filepath[i] = '/';
     }
-    // return potentially modified copy
-    return new_filepath;
-#else
-    // return unchanged path
-    return filepath;
-#endif // __PLATFORM_WINDOWS__
+#endif
+
+    // result
+    std::string pruned;
+    // state
+    char lastChar = 0;
+    // iterate over characters
+    for( long i = 0; i < len; i++ )
+    {
+        // append everything that is not a consecutive /
+        if( new_filepath[i] != '/' || lastChar != '/' ) pruned += new_filepath[i];
+        // set last char
+        lastChar = new_filepath[i];
+    }
+
+    // return
+    return pruned;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: normalize_directory_name()
+// desc: normalize directory name (including always with trailing /)
+//-----------------------------------------------------------------------------
+std::string normalize_directory_name( const std::string & dir )
+{
+    // add trailing / (if extraneous, will be pruned by normalize below)
+    std::string dirname = trim(dir) + '/';
+    // normalize
+    return normalize_directory_separator( dirname );
 }
 
 
@@ -1159,6 +1329,29 @@ std::string autoFilename( const std::string & prefix, const std::string & fileEx
 
 
 
+#ifdef WIN32
+  #define stat _stat
+#endif
+//-----------------------------------------------------------------------------
+// name: file_last_write_time()
+// desc: unformatted last-write timestamp of a file | 1.5.4.0 (ge)
+//-----------------------------------------------------------------------------
+time_t file_last_write_time( const std::string & filename )
+{
+    struct stat result;
+    if( stat( filename.c_str(), &result ) == 0 )
+    {
+        // return result
+        return result.st_mtime;
+    }
+
+    // stat encountered an error, e.g., couldn't open file
+    return 0;
+}
+
+
+
+
 static t_CKBOOL str_contains( const string & s, char c )
 { return s.find( c ) != string::npos; }
 
@@ -1205,11 +1398,13 @@ void tokenize( const std::string & str, std::vector<string> & tokens, const std:
 }
 
 
-// static instantiation
+
+
+//-----------------------------------------------------------------------------
+// TC static instantiation
+//-----------------------------------------------------------------------------
 t_CKBOOL TC::isEnabled = TRUE;
 t_CKBOOL TC::globalBypass = TRUE;
-
-
 //-----------------------------------------------------------------------------
 // on/off switches
 //-----------------------------------------------------------------------------
@@ -1230,7 +1425,6 @@ void TC::globalDisableOverride( t_CKBOOL setTrueToEngage )
     globalBypass = setTrueToEngage;
 }
 
-
 //-----------------------------------------------------------------------------
 // get bold escape sequence
 //-----------------------------------------------------------------------------
@@ -1239,7 +1433,6 @@ std::string TC::bold( const std::string & text )
     if( globalBypass || !isEnabled ) return text;
     return TC::bold() + text + TC::reset();
 }
-
 
 //-----------------------------------------------------------------------------
 // get color escape sequences
@@ -1305,10 +1498,8 @@ std::string TC::set_blue( t_CKBOOL bold )
     return std::string( "\033[38;5;39m" ) + (bold?TC::bold():"");
 }
 
-
 //-----------------------------------------------------------------------------
 // set*() methods -- returns escape sequences o insert into output
-
 //-----------------------------------------------------------------------------
 // set a terminal code
 std::string TC::set( TerminalCode code )

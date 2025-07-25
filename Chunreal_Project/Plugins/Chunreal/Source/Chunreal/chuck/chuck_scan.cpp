@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -160,24 +161,45 @@ t_CKBOOL type_engine_scan0_prog( Chuck_Env * env, a_Program prog,
             break;
 
         case ae_section_class:
-            // if no classes, then skip
-            if( how_much == te_do_no_classes ) break;
+            // -----------------------------------------
+            // 1.5.2.5 (ge) check the compilation criteria
+            // if( !howMuch_criteria_match( how_much, prog->section->class_def ) ) break;
+            // -----------------------------------------
+            // 1.5.4.0 (ge) commented out above howMuch_criteria_match()
+            // * go ahead and compile all classes (public or non-public) even if import_only
+            //   ...there is logic within to further sort out public vs. non-public classes
+            // * this is needed because public classes could make use of non-public classes
+            //   declared in the file (e.g., KSChord needing KS) related: `is_public`
+            // -----------------------------------------
+
             // make global, if marked public
             if( prog->section->class_def->decl == ae_key_public )
             {
+                // 1.5.4.0 (ge) removing restriction of one public class per file
+                // ---------------- legacy note ------------
                 // make sure the context has no public class
-                if( env->context->public_class_def != NULL )
-                {
-                    EM_error2( prog->section->class_def->where,
-                        "more than one 'public' class defined..." );
-                    ret = FALSE;
-                    continue;
-                }
-
-                // make global
-                prog->section->class_def->home = env->user();
+                // if( env->context->public_class_def != NULL )
+                //{
+                //    EM_error2( prog->section->class_def->where,
+                //        "more than one 'public' class defined..." );
+                //    ret = FALSE;
+                //    continue;
+                //}
                 // remember
-                env->context->public_class_def = prog->section->class_def;
+                // env->context->public_class_def = prog->section->class_def;
+                // -----------------------------------------
+
+                // -----------------------------------------
+                // mark this class definition to be added to [user] namespace
+                //   which typically sits between [global] namespace and context namesapce
+                prog->section->class_def->home = env->user();
+                // -----------------------------------------
+                // NOTE: for legacy reasons, fallback to [global] if no [user] namespace
+                //   this fallback mechanism was moved out of env->user() to here for clarity in 1.5.4.0 (ge)
+                //   needs further verification, as this fallback may not be necessary
+                if( !prog->section->class_def->home )
+                { prog->section->class_def->home = env->global(); }
+                // -----------------------------------------
             }
             // scan the class definition
             ret = type_engine_scan0_class_def( env, prog->section->class_def );
@@ -185,7 +207,8 @@ t_CKBOOL type_engine_scan0_prog( Chuck_Env * env, a_Program prog,
 
         default:
             EM_error2( prog->where,
-                "(internal error) unrecognized program section in type checker pre-scan..." );
+                       "(internal error) unrecognized program section (%d) in type checker pre-scan (0)...",
+                       prog->section->s_type );
             ret = FALSE;
             break;
         }
@@ -259,36 +282,39 @@ t_CKBOOL type_engine_scan0_class_def( Chuck_Env * env, a_Class_Def class_def )
     // set the fields
     the_class->xid = te_user;
     the_class->base_name = S_name(class_def->name->xid);
-    the_class->owner = env->curr; CK_SAFE_ADD_REF(the_class->owner);
+    // the_class->owner = env->curr; CK_SAFE_ADD_REF(the_class->owner);
     the_class->array_depth = 0;
     the_class->size = sizeof(void *);
     the_class->obj_size = 0;  // TODO:
-    the_class->info = env->context->new_Chuck_Namespace();
-    CK_SAFE_ADD_REF( the_class->info );
-    the_class->info->name = the_class->base_name;
+    the_class->nspc = env->context->new_Chuck_Namespace();
+    CK_SAFE_ADD_REF( the_class->nspc );
+    the_class->nspc->name = the_class->base_name;
+    // public? | 1.5.4.0 (ge) added
+    the_class->is_public = (class_def->decl == ae_key_public);
     // if public class, then set parent to context
     // ... allowing the class to address current context
-    if( env->context->public_class_def == class_def )
-    { the_class->info->parent = env->context->nspc; }
-    else { the_class->info->parent = env->curr; }
     // TODO: add ref to the parent?
-    the_class->func = NULL;
+    if( the_class->is_public )
+    { the_class->nspc->parent = env->context->nspc; }
+    else { the_class->nspc->parent = env->curr; }
+
     // 1.5.0.5 (ge) commented out; the AST is cleaned up after every compilation;
     // would need to make deep copy if want to keep around
     // the_class->def = class_def;
+
     // add code
-    the_class->info->pre_ctor = new Chuck_VM_Code;
-    CK_SAFE_ADD_REF( the_class->info->pre_ctor );
+    the_class->nspc->pre_ctor = new Chuck_VM_Code;
+    CK_SAFE_ADD_REF( the_class->nspc->pre_ctor );
     // name | 1.5.2.0 (ge) added
-    the_class->info->pre_ctor->name = string("class ") + the_class->base_name;
+    the_class->nspc->pre_ctor->name = string("class ") + the_class->base_name;
     // add to env
-    env->curr->type.add( the_class->base_name, the_class );  // URGENT: make this global
+    env->curr->add_type( the_class->base_name, the_class ); // URGENT: make this global
     // incomplete
     the_class->is_complete = FALSE;
 
     // set the new type as current
     env->nspc_stack.push_back( env->curr );
-    env->curr = the_class->info;
+    env->curr = the_class->nspc;
     // push the class def
     env->class_stack.push_back( env->class_def );
     env->class_def = the_class;
@@ -308,6 +334,13 @@ t_CKBOOL type_engine_scan0_class_def( Chuck_Env * env, a_Class_Def class_def )
             break;
 
         case ae_section_class:
+            // check for public | 1.5.4.0 (ge) added
+            if( body->section->class_def->decl == ae_key_public )
+            {
+                EM_error2( class_def->where,
+                          "cannot declare public classes within a class" );
+                ret = FALSE; goto done;
+            }
             // do the class
             ret = type_engine_scan0_class_def( env, body->section->class_def );
             break;
@@ -332,13 +365,14 @@ t_CKBOOL type_engine_scan0_class_def( Chuck_Env * env, a_Class_Def class_def )
 
         // allocate value
         type = env->ckt_class->copy( env, env->context );
-        type->actual_type = the_class;
+        // 1.5.4.3 (ge) add reference count to actual_type | was: type->actual_type = the_class;
+        CK_SAFE_REF_ASSIGN(type->actual_type, the_class);
         value = env->context->new_Chuck_Value( type, the_class->base_name );
         value->owner = env->curr; CK_SAFE_ADD_REF(value->owner);
         value->is_const = TRUE;
-        value->is_member = FALSE;
+        value->is_instance_member = FALSE;
         // add to env
-        env->curr->value.add( the_class->base_name, value );
+        env->curr->add_value( the_class->base_name, value );
 
         // remember
         class_def->type = the_class;
@@ -400,28 +434,30 @@ t_CKBOOL type_engine_scan1_prog( Chuck_Env * env, a_Program prog,
         {
         case ae_section_stmt:
             // if only classes, then skip
-            if( how_much == te_do_classes_only ) break;
+            if( how_much == te_do_import_only ) break;
             // scan the statements
             ret = type_engine_scan1_stmt_list( env, prog->section->stmt_list );
             break;
 
         case ae_section_func:
-            // if only classes, then skip
-            if( how_much == te_do_classes_only ) break;
+            // check the compilation criteria | 1.5.2.5 (ge)
+            if( !howMuch_criteria_match( how_much, prog->section->func_def ) ) break;
             // scan the function definition
             ret = type_engine_scan1_func_def( env, prog->section->func_def );
             break;
 
         case ae_section_class:
-            // if no classes, then skip
-            if( how_much == te_do_no_classes ) break;
+            // 1.5.2.5 (ge) check the compilation criteria
+            // if( !howMuch_criteria_match( how_much, prog->section->class_def ) ) break;
+            // 1.5.4.0 (ge) commented out (see type_engine_prog0_scan() for explanation)
+
             // scan the class definition
             ret = type_engine_scan1_class_def( env, prog->section->class_def );
             break;
 
         default:
             EM_error2( prog->where,
-                "(internal error) unrecognized program section in type checker pre-scan..." );
+                "(internal error) unrecognized program section in type checker pre-scan (1)..." );
             ret = FALSE;
             break;
         }
@@ -491,9 +527,22 @@ t_CKBOOL type_engine_scan1_stmt( Chuck_Env * env, a_Stmt stmt )
     if( !stmt )
         return TRUE;
 
+    // push stmt | 1.5.4.4 (ge) added to scanner
+    env->stmt_stack.push_back( stmt );
+
     // the type of stmt
     switch( stmt->s_type )
     {
+        case ae_stmt_import: // 1.5.4.0 (ge) added
+            // do nothing here (return true to bypass)
+            ret = TRUE;
+            break;
+
+        case ae_stmt_doc: // 1.5.4.4 (ge) added
+            // do nothing here (return true to bypass)
+            ret = TRUE;
+            break;
+
         case ae_stmt_if:
             // count scope to help determine class member
             env->class_scope++;
@@ -610,6 +659,9 @@ t_CKBOOL type_engine_scan1_stmt( Chuck_Env * env, a_Stmt stmt )
 
     // set whether all control paths associated with this stmt return | 1.5.1.0
     stmt->allControlPathsReturn = allControlPathsReturn;
+
+    // pop stmt | 1.5.4.4 (ge) added to scanner
+    env->stmt_stack.pop_back();
 
     return ret;
 }
@@ -1414,7 +1466,7 @@ t_CKBOOL type_engine_scan1_class_def( Chuck_Env * env, a_Class_Def class_def )
 
     // set the new type as current
     env->nspc_stack.push_back( env->curr );
-    env->curr = the_class->info;
+    env->curr = the_class->nspc;
     // push the class def
     env->class_stack.push_back( env->class_def );
     env->class_def = the_class;
@@ -1576,13 +1628,12 @@ t_CKBOOL type_engine_scan1_func_def( Chuck_Env * env, a_Func_Def f )
             return FALSE;
         }
 
-        // create the new array type
-        t = new_array_type(
-            env,  // the env
+        // get (or create) matching array type
+        t = env->get_array_type(
             env->ckt_array,  // the array base class
             f->type_decl->array->depth,  // the depth of the new type
-            t2,  // the 'array_type'
-            env->curr  // the owner namespace
+            t2  // the 'array_type'
+            // env->curr  // the owner namespace
         );
 
         // TODO: verify
@@ -1665,28 +1716,30 @@ t_CKBOOL type_engine_scan2_prog( Chuck_Env * env, a_Program prog,
         {
         case ae_section_stmt:
             // if classes only, then skip
-            if( how_much == te_do_classes_only ) break;
+            if( how_much == te_do_import_only ) break;
             // scan the statements
             ret = type_engine_scan2_stmt_list( env, prog->section->stmt_list );
             break;
 
         case ae_section_func:
-            // if classes only, then skip
-            if( how_much == te_do_classes_only ) break;
+            // check the compilation criteria | 1.5.2.5 (ge)
+            if( !howMuch_criteria_match( how_much, prog->section->func_def ) ) break;
             // scan the function definition
             ret = type_engine_scan2_func_def( env, prog->section->func_def );
             break;
 
         case ae_section_class:
-            // if no classes, then skip
-            if( how_much == te_do_no_classes ) break;
+            // 1.5.2.5 (ge) check the compilation criteria
+            // if( !howMuch_criteria_match( how_much, prog->section->class_def ) ) break;
+            // 1.5.4.0 (ge) commented out (see type_engine_prog0_scan() for explanation)
+
             // scan the class definition
             ret = type_engine_scan2_class_def( env, prog->section->class_def );
             break;
 
         default:
             EM_error2( prog->where,
-                "(internal error) unrecognized program section in type checker pre-scan..." );
+                "(internal error) unrecognized program section in type checker pre-scan (2)..." );
             ret = FALSE;
             break;
         }
@@ -1738,9 +1791,22 @@ t_CKBOOL type_engine_scan2_stmt( Chuck_Env * env, a_Stmt stmt )
     if( !stmt )
         return TRUE;
 
+    // push stmt | 1.5.4.4 (ge) added to scanner
+    env->stmt_stack.push_back( stmt );
+
     // the type of stmt
     switch( stmt->s_type )
     {
+        case ae_stmt_import: // 1.5.4.0 (ge) added
+            // do nothing here (return true to bypass)
+            ret = TRUE;
+            break;
+
+        case ae_stmt_doc: // 1.5.4.4 (ge) added
+            // do nothing here (return true to bypass)
+            ret = TRUE;
+            break;
+
         case ae_stmt_if:
             // count scope to help determine class member
             env->class_scope++;
@@ -1832,6 +1898,9 @@ t_CKBOOL type_engine_scan2_stmt( Chuck_Env * env, a_Stmt stmt )
             ret = FALSE;
             break;
     }
+
+    // pop stmt | 1.5.4.4 (ge) added to scanner
+    env->stmt_stack.pop_back();
 
     return ret;
 }
@@ -2590,14 +2659,16 @@ t_CKBOOL type_engine_scan2_exp_decl_create( Chuck_Env * env, a_Exp_Decl decl )
             var_decl->ref = ( var_decl->array->exp_list == NULL );
             // the declaration type | 1.4.2.0 (ge) fixed for multiple decl (e.g., int x[1], y[2];)
             Chuck_Type * t2 = decl->ck_type; // was: type, which won't work if more than one var declared
-
-            // create the new array type
-            type = new_array_type(
-                env,  // the env
+            // 1.5.4.4 (ge) added base_type and logic in case decl->ck_type is an array
+            // (typically this can't happen with a decl, except for 'auto' and multidim arrays)
+            // for example: https://github.com/ccrma/chuck/issues/441
+            Chuck_Type * base_type = t2->array_depth ? t2->array_type : t2;
+            // get (or create) matching array type
+            type = env->get_array_type(
                 env->ckt_array,  // the array base class
                 var_decl->array->depth,  // the depth of the new type
-                t2,  // the 'array_type'
-                env->curr  // the owner namespace
+                base_type // the 'array_type' | 1.5.4.4 (ge) changed to t2->array_type, in case t2 is an array
+                // env->curr  // the owner namespace
             );
 
             // 1.4.2.0 (ge) | assign new array type to current var decl
@@ -2619,15 +2690,18 @@ t_CKBOOL type_engine_scan2_exp_decl_create( Chuck_Env * env, a_Exp_Decl decl )
         }
 
         // enter into value binding
-        env->curr->value.add( var_decl->xid,
+        env->curr->add_value( S_name(var_decl->xid),
             value = env->context->new_Chuck_Value( type, S_name(var_decl->xid) ) );
 
         // remember the owner
         value->owner = env->curr; CK_SAFE_ADD_REF( value->owner );
         value->owner_class = env->func ? NULL : env->class_def;
-        value->is_member = ( env->class_def != NULL &&
+        // set if is instanced member
+        value->is_instance_member = ( env->class_def != NULL &&
                              env->class_scope == 0 &&
                              env->func == NULL && !decl->is_static );
+        // 1.5.4.4 (ge) moved is_static set here from type_engine_check_exp_decl_part2()
+        value->is_static = (decl->is_static != 0);
         value->is_context_global = ( env->class_def == NULL && env->func == NULL );
         value->addr = var_decl->addr;
         // flag it until the decl is checked
@@ -2637,9 +2711,17 @@ t_CKBOOL type_engine_scan2_exp_decl_create( Chuck_Env * env, a_Exp_Decl decl )
         // flag as const | 1.5.1.3 (ge) added
         value->is_const = decl->is_const;
 
+        // if we are located inside a statement
+        if( decl->is_static && env->stmt_stack.size() )
+        {
+            // mark containing statement as having static decl | 1.5.4.3 (ge) added as part of #2024-static-init
+            // 1.5.4.4 (ge) moved this logic from type_engine_check_exp_decl_part2()
+            env->stmt_stack.back()->hasStaticDecl = TRUE;
+        }
+
         // dependency tracking: remember the code position of the DECL | 1.5.0.8
-        // NOTE track if context-global and not global, or class-member
-        if( (value->is_context_global && !value->is_global ) || value->is_member )
+        // NOTE track if context-global and not global, or class-member, or static (1.5.4.4 added static check)
+        if( (value->is_context_global && !value->is_global ) || value->is_instance_member || value->is_static )
             value->depend_init_where = var_decl->where;
 
         // remember the value
@@ -2824,7 +2906,7 @@ t_CKBOOL type_engine_scan2_class_def( Chuck_Env * env, a_Class_Def class_def )
 
     // set the new type as current
     env->nspc_stack.push_back( env->curr );
-    env->curr = the_class->info;
+    env->curr = the_class->nspc;
     // push the class def
     env->class_stack.push_back( env->class_def );
     env->class_def = the_class;
@@ -2904,13 +2986,13 @@ t_CKBOOL type_engine_scan2_class_def( Chuck_Env * env, a_Class_Def class_def )
     // check for fun
     assert( env->context != NULL );
     assert( class_def->type != NULL );
-    assert( class_def->type->info != NULL );
+    assert( class_def->type->nspc != NULL );
 
     // retrieve the new type (created in scan_class_def)
     the_class = class_def->type;
 
     // set fields not set in scan
-    the_class->parent = t_parent; CK_SAFE_ADD_REF(t_parent);
+    the_class->parent_type = t_parent; CK_SAFE_ADD_REF(t_parent);
     // inherit ugen_info data from parent PLD
     the_class->ugen_info = t_parent->ugen_info; CK_SAFE_ADD_REF(t_parent->ugen_info);
 
@@ -3038,11 +3120,21 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
 
     // make a new type for the function
     type = env->context->new_Chuck_Type( env );
+    // type id
     type->xid = te_function;
-    type->base_name = "[function]";
-    type->parent = env->ckt_function; // TODO: reference count the parent
+    // type size
     type->size = sizeof(void *);
-    type->func = func;
+    // function type name; this will be updated later in this function once we have more info (e.g., value_ref)
+    type->base_name = "[fun]";
+    // 1.5.4.3 (ge) add ref; was: type->parent_type = env->ckt_function;
+    // part of #2024-func-call-update
+    CK_SAFE_REF_ASSIGN(type->parent_type, env->ckt_function);
+    // 1.5.4.3 (ge) add ref; was: type->func_bridge = func;
+    // part of #2024-func-call-update | TODO: break cycle?
+    CK_SAFE_REF_ASSIGN(type->func_bridge, func);
+    // 1.5.4.3 (ge) add func to type reference
+    // part of #2024-func-call-update | TODO: break cycle?
+    CK_SAFE_REF_ASSIGN(func->type_ref, type);
 
     // make new value, with potential overloaded name
     value = env->context->new_Chuck_Value( type, func_name );
@@ -3051,7 +3143,7 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
     // remember the owner
     value->owner = env->curr; CK_SAFE_ADD_REF( value->owner );
     value->owner_class = env->class_def; CK_SAFE_ADD_REF( value->owner_class );
-    value->is_member = func->is_member;
+    value->is_instance_member = func->is_member;
     // is global context
     value->is_context_global = env->class_def == NULL;
     // remember the func
@@ -3161,13 +3253,12 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
                 goto error; // return FALSE;
             }
 
-            // create the new array type
-            t = new_array_type(
-                env,  // the env
+            // get (or create) matching array type
+            t = env->get_array_type(
                 env->ckt_array,  // the array base class
                 arg_list->var_decl->array->depth,  // the depth of the new type
-                t2,  // the 'array_type'
-                env->curr  // the owner namespace
+                t2  // the 'array_type'
+                // env->curr  // the owner namespace
             );
 
             // set ref
@@ -3183,12 +3274,12 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
         v->owner = env->curr; CK_SAFE_ADD_REF( v->owner );
         // function args not owned
         v->owner_class = NULL; CK_SAFE_ADD_REF( v->owner_class );
-        v->is_member = FALSE;
+        v->is_instance_member = FALSE;
         v->is_const = FALSE; // 1.5.1.3 (ge) added explicitly for future reference
         // later: add as value
         // symbols.push_back( arg_list );
         // values.push_back( v );
-        // later: env->curr->value.add( arg_list->var_decl->xid, v );
+        // later: env->curr->add_value( arg_list->var_decl->xid, v );
 
         // stack
         v->offset = f->stack_depth;
@@ -3341,15 +3432,15 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
     }
 
     // add as value
-    env->curr->value.add( value->name, value );
+    env->curr->add_value( value->name, value );
     // enter the name into the function table
-    env->curr->func.add( func->name, func );
+    env->curr->add_func( func->name, func );
 
     // if not overload, add entries for orig name
     if( !overload )
     {
-        env->curr->value.add( orig_name, value );
-        env->curr->func.add( orig_name, func );
+        env->curr->add_value( orig_name, value );
+        env->curr->add_func( orig_name, func );
     }
 
     // set the current function to this
@@ -3361,9 +3452,12 @@ t_CKBOOL type_engine_scan2_func_def( Chuck_Env * env, a_Func_Def f )
     assert( f->code == NULL || f->code->s_type == ae_stmt_code );
     if( f->code && !type_engine_scan2_code_segment( env, &f->code->stmt_code, FALSE ) )
     {
-        EM_error2( 0, "...in function '%s'", func->signature().c_str() ); // S_name(f->name) );
+        EM_error2( 0, "...in function '%s'", func->signature(FALSE,FALSE).c_str() ); // S_name(f->name) );
         goto error;
     }
+
+    // update the function-specific type's name | 1.5.4.3 (ge) added
+    type->base_name = "[fun]" + func->signature(FALSE,FALSE);
 
     // pop the value stack
     env->curr->value.pop();

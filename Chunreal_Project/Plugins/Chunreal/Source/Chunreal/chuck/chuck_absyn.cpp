@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -33,6 +34,7 @@
 #include "chuck_errmsg.h"
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 #include <string> // 1.5.1.5 for string concat
 
 
@@ -342,23 +344,116 @@ a_Stmt new_stmt_from_case( a_Exp exp, uint32_t lineNum, uint32_t posNum )
     return a;
 }
 
+a_Stmt new_stmt_from_import( a_Import list, uint32_t line, uint32_t where ) // 1.5.4.0 (ge) added
+{
+    a_Stmt a = (a_Stmt)checked_malloc( sizeof(struct a_Stmt_) );
+    a->s_type = ae_stmt_import;
+    a->stmt_import.list = list;
+    a->line = line; a->where = where;
+    a->stmt_import.line = line; a->stmt_import.where = where;
+    a->stmt_import.self = a;
+
+    return a;
+}
+
+a_Stmt new_stmt_from_doc( a_Doc list, uint32_t line, uint32_t where ) // 1.5.4.4 (ge) added
+{
+    a_Stmt a = (a_Stmt)checked_malloc( sizeof(struct a_Stmt_) );
+    a->s_type = ae_stmt_doc;
+    a->stmt_doc.list = list;
+    a->line = line; a->where = where;
+    a->stmt_doc.line = line; a->stmt_doc.where = where;
+    a->stmt_doc.self = a;
+
+    return a;
+}
+
+a_Import new_import( c_str str, a_Id_List list, uint32_t line, uint32_t where ) // 1.5.4.0 (ge) added
+{
+    a_Import a = (a_Import)checked_malloc( sizeof(struct a_Import_) );
+
+    // check which option
+    if( str )
+    {
+        a->what = str; // no strdup( str ); <-- str should have been allocated in alloc_str()
+    }
+    else // id list
+    {
+        a_Id_List curr = list;
+        std::string result = "";
+
+        // iterate over id list
+        while( curr )
+        {
+            result += S_name(curr->xid);
+            // if not the last, appent DOT
+            if( curr->next ) result += ".";
+            // set to next
+            curr = curr->next;
+        }
+
+        // sum of string lengths, +1 for null terminator
+        size_t len = result.length() + 1;
+        // allocate
+        char * sc = (char *)checked_malloc( len );
+        // copy
+        strncpy( sc, result.c_str(), len );
+        // set
+        a->what = sc;
+        // clean up id list, since we will not have references to it after this
+        delete_id_list( list );
+    }
+
+    // set line info
+    a->line = line; a->where = where;
+
+    return a;
+}
+
+a_Import prepend_import( a_Import target, a_Import list, uint32_t lineNum, uint32_t posNum )
+{
+    target->next = list;
+    return target;
+}
+
+a_Doc new_doc( c_str str, uint32_t line, uint32_t where ) // 1.5.4.4 (ge) added
+{
+    a_Doc a = (a_Doc)checked_malloc( sizeof(struct a_Doc_) );
+
+    // copy allocated string pointer
+    a->desc = str; // no strdup( str ); <-- str should have been allocated in alloc_str()
+
+    // set line info
+    a->line = line; a->where = where;
+
+    return a;
+}
+
+a_Doc prepend_doc( a_Doc target, a_Doc list, uint32_t lineNum, uint32_t posNum )
+{
+    target->next = list;
+    return target;
+}
+
 a_Exp append_expression( a_Exp list, a_Exp exp, uint32_t lineNum, uint32_t posNum )
 {
-  a_Exp current;
-  current = list->next;
-  if (current == NULL) {
-    list->next = exp;
-    return list;
-  }
-
-  while (1)
+    a_Exp current;
+    current = list->next;
+    if( current == NULL )
     {
-      if (current->next == NULL) {
-        current->next = exp;
-        break;
-      } else {
-        current = current->next;
-      }
+        list->next = exp;
+        return list;
+    }
+
+    while( true )
+    {
+        if( current->next == NULL ) {
+            current->next = exp;
+            break;
+        }
+        else {
+            current = current->next;
+        }
     }
     return list;
 }
@@ -1306,6 +1401,12 @@ void delete_stmt( a_Stmt stmt )
     case ae_stmt_gotolabel:
         delete_stmt_from_label( stmt );
         break;
+    case ae_stmt_import:
+        delete_stmt_from_import( stmt );
+        break;
+    case ae_stmt_doc: // 1.5.4.4 (ge) added
+        delete_stmt_from_doc( stmt );
+        break;
     }
 
     CK_SAFE_FREE( stmt );
@@ -1386,6 +1487,48 @@ void delete_stmt_from_continue( a_Stmt stmt )
 void delete_stmt_from_label( a_Stmt stmt )
 {
     // TODO: someting with S_Symbol stmt->gotolabel.name
+}
+
+void delete_stmt_from_import( a_Stmt stmt )
+{
+    EM_log( CK_LOG_FINEST, "deleting stmt %p (import)...", (void *)stmt );
+
+    // pointer
+    a_Import next = NULL, i = stmt->stmt_import.list;
+
+    // iterate instead of recurse to avoid stack overflow
+    while( i )
+    {
+        // delete the content
+        CK_SAFE_FREE( i->what );
+        // get next before we delete this one
+        next = i->next;
+        // delete the import target
+        CK_SAFE_FREE( i );
+        // move to the next one
+        i = next;
+    }
+}
+
+void delete_stmt_from_doc( a_Stmt stmt )
+{
+    EM_log( CK_LOG_FINEST, "deleting stmt %p (doc)...", (void *)stmt );
+
+    // pointer
+    a_Doc next = NULL, i = stmt->stmt_doc.list;
+
+    // iterate instead of recurse to avoid stack overflow
+    while( i )
+    {
+        // delete the content
+        CK_SAFE_FREE( i->desc );
+        // get next before we delete this one
+        next = i->next;
+        // delete the import target
+        CK_SAFE_FREE( i );
+        // move to the next one
+        i = next;
+    }
 }
 
 void delete_exp_from_primary( a_Exp_Primary_ & p )
@@ -1493,6 +1636,9 @@ void delete_exp( a_Exp e )
     {
         // TODO: release reference type
         // TODO: release reference owner
+        // 1.5.4.4 (ge) actually -- the above may not be necessary if:
+        // 1) they are not ref-counted in the first place; e.g., see type_engine_check_exp() which assigned `type`
+        // AND 2) the AST is cleaned up before types and nspcs etc.
 
         // delete content in this exp
         delete_exp_contents( e );
@@ -1594,7 +1740,13 @@ void delete_exp_decl( a_Exp e )
 void delete_exp_from_id( a_Exp_Primary e )
 {
     // TODO: do we need to anything with the Symbol?
+    // 1.5.4.4 (ge) symbols are additive but also also unique per string thus growth bounded -- can keep around, in practice
     EM_log( CK_LOG_FINEST, "deleting exp (primary ID '%s') [%p]...", S_name(e->var), (void *)e );
+
+    // TODO: release reference func_alias #2024-ctor-this
+    // 1.5.4.4 (ge) actually -- the above may not be necessary if:
+    // 1) func_alisa not ref-counted in the first place; e.g., see xxx() which assigned `func_alias`
+    // AND 2) the AST is cleaned up before the func etc.
 }
 
 void delete_exp_from_str( a_Exp_Primary e )

@@ -1,26 +1,27 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
- -----------------------------------------------------------------------------*/
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
+-----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
 // file: chuck.h
@@ -95,17 +96,20 @@
 #define CHUCK_PARAM_AUTO_DEPEND                 "AUTO_DEPEND"
 #define CHUCK_PARAM_DEPRECATE_LEVEL             "DEPRECATE_LEVEL"
 #define CHUCK_PARAM_WORKING_DIRECTORY           "WORKING_DIRECTORY"
-#define CHUCK_PARAM_CHUGIN_ENABLE               "CHUGIN_ENABLE"
-#define CHUCK_PARAM_CHUGIN_DIRECTORY            "CHUGIN_DIRECTORY"
-#define CHUCK_PARAM_USER_CHUGINS                "USER_CHUGINS"
-#define CHUCK_PARAM_USER_CHUGIN_DIRECTORIES     "USER_CHUGIN_DIRECTORIES"
 #define CHUCK_PARAM_IS_REALTIME_AUDIO_HINT      "IS_REALTIME_AUDIO_HINT"
 #define CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR "COMPILER_HIGHLIGHT_ON_ERROR"
 #define CHUCK_PARAM_TTY_COLOR                   "TTY_COLOR"
 #define CHUCK_PARAM_TTY_WIDTH_HINT              "TTY_WIDTH_HINT"
+// chugin-relate param names
+#define CHUCK_PARAM_CHUGIN_ENABLE               "CHUGIN_ENABLE"
+#define CHUCK_PARAM_USER_CHUGINS                "USER_CHUGINS"
+// import paths
+#define CHUCK_PARAM_IMPORT_PATH_SYSTEM          "IMPORT_PATH_SYSTEM"
+#define CHUCK_PARAM_IMPORT_PATH_PACKAGES        "IMPORT_PATH_PACKAGES"
+#define CHUCK_PARAM_IMPORT_PATH_USER            "IMPORT_PATH_USER"
 
-// legacy compatibiity (new code should use newer version of these, on the right)
-#define CHUCK_PARAM_HINT_IS_REALTIME_AUDIO      CHUCK_PARAM_IS_REALTIME_AUDIO_HINT
+// code literal signifier
+#define CHUCK_CODE_LITERAL_SIGNIFIER            "<compiled.code>"
 
 
 
@@ -123,7 +127,7 @@ public:
     virtual ~ChucK();
 
 public:
-    // set parameter by name
+    // set parameter by name (CHUCK_PARAM_*)
     //   |- (in general, parameters have reasonable defaults)
     t_CKBOOL setParam( const std::string & name, t_CKINT value );
     t_CKBOOL setParamFloat( const std::string & name, t_CKFLOAT value );
@@ -161,8 +165,10 @@ public:
     // if `shredIDS` is not NULL, it will be filled with the ID(s) of the new resulting shreds
     // returns TRUE if compilation successful (even if count == 0)
     // returns FALSE if compilation unsuccessful
+    // 'optFilepath' optionally specifies a file (name, or path ending in '/') as basis for path-related operations, e.g., @import
     t_CKBOOL compileCode( const std::string & code, const std::string & argsTogether = "",
-                          t_CKUINT count = 1, t_CKBOOL immediate = FALSE, std::vector<t_CKUINT> * shredIDs = NULL );
+                          t_CKUINT count = 1, t_CKBOOL immediate = FALSE, std::vector<t_CKUINT> * shredIDs = NULL,
+                          const std::string & optFilepath = "" );
 
 public:
     // run ChucK and synthesize audio for `numFrames`...
@@ -174,6 +180,12 @@ public:
     // `numFrames` : the number of audio frames to run
     //   |- each audio frame corresponds to one point in time, and contains values for every audio channel
     void run( const SAMPLE * input, SAMPLE * output, t_CKINT numFrames );
+
+public:
+    // remove all shreds currently in the VM | 1.5.4.4 (ge) added
+    //   |- (NOTE: not synchronous or truly immediate, but is thread-safe;
+    //   |-  this will happen at the top of the next VM compute() call)
+    void removeAllShreds();
 
 public:
     // get globals (needed to access Globals Manager)

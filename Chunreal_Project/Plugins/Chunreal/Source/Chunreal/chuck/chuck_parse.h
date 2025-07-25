@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -58,14 +59,12 @@ typedef yy_buffer_state * YY_BUFFER_STATE;
 extern "C" YY_BUFFER_STATE yy_scan_string( const char * );
 extern "C" void yy_delete_buffer( YY_BUFFER_STATE );
 
-
-// parse ck file into abstract syntax tree (root at 'a_Program g_program')
-t_CKBOOL chuck_parse( const std::string & filename, const std::string & code = "" );
+// forward reference
+struct Chuck_CompileTarget;
+// parse ck file into abstract syntax tree
+t_CKBOOL chuck_parse( Chuck_CompileTarget * target );
 // reset the parser
 void reset_parse();
-// set an open FILE descriptor to be parsed ONLY by the next call to chuck_parse()
-// `fd` will be closed using fclose(), if autoClose is set to true
-void fd2parse_set( FILE * fd, t_CKBOOL autoClose );
 
 // convert abstract syntax stmt to string
 std::string absyn2str( a_Stmt stmt );

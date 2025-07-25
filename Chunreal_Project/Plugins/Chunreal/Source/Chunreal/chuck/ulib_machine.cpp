@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -38,10 +39,14 @@
 #include "chuck.h"
 
 #include "util_string.h"
+#include "util_platforms.h"
 
 #include <string>
 #include <algorithm>
 using namespace std;
+
+
+
 
 // exports
 CK_DLL_SFUN( machine_crash_impl );
@@ -69,6 +74,9 @@ CK_DLL_SFUN( machine_getloglevel_impl );
 CK_DLL_SFUN( machine_refcount_impl );
 CK_DLL_SFUN( machine_regstack_impl );
 CK_DLL_SFUN( machine_memstack_impl );
+CK_DLL_SFUN( machine_platform_name_impl );     // 1.5.5.2 (azaday)
+CK_DLL_SFUN( machine_timeofday_impl );         // 1.5.5.2 (azaday)
+CK_DLL_SFUN( machine_timeofday_precise_impl ); // 1.5.5.2 (azaday)
 CK_DLL_SFUN( machine_gc );
 CK_DLL_SFUN( machine_opOverloadReset_impl );
 // not used
@@ -280,6 +288,29 @@ DLL_QUERY machine_query( Chuck_DL_Query * QUERY )
     QUERY->add_sfun( QUERY, machine_memstack_impl, "int", "sp_mem" );
     QUERY->doc_func( QUERY, "get the calling shred's memory (aka \"mem\") stack pointer; intended for either debugging or curiosity." );
 
+    // get the current platform
+    QUERY->add_sfun( QUERY, machine_platform_name_impl, "string", "os" );
+    QUERY->doc_func( QUERY, "get the underlying operating system name; possible values include \"mac\", \"linux\", \"windows\", \"web\", \"ios\", \"android\", \"unknown\"" );
+
+    // get the system time of day
+    QUERY->add_sfun( QUERY, machine_timeofday_impl, "float", "timeOfDay" );
+    QUERY->doc_func( QUERY,
+        "returns the time in seconds since the Epoch 1970-01-01 00:00:00 +0000 (UTC). "
+        "The returned time has microsecond resolution and could be used for e.g. synchronizing "
+        "events across machines without the use of networking. "
+    );
+
+    // get the system time of day as a vec2(seconds, microseconds)
+    QUERY->add_sfun( QUERY, machine_timeofday_precise_impl, "vec2", "timeOfDay2" );
+    QUERY->doc_func( QUERY,
+        "identical to Machine.timeOfDay(), only the return value is a vec2 where "
+        "x is time in seconds, and y is fractional time in microseconds. "
+        "y is guaranteed to be between 0 and 1,000,000. x + y yields the total time. "
+        "Useful for situations needing less than 64-bit precision e.g., floats in OSC are "
+        "32-bit and one must send the x and y values separately -- "
+        "otherwise a significant amount of timing resolution would be lost."
+    );
+
     // add examples
     QUERY->add_ex( QUERY, "machine/eval.ck" );
     QUERY->add_ex( QUERY, "machine/eval-global.ck" );
@@ -342,9 +373,12 @@ t_CKUINT machine_eval( Chuck_String * codeStr, Chuck_String * argsTogether,
     string code = codeStr->str();
     // get args, if there
     string args = argsTogether ? argsTogether->str() : "";
+    // get filepath to use as optional filepath
+    // (e.g., for @import statements in the eval'ed code)
+    string optFilepath = evaluator->code ? evaluator->code->filename : "";
 
     // compile and spork | 1.5.0.5 (ge) immediate=TRUE
-    t_CKUINT retval = chuck->compileCode( code, args, count, TRUE );
+    t_CKUINT retval = chuck->compileCode( code, args, count, TRUE, NULL, optFilepath );
     // automatically yield current shred to let new code run | 1.5.0.5 (ge)
     evaluator->yield();
 
@@ -635,6 +669,52 @@ CK_DLL_SFUN( machine_memstack_impl )
 {
     // return mem stack pointer
     RETURN->v_int = (t_CKINT)SHRED->mem->sp;
+}
+
+CK_DLL_SFUN( machine_platform_name_impl )
+{
+    // make chuck string
+    Chuck_String * s = new Chuck_String( CHUCK_PLATFORM_STRING );
+    // initialize
+    initialize_object(s, VM->carrier()->env->ckt_string, SHRED, VM );
+    // return
+    RETURN->v_string = s;
+}
+
+CK_DLL_SFUN( machine_timeofday_impl )
+{
+    long tv_sec = 0;
+    long tv_usec = 0;
+
+    // get time of day
+    if( ck_gettimeofday( &tv_sec, &tv_usec, NULL ) != 0 )
+    {
+        CK_FPRINTF_STDERR( "[chuck]: Machine.timeOfDay() failed...\n" );
+        RETURN->v_float = 0;
+        return;
+    }
+
+    // return value
+    RETURN->v_float = tv_sec + (tv_usec / 1000000.0);
+}
+
+CK_DLL_SFUN( machine_timeofday_precise_impl )
+{
+    long tv_sec = 0;
+    long tv_usec = 0;
+
+    // get time of day
+    if( ck_gettimeofday( &tv_sec, &tv_usec, NULL ) != 0 )
+    {
+        CK_FPRINTF_STDERR( "[chuck]: Machine.timeOfDayPrecise() failed...\n" );
+        RETURN->v_vec2.x = 0;
+        RETURN->v_vec2.y = 0;
+        return;
+    }
+
+    // return value
+    RETURN->v_vec2.x = tv_sec;
+    RETURN->v_vec2.y = tv_usec;
 }
 
 // gc() | 1.5.2.0 (ge)

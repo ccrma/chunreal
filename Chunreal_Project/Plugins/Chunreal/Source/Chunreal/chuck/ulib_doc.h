@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -44,6 +45,8 @@ DLL_QUERY ckdoc_query( Chuck_DL_Query * QUERY );
 // forward reference
 struct Chuck_VM;
 struct Chuck_Type;
+struct ChucK_Func;
+struct Chuck_Value;
 struct CKDocGroup;
 class CKDocHTMLOutput;
 
@@ -191,6 +194,14 @@ public:
     std::string genGroup( CKDocGroup * group, t_CKBOOL clearOutput = TRUE );
     // generate documentation for a single Type
     std::string genType( Chuck_Type * type, t_CKBOOL clearOutput = TRUE );
+
+public:
+    // whether to skip an entry in the final output | 1.5.4.5 (ge) added
+    static t_CKBOOL shouldSkip( const std::string & docStr );
+    // whether to skip a function in the final output | 1.5.4.5 (ge) added
+    static t_CKBOOL shouldSkip( const Chuck_Func * func );
+    // whether to skip an entry in the final output | 1.5.4.5 (ge) added
+    static t_CKBOOL shouldSkip( const Chuck_Value * var );
 
 public:
     // sort functions and variables | 1.5.2.5 (@kellyyyyyyyyyyyyyyyy @azaday) added

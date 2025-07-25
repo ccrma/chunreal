@@ -20,7 +20,7 @@
   along with this program; if not, write to the Free Software
   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
   U.S.A.
- -----------------------------------------------------------------------------*/
+-----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
 // name: util_platforms.h
@@ -35,8 +35,10 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include "chuck_def.h"
 #include <string>
+#include "chuck_def.h"
+
+
 
 
 // try to open a file by filname, adding extension if needed
@@ -48,6 +50,8 @@ FILE * ck_tmpfile();
 
 // check if is dir
 t_CKBOOL ck_isdir( const std::string & path );
+// check if file exists
+t_CKBOOL ck_fileexists( const std::string & path );
 
 // do any platform-specific setup to enable ANSI escape codes
 t_CKBOOL ck_configANSI_ESCcodes();
@@ -72,6 +76,36 @@ size_t ck_getline( char ** lineptr, size_t * n, FILE * stream );
 
 // sleep
 void ck_usleep( t_CKUINT microseconds );
+
+// gettimeofday
+int ck_gettimeofday( long * tv_sec, long * tv_usec, void * tzp );
+
+
+
+
+//-----------------------------------------------------------------------------
+// Chuck platform string | 1.5.5.2 (azaday)
+//-----------------------------------------------------------------------------
+// note: this must be placed *after* the platform defines above
+//-----------------------------------------------------------------------------
+#if defined( __PLATFORM_MACOS__)
+  #define CHUCK_PLATFORM_STRING  "mac"
+#elif defined(__PLATFORM_LINUX__)
+  #define CHUCK_PLATFORM_STRING  "linux"
+#elif defined(__PLATFORM_WINDOWS__)
+  #define CHUCK_PLATFORM_STRING  "windows"
+#elif defined(__PLATFORM_EMSCRIPTEN__)
+  #define CHUCK_PLATFORM_STRING  "web"
+#elif defined(__PLATFORM_IOS__)
+  #define CHUCK_PLATFORM_STRING  "ios"
+#elif defined(__PLATFORM_ANDROID__)
+  #define CHUCK_PLATFORM_STRING  "android"
+#elif defined(__PLATFORM_CYGWIN__)
+  #define CHUCK_PLATFORM_STRING  "cygwin" // not sure if needed, as cygwin implies windows
+#elif
+  #define CHUCK_PLATFORM_STRING "unknown"
+#endif
+
 
 
 
@@ -100,6 +134,9 @@ ck_OSVersion ck_macOS_version();
 //---------------------------------------------------------
 // Darwin operating system version to macOS release version
 // https://en.wikipedia.org/wiki/Darwin_(operating_system)
+// 25.x.x. macOS 16.x.x Tahoe
+// 24.x.x. macOS 15.x.x Sequoia
+// 23.x.x. macOS 14.x.x Sonoma
 // 22.x.x. macOS 13.x.x Ventura
 // 21.x.x. macOS 12.x.x Monterey
 // 20.x.x. macOS 11.x.x Big Sur

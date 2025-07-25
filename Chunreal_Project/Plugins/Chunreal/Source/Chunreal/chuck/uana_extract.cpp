@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -192,7 +193,13 @@ void xcorr_fft( SAMPLE * f, t_CKINT fs, SAMPLE * g, t_CKINT gs, SAMPLE * buffer,
 void xcorr_normalize( SAMPLE * buffy, t_CKINT bs, SAMPLE * f, t_CKINT fs, SAMPLE * g, t_CKINT gs );
 
 // 1.4.2.0 (ge) | local global sample rate variable (e.g., for MFCC)
-static t_CKUINT g_srate = 0;
+static t_CKUINT g_uana_srate = 0;
+
+//-----------------------------------------------------------------------------
+// this is called for this module to know when sample rate changes | 1.5.4.2 (ge) added
+//-----------------------------------------------------------------------------
+void uana_srate_update_cb( t_CKUINT srate, void * userdata ) { g_uana_srate = srate; }
+
 
 
 
@@ -206,7 +213,9 @@ DLL_QUERY extract_query( Chuck_DL_Query * QUERY )
     Chuck_DL_Func * func = NULL;
 
     // 1.4.2.0 (ge) | store sample rate
-    g_srate = QUERY->srate;
+    g_uana_srate = QUERY->srate();
+    // register callback to be notified if/when sample rate changes | 1.5.4.2 (ge) added
+    QUERY->register_callback_on_srate_update( QUERY, uana_srate_update_cb, NULL );
 
     std::string doc;
 
@@ -1211,7 +1220,7 @@ struct MFCC_Object
     MFCC_Object()
     {
         size = 1024;
-        sample_rate = g_srate;
+        sample_rate = g_uana_srate;
         num_filters = 10;
         num_coeffs = 40;
         curr_sample_rate = 0.0;
@@ -1675,7 +1684,7 @@ struct SFM_Object
     SFM_Object()
     {
         size = 0;
-        sample_rate = g_srate;
+        sample_rate = g_uana_srate;
         nr_bands = 0;
         nr_valid_bands = 0;
         edge = NULL;
@@ -1926,7 +1935,7 @@ struct Chroma_Object
     Chroma_Object()
     {
         size = 1024;
-        sample_rate = g_srate;
+        sample_rate = g_uana_srate;
         low_oct_num = 0;
         high_oct_num = 8;
         curr_sample_rate = 0;

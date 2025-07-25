@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -53,6 +54,7 @@
 #include <time.h>
 #include <float.h>
 #include <limits.h>
+#include <string>
 
 
 
@@ -63,6 +65,9 @@
 //------------------------------------------------------------------------------
 union what { long x; char y[sizeof(long)]; };
 t_CKBOOL little_endian = FALSE;
+
+// test for baseclass pointers; throw exception and halt shred if NULL | 1.5.4.2 (ge & nshaheed) added
+t_CKBOOL stk_verify_baseclass( void * ptr, const std::string & typeName, Chuck_VM_Shred * shred );
 
 // static t_CKUINT g_srate = 0;
 // filter member data offset
@@ -1290,10 +1295,17 @@ CK_DLL_DTOR( MidiFileIn_dtor );
 CK_DLL_MFUN( MidiFileIn_open );
 CK_DLL_MFUN( MidiFileIn_close );
 CK_DLL_MFUN( MidiFileIn_numTracks );
+CK_DLL_MFUN( MidiFileIn_ticksPerQuarter );
+CK_DLL_MFUN( MidiFileIn_beatsPerMinute );
 CK_DLL_MFUN( MidiFileIn_read );
 CK_DLL_MFUN( MidiFileIn_readTrack );
 CK_DLL_MFUN( MidiFileIn_rewind );
 CK_DLL_MFUN( MidiFileIn_rewindTrack );
+
+//-----------------------------------------------------------------------------
+// this is called for this module to know when sample rate changes | 1.5.4.2 (ge) added
+//-----------------------------------------------------------------------------
+void stk_srate_update_cb( t_CKUINT srate, void * userdata ) { Stk::setSampleRate( srate ); }
 
 
 
@@ -1312,7 +1324,9 @@ DLL_QUERY stk_query( Chuck_DL_Query * QUERY )
     // TODO: does not work for multiple VMs running different sample rates
     // https://github.com/ccrma/chuck/issues/208
     // set srate
-    Stk::setSampleRate( QUERY->srate );
+    Stk::setSampleRate( QUERY->srate() );
+    // register callback to be notified if/when sample rate changes | 1.5.4.2 (ge) added
+    QUERY->register_callback_on_srate_update( QUERY, stk_srate_update_cb, NULL );
 
     // test for endian
     what w; w.x = 1;
@@ -3284,7 +3298,8 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
 
     // add examples
     if( !type_engine_import_add_ex( env, "stk/honkeytonk-algo1.ck" ) ) goto error;
-    if( !type_engine_import_add_ex( env, "stk/honkeytonk-algo3.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "stk/nylon-guitar-algo1.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "stk/jacobass-algo1.ck" ) ) goto error;
 
     // end the class import
     type_engine_import_class_end( env );
@@ -3467,6 +3482,9 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
     if( !type_engine_import_ugen_begin( env, "TubeBell", "FM", env->global(),
                         TubeBell_ctor, TubeBell_dtor,
                         TubeBell_tick, TubeBell_pmsg, doc.c_str() ) ) return FALSE;
+
+    // add example
+    type_engine_import_add_ex( env, "stk/tubebell-algo5.ck" );
 
     // end the class import
     type_engine_import_class_end( env );
@@ -3936,7 +3954,7 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
     type_engine_import_add_ex(env, "basic/blit2.ck");
 
     // add construtor ADSR( dur attack, dur decay, float sustain, dur release ) | 1.5.2.5 (added) ge & eito
-    func = make_new_ctor( ADSR_ctor_floats );
+    func = make_new_ctor( ADSR_ctor_durs );
     func->add_arg( "dur", "attack" );
     func->add_arg( "dur", "decay" );
     func->add_arg( "float", "sustain" );
@@ -3945,7 +3963,7 @@ by Perry R. Cook and Gary P. Scavone, 1995 - 2002.";
     if( !type_engine_import_ctor( env, func ) ) goto error;
 
     // add constructor ADSR( float attack, float decay, float sustain, float release ) | 1.5.2.5 (added) ge & eito
-    func = make_new_ctor( ADSR_ctor_durs );
+    func = make_new_ctor( ADSR_ctor_floats );
     func->add_arg( "float", "attack" );
     func->add_arg( "float", "decay" );
     func->add_arg( "float", "sustain" );
@@ -5229,6 +5247,22 @@ Modified algorithm code by Gary Scavone, 2005.";
 
     func = make_new_mfun( "int", "numTracks", MidiFileIn_numTracks );
     func->doc = "Get the number of tracks in the open MIDI file.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    func = make_new_mfun( "int", "ticksPerQuarter", MidiFileIn_ticksPerQuarter );
+    func->doc = "Get the ticks per quarter (TPQ) value from the MIDI file header.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    func = make_new_mfun( "int", "tpq", MidiFileIn_ticksPerQuarter );
+    func->doc = "Same as ticksPerQuarter().";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    func = make_new_mfun( "float", "beatsPerMinute", MidiFileIn_beatsPerMinute );
+    func->doc = "Get the beats per minute (BPM) value from the MIDI file header.";
+    if( !type_engine_import_mfun( env, func ) ) goto error;
+
+    func = make_new_mfun( "float", "bpm", MidiFileIn_beatsPerMinute );
+    func->doc = "Same as beatsPerMinute().";
     if( !type_engine_import_mfun( env, func ) ) goto error;
 
     func = make_new_mfun( "void", "rewind", MidiFileIn_rewind );
@@ -10493,6 +10527,30 @@ MY_FLOAT KrstlChr :: tick()
 //-----------------------------------------------------------------------------
 // 1.4.1.0 ***** END REPAIRATHON2021 ADDITIONS of NEW FM ALGORITHMS *****
 //-----------------------------------------------------------------------------
+
+
+
+//-----------------------------------------------------------------------------
+// name: stk_verify_baseclass()
+// desc: check base class pointer, if NULL throw exception (which also halts the shred)
+//-----------------------------------------------------------------------------
+t_CKBOOL stk_verify_baseclass( void * ptr, const std::string & typeName, Chuck_VM_Shred * shred )
+{
+    if( ptr == NULL )
+    {
+        // we have a problem
+        EM_exception( "MethodCalledByAbstractClass: '%s' is an abstract class\n"
+                      "...(hint: call the method using a non-abstract subclass) shred[id=%lu:%s]",
+                      typeName.c_str(), shred->xid, shred->name.c_str() );
+        // halt the shred
+        shred->is_running = FALSE;
+        shred->is_done = TRUE;
+        // return false
+        return FALSE;
+    }
+
+    return TRUE;
+}
 
 
 
@@ -18341,7 +18399,9 @@ void WvIn :: openFile( const char *fileName, bool raw, bool doNormalize, bool ge
             SAMPLE * rawdata = NULL;
             t_CKUINT rawsize = 0;
 
-            if( strstr(fileName, "special:aah") ) {
+            if( strstr(fileName, "special:aaa") ||
+                strstr(fileName, "special:aah") ||
+                strstr(fileName, "special:ahh") ) {
                 rawsize = ahh_size; rawdata = ahh_data;
             }
             else if( strstr(fileName, "special:britestk") ) {
@@ -20156,6 +20216,8 @@ MidiFileIn :: MidiFileIn( std::string fileName )
 {
     // ge: initialize
     bpm_ = 0;
+    // ge & alex & kiran
+    tpq_ = 0;
     // 1.4.1.1 (ge) string buffer for error message
     std::stringstream msg;
     // 1.5.0.4 (ge) add initialization
@@ -20228,6 +20290,8 @@ MidiFileIn :: MidiFileIn( std::string fileName )
     }
     else {
         tickrate = (double) (*data & 0x7FFF); // ticks per quarter note
+        // save for lookup later | (ge & alex & kiran) 1.5.3.2
+        tpq_ = tickrate;
     }
 
     // Now locate the track offsets and lengths. If not using time
@@ -20352,6 +20416,12 @@ double MidiFileIn :: getTickSeconds( unsigned int track )
 double MidiFileIn :: getBPM()
 {
     return bpm_;
+}
+
+// ge & alex & kiran: implemented 1.5.3.2
+double MidiFileIn :: getTPQ()
+{
+    return tpq_;
 }
 
 unsigned long MidiFileIn :: getNextEvent( std::vector<unsigned char> *event, unsigned int track )
@@ -20633,6 +20703,10 @@ CK_DLL_PMSG( Instrmnt_pmsg )
 CK_DLL_CTRL( Instrmnt_ctrl_noteOn )
 {
     Instrmnt * i = (Instrmnt *)OBJ_MEMBER_UINT(SELF, Instrmnt_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(i, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     i->noteOn( i->m_frequency, f );
 }
@@ -20645,9 +20719,15 @@ CK_DLL_CTRL( Instrmnt_ctrl_noteOn )
 CK_DLL_CTRL( Instrmnt_ctrl_noteOff )
 {
     Instrmnt * i = (Instrmnt *)OBJ_MEMBER_UINT(SELF, Instrmnt_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(i, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     i->noteOff( f );
 }
+
+
 
 
 //-----------------------------------------------------------------------------
@@ -20657,6 +20737,10 @@ CK_DLL_CTRL( Instrmnt_ctrl_noteOff )
 CK_DLL_CTRL( Instrmnt_ctrl_freq )
 {
     Instrmnt * i = (Instrmnt *)OBJ_MEMBER_UINT(SELF, Instrmnt_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(i, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     i->setFrequency( f );
     RETURN->v_float = (t_CKFLOAT)i->m_frequency;
@@ -20670,7 +20754,10 @@ CK_DLL_CTRL( Instrmnt_ctrl_freq )
 CK_DLL_CGET( Instrmnt_cget_freq )
 {
     Instrmnt * i = (Instrmnt *)OBJ_MEMBER_UINT(SELF, Instrmnt_offset_data);
-//    t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(i, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     RETURN->v_float = (t_CKFLOAT)i->m_frequency;
 }
 
@@ -20682,6 +20769,10 @@ CK_DLL_CGET( Instrmnt_cget_freq )
 CK_DLL_CTRL(Instrmnt_ctrl_controlChange )
 {
     Instrmnt * ii = (Instrmnt *)OBJ_MEMBER_UINT(SELF, Instrmnt_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(ii, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT i = GET_NEXT_INT(ARGS);
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     ii->controlChange( i, f );
@@ -25744,8 +25835,8 @@ CK_DLL_CGET( PoleZero_cget_blockZero )
 
 
 
+//-----------------------------------------------------------------------------
 // FM functions
-
 //-----------------------------------------------------------------------------
 // name: FM_ctor()
 // desc: CTOR function ...
@@ -25817,6 +25908,10 @@ CK_DLL_PMSG( FM_pmsg )
 CK_DLL_CTRL( FM_ctrl_opADSR )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     t_CKFLOAT a = GET_NEXT_FLOAT(ARGS);
     t_CKFLOAT d = GET_NEXT_FLOAT(ARGS);
@@ -25826,6 +25921,7 @@ CK_DLL_CTRL( FM_ctrl_opADSR )
     RETURN->v_int = w;
 }
 
+
 //-----------------------------------------------------------------------------
 // name: FM_ctrl_opGain()
 // desc: CTRL function ...
@@ -25833,11 +25929,16 @@ CK_DLL_CTRL( FM_ctrl_opADSR )
 CK_DLL_CTRL( FM_ctrl_opGain )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     t_CKFLOAT g = GET_NEXT_FLOAT(ARGS);
     fm->setOpGain(w, g);
     RETURN->v_float = g;
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_cget_opGain()
@@ -25846,9 +25947,14 @@ CK_DLL_CTRL( FM_ctrl_opGain )
 CK_DLL_CGET( FM_cget_opGain )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     RETURN->v_float = fm->getOpGain(w);
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_ctrl_opAM()
@@ -25857,11 +25963,16 @@ CK_DLL_CGET( FM_cget_opGain )
 CK_DLL_CTRL( FM_ctrl_opAM )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     t_CKFLOAT g = GET_NEXT_FLOAT(ARGS);
     fm->setOpAM(w, g);
     RETURN->v_float = g;
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_cget_opAM()
@@ -25870,9 +25981,14 @@ CK_DLL_CTRL( FM_ctrl_opAM )
 CK_DLL_CGET( FM_cget_opAM )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     RETURN->v_float = fm->getOpAM(w);
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_ctrl_opWave()
@@ -25881,11 +25997,16 @@ CK_DLL_CGET( FM_cget_opAM )
 CK_DLL_CTRL( FM_ctrl_opWave )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     t_CKINT w2 = GET_NEXT_INT(ARGS);
     fm->setOpWave(w, w2);
     RETURN->v_int = w2;
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_ctrl_opRatio()
@@ -25894,11 +26015,16 @@ CK_DLL_CTRL( FM_ctrl_opWave )
 CK_DLL_CTRL( FM_ctrl_opRatio )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     t_CKFLOAT r = GET_NEXT_FLOAT(ARGS);
     fm->setRatio(w, r);
     RETURN->v_float = r;
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_cget_opRatio()
@@ -25907,9 +26033,14 @@ CK_DLL_CTRL( FM_ctrl_opRatio )
 CK_DLL_CGET( FM_cget_opRatio )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
-    t_CKINT w = GET_NEXT_INT(ARGS);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
+   t_CKINT w = GET_NEXT_INT(ARGS);
     RETURN->v_float = fm->getRatio(w);
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_ctrl_op4Feedback()
@@ -25918,10 +26049,15 @@ CK_DLL_CGET( FM_cget_opRatio )
 CK_DLL_CTRL( FM_ctrl_op4Feedback )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT r = GET_NEXT_FLOAT(ARGS);
     fm->setOp4Feedback(r);
     RETURN->v_float = r;
 }
+
 
 //-----------------------------------------------------------------------------
 // name: FM_cget_op4Feedback()
@@ -25930,9 +26066,12 @@ CK_DLL_CTRL( FM_ctrl_op4Feedback )
 CK_DLL_CGET( FM_cget_op4Feedback )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     RETURN->v_float = fm->getOp4Feedback();
 }
-
 
 
 //-----------------------------------------------------------------------------
@@ -25942,6 +26081,10 @@ CK_DLL_CGET( FM_cget_op4Feedback )
 CK_DLL_CGET( FM_cget_getFMTableGain )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     RETURN->v_float = fm->getFMTableGain(w);
 }
@@ -25953,6 +26096,10 @@ CK_DLL_CGET( FM_cget_getFMTableGain )
 CK_DLL_CGET( FM_cget_getFMTableTime )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     RETURN->v_float = fm->getFMTableTime(w);
 }
@@ -25964,6 +26111,10 @@ CK_DLL_CGET( FM_cget_getFMTableTime )
 CK_DLL_CGET( FM_cget_getFMTableSusLevel )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKINT w = GET_NEXT_INT(ARGS);
     RETURN->v_float = fm->getFMTableSusLevel(w);
 }
@@ -25979,6 +26130,10 @@ CK_DLL_CGET( FM_cget_getFMTableSusLevel )
 CK_DLL_CTRL( FM_ctrl_modDepth )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     fm->setModulationDepth( f );
     RETURN->v_float = f;
@@ -25992,6 +26147,10 @@ CK_DLL_CTRL( FM_ctrl_modDepth )
 CK_DLL_CTRL( FM_cget_modDepth )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     RETURN->v_float = fm->modDepth;
 }
 
@@ -26003,6 +26162,11 @@ CK_DLL_CTRL( FM_cget_modDepth )
 CK_DLL_CTRL( FM_ctrl_modSpeed )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
+
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     fm->setModulationSpeed( f );
     RETURN->v_float = fm->vibrato->m_freq;
@@ -26016,6 +26180,10 @@ CK_DLL_CTRL( FM_ctrl_modSpeed )
 CK_DLL_CTRL( FM_cget_modSpeed )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     RETURN->v_float = fm->vibrato->m_freq;
 }
 
@@ -26027,6 +26195,10 @@ CK_DLL_CTRL( FM_cget_modSpeed )
 CK_DLL_CTRL( FM_ctrl_control1 )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     fm->setControl1( f );
     RETURN->v_float = fm->control1 / 2.0;
@@ -26040,6 +26212,10 @@ CK_DLL_CTRL( FM_ctrl_control1 )
 CK_DLL_CTRL( FM_cget_control1 )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     RETURN->v_float = fm->control1 / 2.0;
 }
 
@@ -26051,6 +26227,10 @@ CK_DLL_CTRL( FM_cget_control1 )
 CK_DLL_CTRL( FM_ctrl_control2 )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     fm->setControl2( f );
     RETURN->v_float = fm->control2 / 2.0;
@@ -26064,10 +26244,12 @@ CK_DLL_CTRL( FM_ctrl_control2 )
 CK_DLL_CTRL( FM_cget_control2 )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     RETURN->v_float = fm->control2 / 2.0;
 }
-
-
 
 
 //-----------------------------------------------------------------------------
@@ -26077,6 +26259,10 @@ CK_DLL_CTRL( FM_cget_control2 )
 CK_DLL_CTRL( FM_ctrl_afterTouch )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     t_CKFLOAT f = GET_NEXT_FLOAT(ARGS);
     fm->controlChange( __SK_AfterTouch_Cont_, f * 128.0 );
     RETURN->v_float = fm->adsr[1]->target;
@@ -26090,6 +26276,10 @@ CK_DLL_CTRL( FM_ctrl_afterTouch )
 CK_DLL_CTRL( FM_cget_afterTouch )
 {
     FM * fm = (FM *)OBJ_MEMBER_UINT(SELF, FM_offset_data);
+    //---------------------------------------------------------------------
+    // check for base class pointer; throw exception and halt shred if NULL
+    if( !stk_verify_baseclass(fm, SELF->type_ref->name(), SHRED) ) return;
+    //---------------------------------------------------------------------
     RETURN->v_float = fm->adsr[1]->target;
 }
 
@@ -29227,6 +29417,26 @@ CK_DLL_MFUN( MidiFileIn_numTracks )
 
     if(f)
         RETURN->v_int = f->getNumberOfTracks();
+    else
+        RETURN->v_int = 0;
+}
+
+CK_DLL_MFUN( MidiFileIn_beatsPerMinute )
+{
+    stk::MidiFileIn *f = (stk::MidiFileIn *) OBJ_MEMBER_UINT(SELF, MidiFileIn_offset_data);
+
+    if(f)
+        RETURN->v_float = f->getBPM();
+    else
+        RETURN->v_float = 0;
+}
+
+CK_DLL_MFUN( MidiFileIn_ticksPerQuarter )
+{
+    stk::MidiFileIn *f = (stk::MidiFileIn *) OBJ_MEMBER_UINT(SELF, MidiFileIn_offset_data);
+
+    if(f)
+        RETURN->v_int = f->getTPQ();
     else
         RETURN->v_int = 0;
 }

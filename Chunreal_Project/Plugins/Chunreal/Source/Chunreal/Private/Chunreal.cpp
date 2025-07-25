@@ -10,7 +10,7 @@
 
 #include "Chunreal.h"
 #include "MetasoundFrontendRegistries.h"
-
+#include "AudioDevice.h"
 #define LOCTEXT_NAMESPACE "FChunrealModule"
 
 // Define custom log category "LogChunreal"
@@ -22,7 +22,7 @@ void FChunrealModule::StartupModule()
     chuckParent = new ChucK();
 
     // Initialize Chuck params
-    chuckParent->setParam(CHUCK_PARAM_SAMPLE_RATE, FChunrealModule::GetChuckSampleRate());
+    chuckParent->setParam(CHUCK_PARAM_SAMPLE_RATE, FChunrealModule::GetChuckSampleRate());  // The following crashes: FAudioDeviceManager::Get()->GetActiveAudioDevice().GetAudioDevice()->GetSampleRate()
     chuckParent->setParam(CHUCK_PARAM_INPUT_CHANNELS, 2);
     chuckParent->setParam(CHUCK_PARAM_OUTPUT_CHANNELS, 2);
     chuckParent->setParam(CHUCK_PARAM_VM_ADAPTIVE, 0);
@@ -32,10 +32,13 @@ void FChunrealModule::StartupModule()
     //chuckParent->setParam(CHUCK_PARAM_DUMP_INSTRUCTIONS, (t_CKINT)dump);
     chuckParent->setParam(CHUCK_PARAM_AUTO_DEPEND, (t_CKINT)0);
     //chuckParent->setParam(CHUCK_PARAM_DEPRECATE_LEVEL, deprecate_level);
-    chuckParent->setParam(CHUCK_PARAM_CHUGIN_ENABLE, false);
+    chuckParent->setParam(CHUCK_PARAM_CHUGIN_ENABLE, true);
     //chuckParent->setParam(CHUCK_PARAM_USER_CHUGINS, named_dls);
-    //chuckParent->setParam(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES, dl_search_path);
-    chuckParent->setParam(CHUCK_PARAM_HINT_IS_REALTIME_AUDIO, true);
+    chuckParent->setParam(CHUCK_PARAM_IS_REALTIME_AUDIO_HINT, true);
+    std::string userPath = std::string(TCHAR_TO_UTF8(*(FPaths::ProjectContentDir()))) + "ChuckFiles/";
+    chuckParent->setParam(CHUCK_PARAM_WORKING_DIRECTORY, userPath);
+    std::list<std::string> userPaths = { userPath };
+    chuckParent->setParam(CHUCK_PARAM_IMPORT_PATH_USER, userPaths);
 
     // Start ChucK parent
     chuckParent->init();

@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -294,13 +295,28 @@ void Chuck_Instr_Complement_int::execute( Chuck_VM * vm, Chuck_VM_Shred * shred 
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: module two ints
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Mod_int::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     t_CKINT *& sp = (t_CKINT *&)shred->reg->sp;
     pop_( sp, 2 );
+    if( val_(sp+1) == 0 ) goto mod_zero;
     push_( sp, val_(sp) % val_(sp+1) );
+
+    return;
+
+ mod_zero:
+    // we have a problem | 1.5.4.0 (nshaheed) throw exception
+    EM_exception(
+        "ModuloByZero: on line[%lu] in shred[id=%lu:%s]",
+        m_linepos, shred->xid, shred->name.c_str());
+    goto done;
+
+ done:
+    // do something!
+    shred->is_running = FALSE;
+    shred->is_done = TRUE;
 }
 
 
@@ -308,13 +324,28 @@ void Chuck_Instr_Mod_int::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: module two ints (in reverse)
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Mod_int_Reverse::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     t_CKINT *& sp = (t_CKINT *&)shred->reg->sp;
     pop_( sp, 2 );
+    if( val_(sp) == 0 ) goto mod_zero;
     push_( sp, val_(sp+1) % val_(sp) );
+
+    return;
+
+ mod_zero:
+    // we have a problem | 1.5.4.0 (nshaheed) throw exception
+    EM_exception(
+        "ModuloByZero: on line[%lu] in shred[id=%lu:%s]",
+        m_linepos, shred->xid, shred->name.c_str());
+    goto done;
+
+ done:
+    // do something!
+    shred->is_running = FALSE;
+    shred->is_done = TRUE;
 }
 
 
@@ -507,13 +538,28 @@ void Chuck_Instr_Divide_double_Reverse::execute( Chuck_VM * vm, Chuck_VM_Shred *
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: modulo two floats
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Mod_double::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     t_CKFLOAT *& sp = (t_CKFLOAT *&)shred->reg->sp;
     pop_( sp, 2 );
+    if( val_(sp+1) == 0 ) goto mod_zero;
     push_( sp, ::fmod( val_(sp), val_(sp+1) ) );
+
+    return;
+
+ mod_zero:
+    // we have a problem | 1.5.4.0 (nshaheed) throw exception
+    EM_exception(
+        "ModuloByZero: on line[%lu] in shred[id=%lu:%s]",
+        m_linepos, shred->xid, shred->name.c_str());
+    goto done;
+
+ done:
+    // do something!
+    shred->is_running = FALSE;
+    shred->is_done = TRUE;
 }
 
 
@@ -521,13 +567,28 @@ void Chuck_Instr_Mod_double::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: modulo two floats (in reverse)
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Mod_double_Reverse::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     t_CKFLOAT *& sp = (t_CKFLOAT *&)shred->reg->sp;
     pop_( sp, 2 );
+    if( val_(sp) == 0 ) goto mod_zero;
     push_( sp, ::fmod( val_(sp+1), val_(sp) ) );
+
+    return;
+
+ mod_zero:
+    // we have a problem
+    EM_exception(
+        "ModuloByZero: on line[%lu] in shred[id=%lu:%s]",
+        m_linepos, shred->xid, shred->name.c_str());
+    goto done;
+
+ done:
+    // do something!
+    shred->is_running = FALSE;
+    shred->is_done = TRUE;
 }
 
 
@@ -1239,14 +1300,29 @@ void Chuck_Instr_Add_int_Assign::execute( Chuck_VM * vm, Chuck_VM_Shred * shred 
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: modulo assign two ints
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Mod_int_Assign::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
     t_CKINT temp, *& sp = (t_CKINT *&)shred->reg->sp;
     pop_( sp, 2 );
+    if( val_(sp) == 0 ) goto mod_zero;
     temp = **(t_CKINT **)(sp+1) %= val_(sp);
     push_( sp, temp );
+
+    return;
+
+ mod_zero:
+    // we have a problem | 1.5.4.0 (nshaheed) throw exception
+    EM_exception(
+        "ModuloByZero: on line[%lu] in shred[id=%lu:%s]",
+        m_linepos, shred->xid, shred->name.c_str());
+    goto done;
+
+ done:
+    // do something!
+    shred->is_running = FALSE;
+    shred->is_done = TRUE;
 }
 
 
@@ -1388,7 +1464,7 @@ void Chuck_Instr_Divide_double_Assign::execute( Chuck_VM * vm, Chuck_VM_Shred * 
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: modulo assign two doubles
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Mod_double_Assign::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
@@ -1396,11 +1472,27 @@ void Chuck_Instr_Mod_double_Assign::execute( Chuck_VM * vm, Chuck_VM_Shred * shr
     t_CKBYTE *& sp = (t_CKBYTE *&)shred->reg->sp;
     // pop value + pointer
     pop_( sp, sz_FLOAT + sz_UINT );
+
+    if( val_((t_CKFLOAT *&)sp) == 0 ) goto mod_zero;
     // assign
     temp = ::fmod( **(t_CKFLOAT **)(sp+sz_FLOAT), val_((t_CKFLOAT *&)sp) );
     **(t_CKFLOAT **)(sp+sz_FLOAT) = temp;
     // push result
     push_( (t_CKFLOAT *&)sp, temp );
+
+    return;
+
+ mod_zero:
+    // we have a problem | 1.5.4.0 (nshaheed) throw exception
+    EM_exception(
+        "ModuloByZero: on line[%lu] in shred[id=%lu:%s]",
+        m_linepos, shred->xid, shred->name.c_str());
+    goto done;
+
+ done:
+    // do something!
+    shred->is_running = FALSE;
+    shred->is_done = TRUE;
 }
 
 
@@ -1873,54 +1965,56 @@ void Chuck_Instr_vec4_Divide_float_Assign::execute( Chuck_VM * vm, Chuck_VM_Shre
 
 
 
+
 #pragma mark === String Arithmetic ===
 
 
 //-----------------------------------------------------------------------------
 // name: execute()
 // desc: string + string
+//       (no longer used; string concat now handled by op overloading)
 //-----------------------------------------------------------------------------
-void Chuck_Instr_Add_string::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
-{
-    t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
-    Chuck_String * lhs = NULL;
-    Chuck_String * rhs = NULL;
-    Chuck_String * result = NULL;
-
-    // pop word from reg stack
-    pop_( reg_sp, 2 );
-    // left
-    lhs = (Chuck_String *)(*(reg_sp));
-    // right
-    rhs = (Chuck_String *)(*(reg_sp+1));
-
-    // make sure no null
-    if( !rhs || !lhs ) goto null_pointer;
-
-    // make new string
-    result = (Chuck_String *)instantiate_and_initialize_object( vm->env()->ckt_string, shred );
-
-    // concat
-    // result->str = lhs->str + rhs->str;
-    result->set( lhs->str() + rhs->str() );
-
-    // push the reference value to reg stack
-    push_( reg_sp, (t_CKUINT)(result) );
-
-    return;
-
-null_pointer:
-    // we have a problem
-    EM_exception(
-        "NullPointer: (string + string) on line[%lu] in shred[id=%lu:%s]",
-        m_linepos, shred->xid, shred->name.c_str() ); // , shred->pc );
-    goto done;
-
-done:
-    // do something!
-    shred->is_running = FALSE;
-    shred->is_done = TRUE;
-}
+//void Chuck_Instr_Add_string::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+//{
+//    t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
+//    Chuck_String * lhs = NULL;
+//    Chuck_String * rhs = NULL;
+//    Chuck_String * result = NULL;
+//
+//    // pop word from reg stack
+//    pop_( reg_sp, 2 );
+//    // left
+//    lhs = (Chuck_String *)(*(reg_sp));
+//    // right
+//    rhs = (Chuck_String *)(*(reg_sp+1));
+//
+//    // make sure no null
+//    if( !rhs || !lhs ) goto null_pointer;
+//
+//    // make new string
+//    result = (Chuck_String *)instantiate_and_initialize_object( vm->env()->ckt_string, shred );
+//
+//    // concat
+//    // result->str = lhs->str + rhs->str;
+//    result->set( lhs->str() + rhs->str() );
+//
+//    // push the reference value to reg stack
+//    push_( reg_sp, (t_CKUINT)(result) );
+//
+//    return;
+//
+//null_pointer:
+//    // we have a problem
+//    EM_exception(
+//        "NullPointer: (string + string) on line[%lu] in shred[id=%lu:%s]",
+//        m_linepos, shred->xid, shred->name.c_str() ); // , shred->pc );
+//    goto done;
+//
+//done:
+//    // do something!
+//    shred->is_running = FALSE;
+//    shred->is_done = TRUE;
+//}
 
 
 
@@ -2381,17 +2475,41 @@ void Chuck_Instr_Reg_Dup_Last2::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 
 
 //-----------------------------------------------------------------------------
-// name: execute()
-// desc: ...
+// allocate memory in special-primitive storage; used for vec2/3/4 member function calls
+// 1.5.4.2 (ge) added as part of #special-primitive-member-func-from-literal
 //-----------------------------------------------------------------------------
-void Chuck_Instr_Reg_Dup_Last_As_Pointer::execute(
-     Chuck_VM * vm, Chuck_VM_Shred * shred )
+static t_CKBYTE * special_primitive_alloc( const t_CKBYTE * copyFrom, t_CKUINT numBytes )
 {
-    t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
-    t_CKBYTE * where = (t_CKBYTE *)shred->reg->sp;
-
+    t_CKBYTE * copy = new t_CKBYTE[numBytes];
+    memcpy( copy, copyFrom, numBytes );
+    return copy;
+}
+//-----------------------------------------------------------------------------
+// reclaim memory in special-primitive storage; used for vec2/3/4 member function calls
+// 1.5.4.2 (ge) added as part of #special-primitive-member-func-from-literal
+//-----------------------------------------------------------------------------
+static void special_primitive_cleanup( t_CKBYTE * reclaimMe )
+{
+    CK_SAFE_DELETE_ARRAY( reclaimMe );
+}
+//-----------------------------------------------------------------------------
+// name: execute() | 1.5.4.2 (ge) added
+// desc: assume a (primitive, e.g., vec2/3/4) value on reg stack, pop from stack,
+//       put into special-primitive storage, push its address to reg
+//       stack for a potential function call #special-primitive-member-func-from-literal
+//-----------------------------------------------------------------------------
+void Chuck_Instr_Reg_Transmute_Value_To_Pointer::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    // stack pointer
+    t_CKBYTE *& reg_sp = (t_CKBYTE *&)shred->reg->sp;
+    // pop the specified number of bytes
+    pop_( reg_sp, m_val );
+    // allocate
+    t_CKBYTE * ptr = special_primitive_alloc( reg_sp, m_val );
+    // get as uint pointer so the push_() pointer arithmetic works correctly
+    t_CKUINT *& the_sp = (t_CKUINT *&)reg_sp;
     // push pointer into reg stack
-    push_( reg_sp, (t_CKUINT)(where-(m_val*sz_WORD)) );
+    push_( the_sp, (t_CKUINT)ptr );
 }
 
 
@@ -4073,14 +4191,14 @@ void call_all_parent_pre_constructors( Chuck_VM * vm, Chuck_VM_Shred * shred,
     Chuck_Type * type, t_CKUINT stack_offset )
 {
     // first, call parent ctor
-    if( type->parent != NULL )
+    if( type->parent_type != NULL )
     {
-        call_all_parent_pre_constructors( vm, shred, type->parent, stack_offset );
+        call_all_parent_pre_constructors( vm, shred, type->parent_type, stack_offset );
     }
     // next, call my pre-ctor
     if( type->has_pre_ctor )
     {
-        call_pre_constructor( vm, shred, type->info->pre_ctor, stack_offset );
+        call_pre_constructor( vm, shred, type->nspc->pre_ctor, stack_offset );
     }
     // next, call my default ctor | 1.5.2.2 (ge)
     if( type->ctor_default && type->ctor_default->code )
@@ -4274,8 +4392,8 @@ const char * Chuck_Instr_Pre_Constructor::params() const
 
 
 //-----------------------------------------------------------------------------
-// name: instantiate_object()
-// desc: instantiate Object including data and virtual table
+// name: initialize_object()
+// desc: initialize Object including data and virtual table
 //-----------------------------------------------------------------------------
 t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_Shred * shred, Chuck_VM * vm, t_CKBOOL setShredOrigin )
 {
@@ -4284,18 +4402,19 @@ t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_S
 
     // sanity
     assert( type != NULL );
-    assert( type->info != NULL );
+    assert( type->nspc != NULL );
 
     // REFACTOR-2017: added | 1.5.1.5 (ge & andrew) moved here from instantiate_...
     object->setOriginVM( vm );
     // set origin shred for non-ugens | 1.5.1.5 (ge & andrew) moved here from instantiate_...
-    if( !type->ugen_info && setShredOrigin ) object->setOriginShred( shred );
+    // change logic: if ugen OR setShredOrigin==TRUE | 1.5.4.2 (ge) part of #ugen-refs
+    if( type->ugen_info || setShredOrigin ) object->setOriginShred( shred );
 
     // allocate virtual table
     object->vtable = new Chuck_VTable;
     if( !object->vtable ) goto out_of_memory;
     // copy the object's virtual table
-    object->vtable->funcs = type->info->obj_v_table.funcs;
+    object->vtable->funcs = type->nspc->obj_v_table.funcs;
     // set the type reference
     object->type_ref = type;
     // reference count
@@ -4318,15 +4437,24 @@ t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_S
     {
         // ugen
         Chuck_UGen * ugen = (Chuck_UGen *)object;
+        //---------------------------------------
         // UGens: needs shred for auto-disconnect when shred is removed
         // 1.5.1.5 (ge & andrew) moved from instantiate_and_initialize_object()
+        //---------------------------------------
+        // 1.5.4.2 (ge) revisiting the above mechanism, part of #ugen-refs
+        // now UGens are not ref-counted by shred, is subject to the normal GC,
+        // and when refcount goes to 0, will remove it self from UGen graph
+        //---------------------------------------
         if( shred )
         {
-            // add ugen to shred (ref-counted)
+            // register ugen with originShred; if the shred is preemptively removed
+            // (e.g., through OTF / Machine.remove()), it will trigger a ugen_detach()
+            // to disconnect UGens that were created on it...
+            // 1.5.4.2 (ge) no longer ref-counted as part of #ugen-refs
+            // FYI the ugen's originShred should be set already (above) for UGens
             shred->add( ugen );
-            // add shred to ugen (ref-counted) | 1.5.1.5 (ge) was: ugen->shred = shred;
-            object->setOriginShred( shred );
         }
+        //---------------------------------------
         // set tick
         if( type->ugen_info->tick ) ugen->tick = type->ugen_info->tick;
         // added 1.3.0.0 -- tickf for multi-channel tick
@@ -4341,6 +4469,10 @@ t_CKBOOL initialize_object( Chuck_Object * object, Chuck_Type * type, Chuck_VM_S
         for( t_CKUINT i = 0; i < ugen->m_multi_chan_size; i++ )
         {
             // allocate ugen for each | REFACTOR-2017: added ugen->vm
+            // NOTE the channels currently are also detached as part of the
+            // origin shred's ugen_detach() routine when the shred
+            // is removed; as of 1.5.4.2, however, ugens are no longer
+            // reference-counted when added to their origin shreds
             Chuck_Object * obj = instantiate_and_initialize_object(
                 ugen->originVM()->env()->ckt_ugen, ugen->originShred(), ugen->originVM() );
             // cast to ugen
@@ -4403,9 +4535,11 @@ Chuck_Object * instantiate_and_initialize_object( Chuck_Type * type, Chuck_VM * 
 
 //-----------------------------------------------------------------------------
 // name: instantiate_and_initialize_object()
-// desc: you probably shouldn't call this version. call the one that takes a
-//       shred if you have a non-null shred, otherwise call the one that
-//       takes a vm
+// desc: instiate and initialize a ChucK Object of a particular Type
+//       NOTE: the returned Object will have a reference count of 0
+//       NOTE: you probably shouldn't call this version. call the one that
+//       takes a shred if you have a non-null shred, otherwise call the one
+//       that takes a vm
 //-----------------------------------------------------------------------------
 Chuck_Object * instantiate_and_initialize_object( Chuck_Type * type, Chuck_VM_Shred * shred, Chuck_VM * vm )
 {
@@ -4417,7 +4551,7 @@ Chuck_Object * instantiate_and_initialize_object( Chuck_Type * type, Chuck_VM_Sh
 
     // sanity
     assert( type != NULL );
-    assert( type->info != NULL );
+    assert( type->nspc != NULL );
 
     // allocate the VM object
     if( !type->ugen_info )
@@ -4512,7 +4646,7 @@ error:
 // desc: instantiate a object, push its pointer on reg stack
 //-----------------------------------------------------------------------------
 inline void instantiate_object( Chuck_VM * vm, Chuck_VM_Shred * shred,
-                                Chuck_Type * type )
+                                Chuck_Type * type, t_CKBOOL addRef )
 {
     t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
 
@@ -4522,6 +4656,10 @@ inline void instantiate_object( Chuck_VM * vm, Chuck_VM_Shred * shred,
 
     // push the pointer on the operand stack
     push_( reg_sp, (t_CKUINT)object );
+
+    // add reference? | 1.5.4.3 (ge) added this logic
+    // for explanation see: Chuck_Instr_Instantiate_Object_Complete::execute()
+    if( addRef ) object->add_ref();
 
     // call preconstructor
     // call_pre_constructor( vm, shred, object, type, stack_offset );
@@ -4540,11 +4678,15 @@ error:
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: instantiate object
+// desc: instantiate a ChucK Object (starting step)
 //-----------------------------------------------------------------------------
-void Chuck_Instr_Instantiate_Object::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+void Chuck_Instr_Instantiate_Object_Start::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
-    instantiate_object( vm, shred, this->type  );
+    // instantiate a chuck Object
+    // 1.5.4.3 (ge) add (temporary) reference that will be decremented when
+    // instantiation complete; see Chuck_Instr_Instantiate_Object_Complete::execute()
+    // for explanation
+    instantiate_object( vm, shred, this->type, TRUE );
 }
 
 
@@ -4554,7 +4696,81 @@ void Chuck_Instr_Instantiate_Object::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
 // name: params()
 // desc: ...
 //-----------------------------------------------------------------------------
-const char * Chuck_Instr_Instantiate_Object::params() const
+const char * Chuck_Instr_Instantiate_Object_Start::params() const
+{
+    static char buffer[CK_PRINT_BUF_LENGTH];
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s", this->type->c_name() );
+    return buffer;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: execute()
+// desc: complete the process of instantiating an Object | 1.5.4.3 (ge) added
+//-----------------------------------------------------------------------------
+void Chuck_Instr_Instantiate_Object_Complete::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+{
+    // operand stack pointer
+    t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
+    // get the object reference (should be top of operand stack)
+    Chuck_Object * obj = (Chuck_Object *)(*(reg_sp-1));
+    // leave stack contents unchanged (no push or pop)...
+
+    // NOTE: decrement (but NOT release) the temporary reference added by
+    // Chuck_Instr_Instantiate_Object_Start; this is done so that a constructor
+    // can work with `this` pointer with refcount > 0 BEFORE the
+    // instatiated object has a chance to be assigned to a variable (at which
+    // point it would have a proper reference) | 1.5.4.3 (ge) added
+    //
+    // NOTE: we are derementing only because of the possibility of
+    // the reference going back to 0, but we don't want to delete it at
+    // this point in case it's about to be assigned to a variable
+    //
+    // EXAMPLE: a situation that needs this: a constructor that calls a member
+    // function that returns itself: the statement cleanup logic could delete
+    // this object before the object can be assigned to a variable -- to account
+    // for the above, this mechanism temporarily boosts the instantiating
+    // object's refcount throughout Object instantiation
+    obj->dec_ref_no_release();
+
+    /*--------------------------------------------------------------------------
+    | example -- also test/01-Basic/264-instantiation-integrity.ck
+    ----------------------------------------------------------------------------
+    // a class definition
+    public class Foo
+    {
+        // a member function that returns `this`
+        fun Foo getFoo() { return this; }
+        // a constructor (takes argument for good measure)
+        fun Foo( vec3 sz )
+        {
+            // return ourself -- note this is INSIDE Foo constructor
+            // which means it's before this instance can be assigned
+            // to a variable (as below); yet statements likes these
+            // have a clean-up logic that balances reference counts;
+            // so the refcount for Foo during instantiation must
+            // account for this interregnum; FYI this is typically
+            // handled by temporarily boosting the refcount during
+            // instantiation so it cannot be deleted from within
+            // its own constructor!
+            this.getFoo();
+        }
+    }
+    // instantiate and assignment to variable
+    Foo foo( @(1,2,3) );
+    --------------------------------------------------------------------------*/
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: params()
+// desc: ...
+//-----------------------------------------------------------------------------
+const char * Chuck_Instr_Instantiate_Object_Complete::params() const
 {
     static char buffer[CK_PRINT_BUF_LENGTH];
     snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s", this->type->c_name() );
@@ -4592,7 +4808,7 @@ void Chuck_Instr_Pre_Ctor_Array_Top::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
     else
     {
         // instantiate
-        instantiate_object( vm, shred, type );
+        instantiate_object( vm, shred, type, FALSE );
     }
 }
 
@@ -5113,7 +5329,7 @@ const char * Chuck_Instr_Func_Call::params() const
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: general function call for in-language defined functions
 //-----------------------------------------------------------------------------
 void Chuck_Instr_Func_Call::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
 {
@@ -5218,9 +5434,10 @@ error_overflow:
 const char * Chuck_Instr_Func_Call_Member::params() const
 {
     static char buffer[CK_PRINT_BUF_LENGTH];
-    snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s, %s",
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "%s, %s, %s",
               m_func_ref ? m_func_ref->signature(FALSE,FALSE).c_str() : "[null]",
-              m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK ? "this:back" : "this:front" );
+              m_arg_convention == CK_FUNC_CALL_THIS_IN_BACK ? "this:back" : "this:front",
+              m_special_primitive_cleanup_this ? "transmute:yes" : "transmute:no" );
     return buffer;
 }
 
@@ -5236,6 +5453,8 @@ void Chuck_Instr_Func_Call_Member::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
     t_CKUINT *& mem_sp = (t_CKUINT *&)shred->mem->sp;
     t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
     Chuck_DL_Return retval;
+    // 1.5.4.2 (ge) added; #special-primitive-member-func-from-literal
+    t_CKUINT ckTHIS = 0;
 
     // pop word
     pop_( reg_sp, 2 );
@@ -5289,6 +5508,9 @@ void Chuck_Instr_Func_Call_Member::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
         for( t_CKUINT i = 0; i < stack_depth; i++ )
             *mem_sp2++ = *reg_sp2++;
     }
+
+    // remember THIS #special-primitive-member-func-from-literal
+    ckTHIS = (t_CKUINT)(*mem_sp);
 
     // check the function pointer kind: ctor or mfun?
     if( func->native_func_kind == ae_fp_ctor ) // ctor
@@ -5367,6 +5589,16 @@ void Chuck_Instr_Func_Call_Member::execute( Chuck_VM * vm, Chuck_VM_Shred * shre
         //          e.g., string Sndbuf.read(string)
         func_release_args( vm, m_func_ref->def()->arg_list, (t_CKBYTE *)(mem_sp+1) );
     }
+
+    // check if we need to do special-primitive cleanup | 1.5.4.2 (ge) added
+    // this is for special primitives that have "member" functions
+    // e.g., vec2/3/4 -- specifically, this supports calling a "member" function
+    // from a literal value (i.e., not a variable) -- e.g., @(1,0).magnitude()
+    // NOTE: this approach is cursed because it adds more special case treatment
+    // to existing special cases for special primitives; if there is any silver
+    // lining, it might be that this logic is isolated and contained
+    // (see #special-primitive-member-func-from-literal for related code)
+    if( m_special_primitive_cleanup_this ) special_primitive_cleanup( (t_CKBYTE *)ckTHIS );
 
     // pop the stack pointer
     mem_sp -= push;
@@ -5921,7 +6153,7 @@ t_CKBOOL Chuck_Instr_Stmt_Start::cleanupRefs( Chuck_VM_Shred * shred )
 const char * Chuck_Instr_Stmt_Remember_Object::params() const
 {
     static char buffer[CK_PRINT_BUF_LENGTH];
-    snprintf( buffer, CK_PRINT_BUF_LENGTH, "offset=%lu start=%p", (unsigned long)m_offset, m_stmtStart );
+    snprintf( buffer, CK_PRINT_BUF_LENGTH, "offset=%lu start=%p addref:%s", (unsigned long)m_offset, m_stmtStart, m_addRef?"yes":"no" );
     return buffer;
 }
 
@@ -6269,6 +6501,12 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
     // reg stack pointer
     t_CKUINT *& reg_sp = (t_CKUINT *&)shred->reg->sp;
 
+    // 1.5.4.4 (ge) added base_type logic for multidim arrays
+    Chuck_Type * baseType = m_type_ref->array_type ? m_type_ref->array_type : m_type_ref;
+    // amalgamating array type | 1.5.4.0 (ge, nick, andrew) added after a wild yak hunt
+    // 1.5.4.4 (ge) updated to use `baseType` instead of `m_type_ref`
+    Chuck_Type * arrayType = vm->env()->get_array_type( vm->env()->ckt_array, m_type_ref->array_depth+1, baseType );
+
     // allocate the array
     // 1.4.2.0 (ge) | added: check for float explicitly
     if( m_type_ref->size == sz_INT && !m_is_float ) // ISSUE: 64-bit (fixed 1.3.1.0)
@@ -6280,9 +6518,13 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         Chuck_ArrayInt * array = new Chuck_ArrayInt( m_is_obj, m_length );
         // problem
         if( !array ) goto out_of_memory;
+
         // initialize object
-        // TODO: should it be this??? initialize_object( array, m_type_ref );
-        initialize_object( array, vm->env()->ckt_array, shred, vm );
+        // should it be this??? initialize_object( array, m_type_ref );
+        // should it be this??? initialize_object( array, vm->env()->ckt_array, shred, vm );
+        // neither! behold -- the amalgamated array type... | 1.5.4.0 (ge, nick, andrew)
+        initialize_object( array, arrayType, shred, vm );
+
         // set size
         array->set_size( m_length );
         // fill array
@@ -6302,7 +6544,7 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         // fill array
         t_CKFLOAT * sp = (t_CKFLOAT *)reg_sp;
         // intialize object
-        initialize_object( array, vm->env()->ckt_array, shred, vm );
+        initialize_object( array, arrayType, shred, vm );
         // set size
         array->set_size( m_length );
         // fill array
@@ -6322,7 +6564,7 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         // fill array
         t_CKVEC2 * sp = (t_CKVEC2 *)reg_sp;
         // intialize object
-        initialize_object( array, vm->env()->ckt_array, shred, vm );
+        initialize_object( array, arrayType, shred, vm );
         // differentiate between complex and polar | 1.5.1.0 (ge) added, used for sorting Array16s
         if( isa(m_type_ref, vm->env()->ckt_polar) ) array->m_isPolarType = TRUE;
         // set size
@@ -6344,7 +6586,7 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         // fill array
         t_CKVEC3 * sp = (t_CKVEC3 *)reg_sp;
         // intialize object
-        initialize_object( array, vm->env()->ckt_array, shred, vm );
+        initialize_object( array, arrayType, shred, vm );
         // set size
         array->set_size( m_length );
         // fill array
@@ -6364,7 +6606,7 @@ void Chuck_Instr_Array_Init_Literal::execute( Chuck_VM * vm, Chuck_VM_Shred * sh
         // fill array
         t_CKVEC4 * sp = (t_CKVEC4 *)reg_sp;
         // intialize object
-        initialize_object( array, vm->env()->ckt_array, shred, vm );
+        initialize_object( array, arrayType, shred, vm );
         // set size
         array->set_size( m_length );
         // fill array
@@ -7551,9 +7793,9 @@ void Chuck_Instr_Dot_Static_Data::execute( Chuck_VM * vm, Chuck_VM_Shred * shred
     // get the object pointer
     Chuck_Type * t_class = (Chuck_Type *)(*sp);
     // make sure
-    assert( (m_offset + m_size) <= t_class->info->class_data_size );
+    assert( (m_offset + m_size) <= t_class->nspc->static_data_size );
     // calculate the data pointer
-    data = (t_CKUINT)(t_class->info->class_data + m_offset);
+    data = (t_CKUINT)(t_class->nspc->static_data + m_offset);
 
     // emit addr or value
     if( m_emit_addr )
@@ -7619,7 +7861,11 @@ void Chuck_Instr_Dot_Static_Func::execute( Chuck_VM * vm, Chuck_VM_Shred * shred
 
     // 1.4.1.0 (ge): leave the base type on the operand stack
     // commented out: pop the type pointer
-    // pop_( sp, 1 );
+    // 1.5.4.3 (ge): uncommented, remove base pointer, consistent with
+    // other dot-member function emission; this helps cleaning up the
+    // stack, depending on whether this is part of a function value emission
+    // only, or going to be used as a function call #2024-func-call-update
+    pop_( sp, 1 );
 
     // push the address
     push_( sp, (t_CKUINT)(m_func) );
@@ -8146,75 +8392,76 @@ done:
 
 //-----------------------------------------------------------------------------
 // name: execute()
-// desc: ...
+// desc: various string ops
+//       (no longer used; string ops now handled more properly by op overloads)
 //-----------------------------------------------------------------------------
-void Chuck_Instr_Op_string::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
-{
-    t_CKUINT *& sp = (t_CKUINT *&)shred->reg->sp;
-    Chuck_String * lhs = NULL;
-    Chuck_String * rhs = NULL;
-
-    // pop
-    pop_( sp, 2 );
-    // get the string references
-    lhs = (Chuck_String *)*sp;
-    rhs = (Chuck_String *)*(sp + 1);
-    // neither should be null
-    if( !lhs || !rhs ) goto null_pointer;
-
-    // look
-    switch( m_val )
-    {
-    case ae_op_eq:
-        push_( sp, lhs->str() == rhs->str() );
-    break;
-
-    case ae_op_neq:
-        push_( sp, lhs->str() != rhs->str() );
-    break;
-
-    case ae_op_lt:
-        push_( sp, lhs->str() < rhs->str() );
-    break;
-
-    case ae_op_le:
-        push_( sp, lhs->str() <= rhs->str() );
-    break;
-
-    case ae_op_gt:
-        push_( sp, lhs->str() > rhs->str() );
-    break;
-
-    case ae_op_ge:
-        push_( sp, lhs->str() >= rhs->str() );
-    break;
-
-    default:
-        goto invalid_op;
-    break;
-    }
-
-    return;
-
-null_pointer:
-    // we have a problem
-    EM_exception(
-        "NullPointer: (string op) on line[%lu] in shred[id=%lu:%s]",
-        m_linepos, shred->xid, shred->name.c_str() );
-    goto done;
-
-invalid_op:
-    // we have a problem
-    EM_exception(
-        "InvalidStringOp: '%s' on line[%lu] in shred[id=%lu:%s]",
-        op2str((ae_Operator)m_val), m_linepos, shred->xid, shred->name.c_str() );
-    goto done;
-
-done:
-    // do something!
-    shred->is_running = FALSE;
-    shred->is_done = TRUE;
-}
+//void Chuck_Instr_Op_string::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
+//{
+//    t_CKUINT *& sp = (t_CKUINT *&)shred->reg->sp;
+//    Chuck_String * lhs = NULL;
+//    Chuck_String * rhs = NULL;
+//
+//    // pop
+//    pop_( sp, 2 );
+//    // get the string references
+//    lhs = (Chuck_String *)*sp;
+//    rhs = (Chuck_String *)*(sp + 1);
+//    // neither should be null
+//    if( !lhs || !rhs ) goto null_pointer;
+//
+//    // look
+//    switch( m_val )
+//    {
+//    case ae_op_eq:
+//        push_( sp, lhs->str() == rhs->str() );
+//    break;
+//
+//    case ae_op_neq:
+//        push_( sp, lhs->str() != rhs->str() );
+//    break;
+//
+//    case ae_op_lt:
+//        push_( sp, lhs->str() < rhs->str() );
+//    break;
+//
+//    case ae_op_le:
+//        push_( sp, lhs->str() <= rhs->str() );
+//    break;
+//
+//    case ae_op_gt:
+//        push_( sp, lhs->str() > rhs->str() );
+//    break;
+//
+//    case ae_op_ge:
+//        push_( sp, lhs->str() >= rhs->str() );
+//    break;
+//
+//    default:
+//        goto invalid_op;
+//    break;
+//    }
+//
+//    return;
+//
+//null_pointer:
+//    // we have a problem
+//    EM_exception(
+//        "NullPointer: (string op) on line[%lu] in shred[id=%lu:%s]",
+//        m_linepos, shred->xid, shred->name.c_str() );
+//    goto done;
+//
+//invalid_op:
+//    // we have a problem
+//    EM_exception(
+//        "InvalidStringOp: '%s' on line[%lu] in shred[id=%lu:%s]",
+//        op2str((ae_Operator)m_val), m_linepos, shred->xid, shred->name.c_str() );
+//    goto done;
+//
+//done:
+//    // do something!
+//    shred->is_running = FALSE;
+//    shred->is_done = TRUE;
+//}
 
 
 
@@ -8712,7 +8959,7 @@ void Chuck_Instr_ForEach_Inc_And_Branch::execute( Chuck_VM * vm, Chuck_VM_Shred 
                 if( arr->contains_objects() && *pVar)
                 {
                     // add ref, as this will be cleaned up at end of scope, hopefully
-                    ((Chuck_VM_Object *)(*pVar))->add_ref(); 
+                    ((Chuck_VM_Object *)(*pVar))->add_ref();
                 }
                 break;
             }
@@ -9412,7 +9659,8 @@ void Chuck_Instr_Gack::execute( Chuck_VM * vm, Chuck_VM_Shred * shred )
                     if( *(sp) == 0 )
                         CK_FPRINTF_STDERR( "null " );
                     else
-                        CK_FPRINTF_STDERR( "0x%lx (refcount=%d) ", *(sp), obj->m_ref_count );
+                        CK_FPRINTF_STDERR( "0x%lx :(%s|refcount=%d)\n", *(sp), type->c_name(), obj->m_ref_count );
+                        // CK_FPRINTF_STDERR( "0x%lx (refcount=%d) ", *(sp), obj->m_ref_count );
                 }
                 else
                 {

@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -743,7 +744,8 @@ t_CKBOOL init_class_Midi( Chuck_Env * env )
     if( MidiMsg_offset_data3 == CK_INVALID_OFFSET ) goto error;
 
     // add member variable
-    doc = "Time when the MidiMsg occurred, relative to the start of the file (only valid for MidiFileIn).";
+    doc = "Duration since the last MidiMsg (only valid for MidiFileIn).";
+          // Time when the MidiMsg occurred, relative to the start of the file (only valid for MidiFileIn).";
     MidiMsg_offset_when = type_engine_import_mvar( env, "dur", "when", FALSE, doc.c_str() );
     if( MidiMsg_offset_when == CK_INVALID_OFFSET ) goto error;
 
@@ -1494,6 +1496,65 @@ t_CKBOOL init_class_HID( Chuck_Env * env )
      // end the class import
      type_engine_import_class_end( env );
      */
+
+// RELEASE NOTES for when we are ready
+//    (added) new `MouseCursor` class for quickly accessing mouse cursor:
+//            // absolute screen coordinate of cursor
+//            vec2 MouseCursor.xy();
+//            // scaled coordinates in range [0,1]
+//            vec2 MouseCursor.scaled();
+//        (see API reference for more information)
+//        https://chuck.stanford.edu/doc/reference/io.html#MouseCursor
+//    (added) new `Mousor` class; `Mousor` is functionally equivalent to `MouseCursor`,
+//        purely made for those prefer slightly less typing and slightly more chaos!
+//    (added) examples/hid/mouse-cursor.ck
+
+    // init MouseCursor class | 1.5.4.2 (ge & spencer) added
+    if( !type_engine_import_class_begin( env, "MouseCursor", "Object",
+                                         env->global(), MouseCursor_ctor, MouseCursor_dtor,
+                                         "Mouse cursor position tracking. (For full access to mouse input, see the Hid class.)" ) )
+        return FALSE;
+
+    // add examples
+    if( !type_engine_import_add_ex( env, "hid/mouse-cursor.ck" ) ) goto error;
+
+    // add pos() | 1.5.4.2 (ge & spencer ) added
+    func = make_new_sfun( "vec2", "scaled", MouseCursor_scaled );
+    func->doc = "get the current X and Y normalized positions of the mouse cursor relative to its containing monitor; yields X and Y values in the range [0.0,1.0]";
+    if( !type_engine_import_sfun( env, func ) ) goto error;
+
+    // add abs() | 1.5.4.2 (ge & spencer ) added
+    func = make_new_sfun( "vec2", "abs", MouseCursor_abs );
+    func->doc = "get the current X and Y absolute coordinates of the mouse cursor; dependent on screen resolution; could yield positive and negative values in a multi-monitor setup; same as .xy()";
+    if( !type_engine_import_sfun( env, func ) ) goto error;
+
+    // add xy() | 1.5.4.2 (ge & spencer ) added
+    func = make_new_sfun( "vec2", "xy", MouseCursor_abs );
+    func->doc = "get the current X and Y absolute coordinates of the mouse cursor; dependent on screen resolution; could yield positive and negative values in a multi-monitor setup; same as .abs()";
+    if( !type_engine_import_sfun( env, func ) ) goto error;
+
+    // add x() | 1.5.4.2 (ge & spencer ) added
+    func = make_new_sfun( "float", "x", MouseCursor_abs_x );
+    func->doc = "get the current X absolute coordinate of the mouse cursor; dependent on screen resolution; could yield positive and negative values in a multi-monitor setup";
+    if( !type_engine_import_sfun( env, func ) ) goto error;
+
+    // add y() | 1.5.4.2 (ge & spencer ) added
+    func = make_new_sfun( "float", "y", MouseCursor_abs_y );
+    func->doc = "get the current Y absolute coordinate of the mouse cursor; dependent on screen resolution; could yield positive and negative values in a multi-monitor setup";
+    if( !type_engine_import_sfun( env, func ) ) goto error;
+
+    // end the class import
+    type_engine_import_class_end( env );
+
+    // init Mousor class | 1.5.4.2 (chuck team) added as a shorter and more fun/chaotic alias for MouseCursor
+    if( !type_engine_import_class_begin( env, "Mousor", "MouseCursor",
+                                         env->global(), Mousor_ctor, Mousor_dtor,
+                                         "Same as MouseCursor; for those who prefer less typing and more chaos. (For full access to mouse input, see the Hid class.)" ) )
+        return FALSE;
+
+    // end the class import
+    type_engine_import_class_end( env );
+
     return TRUE;
 
 error:
@@ -3003,6 +3064,38 @@ CK_DLL_MFUN( HidOut_send )
     // the_msg.data[2] = (t_CKBYTE)OBJ_MEMBER_INT(fake_msg, HidMsg_offset_data3);
     RETURN->v_int = mout->send( &the_msg );
 }
+
+// Mouse constructor
+CK_DLL_CTOR( MouseCursor_ctor ) { }
+// Mouse desctructor
+CK_DLL_DTOR( MouseCursor_dtor ) { }
+
+// get normalized mouse XY position, range [0,1]
+CK_DLL_SFUN( MouseCursor_scaled )
+{
+    RETURN->v_vec2 = ck_get_mouse_xy_normalize();
+}
+
+CK_DLL_SFUN( MouseCursor_abs )
+{
+    RETURN->v_vec2 = ck_get_mouse_xy_absolute();
+}
+
+CK_DLL_SFUN( MouseCursor_abs_x )
+{
+    RETURN->v_float = ck_get_mouse_xy_absolute().x;
+}
+
+CK_DLL_SFUN( MouseCursor_abs_y )
+{
+    RETURN->v_float = ck_get_mouse_xy_absolute().y;
+}
+
+// Mouse constructor
+CK_DLL_CTOR( Mousor_ctor ) { }
+// Mouse desctructor
+CK_DLL_DTOR( Mousor_dtor ) { }
+
 #endif // __DISABLE_HID__
 
 

@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -43,6 +44,13 @@ static t_CKUINT g_srateOsc = 0;
 // for member data offset
 static t_CKUINT osc_offset_data = 0;
 
+//-----------------------------------------------------------------------------
+// this is called for this module to know when sample rate changes | 1.5.4.2 (ge) added
+//-----------------------------------------------------------------------------
+void osc_srate_update_cb( t_CKUINT srate, void * userdata ) { g_srateOsc = srate; }
+
+
+
 
 //-----------------------------------------------------------------------------
 // name: osc_query()
@@ -51,7 +59,9 @@ static t_CKUINT osc_offset_data = 0;
 DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
 {
     // srate
-    g_srateOsc = QUERY->srate;
+    g_srateOsc = QUERY->srate();
+    // register callback to be notified if/when sample rate changes | 1.5.4.2 (ge) added
+    QUERY->register_callback_on_srate_update( QUERY, osc_srate_update_cb, NULL );
     // get the env
     Chuck_Env * env = QUERY->env();
 
@@ -238,6 +248,7 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
     // add examples
     if( !type_engine_import_add_ex( env, "basic/oscillatronx.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "deep/shepard.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "deep/smb.ck" ) ) goto error;
 
     // end the class import
     type_engine_import_class_end( env );
@@ -348,6 +359,7 @@ DLL_QUERY osc_query( Chuck_DL_Query * QUERY )
 
     // add examples
     if( !type_engine_import_add_ex( env, "basic/oscillatronx.ck" ) ) goto error;
+    if( !type_engine_import_add_ex( env, "deep/smb.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "filter/brf.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "filter/rlpf.ck" ) ) goto error;
     if( !type_engine_import_add_ex( env, "filter/rhpf.ck" ) ) goto error;
@@ -1064,7 +1076,10 @@ static void _transition( t_CKDOUBLE a, t_CKDOUBLE alpha, t_CKDOUBLE b,
 DLL_QUERY genX_query( Chuck_DL_Query * QUERY )
 {
     // srate
-    g_srateOsc = QUERY->srate;
+    g_srateOsc = QUERY->srate();
+    // register callback to be notified if/when sample rate changes | 1.5.4.2 (ge) added
+    QUERY->register_callback_on_srate_update( QUERY, osc_srate_update_cb, NULL );
+
     // get the env
     Chuck_Env * env = QUERY->env();
     std::string doc;

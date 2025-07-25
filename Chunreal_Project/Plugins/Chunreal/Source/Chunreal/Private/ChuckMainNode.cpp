@@ -32,7 +32,7 @@ namespace Metasound
         theChuck = new ChucK();
 
         // Initialize Chuck params
-        theChuck->setParam(CHUCK_PARAM_SAMPLE_RATE, FChunrealModule::GetChuckSampleRate());
+        theChuck->setParam(CHUCK_PARAM_SAMPLE_RATE, InSettings.GetSampleRate());
         theChuck->setParam(CHUCK_PARAM_INPUT_CHANNELS, 2);
         theChuck->setParam(CHUCK_PARAM_OUTPUT_CHANNELS, 2);
         theChuck->setParam(CHUCK_PARAM_VM_ADAPTIVE, 0);
@@ -42,10 +42,13 @@ namespace Metasound
         //theChuck->setParam(CHUCK_PARAM_DUMP_INSTRUCTIONS, (t_CKINT)dump);
         theChuck->setParam(CHUCK_PARAM_AUTO_DEPEND, (t_CKINT)0);
         //theChuck->setParam(CHUCK_PARAM_DEPRECATE_LEVEL, deprecate_level);
-        theChuck->setParam(CHUCK_PARAM_CHUGIN_ENABLE, false);
+        theChuck->setParam(CHUCK_PARAM_CHUGIN_ENABLE, true);
         //theChuck->setParam(CHUCK_PARAM_USER_CHUGINS, named_dls);
-        //theChuck->setParam(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES, dl_search_path);
-        theChuck->setParam(CHUCK_PARAM_HINT_IS_REALTIME_AUDIO, true);
+        theChuck->setParam(CHUCK_PARAM_IS_REALTIME_AUDIO_HINT, true);
+        std::string userPath = std::string(TCHAR_TO_UTF8(*(FPaths::ProjectContentDir()))) + "ChuckFiles/";
+        theChuck->setParam(CHUCK_PARAM_WORKING_DIRECTORY, userPath);
+        std::list<std::string> userPaths = { userPath };
+        theChuck->setParam(CHUCK_PARAM_IMPORT_PATH_USER, userPaths);
 
         // Set log
         #if PRINT_CHUCK_LOG

@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -1352,6 +1353,59 @@ t_CKBOOL Chuck_Globals_Manager::getGlobalUGenSamples( const char * name,
 
     // else, fill (if the ugen isn't buffered, then it will fill with zeroes)
     m_global_ugens[name]->val->get_buffer( buffer, numFrames );
+
+    return TRUE;
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: getGlobalUGenSamplesMulti()
+// desc: get buffer samples, multichannel edition | 1.5.3.2 (eito, nick, ge)
+//-----------------------------------------------------------------------------
+t_CKBOOL Chuck_Globals_Manager::getGlobalUGenSamplesMulti( const char * name,
+                                                           SAMPLE * buffer,
+                                                           int numFrames,
+                                                           int numChannels )
+{
+    // if hasn't been init, or it has been init and hasn't been constructed,
+    if( m_global_ugens.count( name ) == 0 ||
+       should_call_global_ctor( name, te_globalUGen ) )
+    {
+        // fail without doing anything
+        return FALSE;
+    }
+
+    // get the UGen
+    Chuck_UGen * ugen =  m_global_ugens[name]->val;
+    // get number of channels
+    t_CKINT multichans = ugen->m_multi_chan_size;
+
+    // check that # of channels match
+    if( multichans != numChannels )
+    {
+        // fail without doing anything
+        return FALSE;
+    }
+
+    // if > mono
+    if( multichans )
+    {
+        // loop over channel
+        for( t_CKINT c = 0; c < multichans; c++ )
+        {
+            // copy in chunk (non-interleaved)
+            ugen->m_multi_chan[c]->get_buffer( buffer, numFrames );
+            // advance buffer pointer
+            buffer += numFrames;
+        }
+    }
+    else // mono
+    {
+        // fill (if the ugen isn't buffered, then it will fill with zeroes)
+        ugen->get_buffer( buffer, numFrames );
+    }
 
     return TRUE;
 }

@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -1248,13 +1249,14 @@ public:
 
 //-----------------------------------------------------------------------------
 // name: struct Chuck_Instr_Add_string
-// desc: ...
+// desc: string + string
+//       (no longer used; string concat now handled by op overloading)
 //-----------------------------------------------------------------------------
-struct Chuck_Instr_Add_string : public Chuck_Instr_Binary_Op
-{
-public:
-    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
-};
+//struct Chuck_Instr_Add_string : public Chuck_Instr_Binary_Op
+//{
+//public:
+//    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+//};
 
 
 
@@ -2281,14 +2283,14 @@ public:
 
 
 //-----------------------------------------------------------------------------
-// name: struct Chuck_Instr_Reg_Dup_Last_As_Pointer
+// name: struct Chuck_Instr_Reg_Transmute_Value_To_Pointer
 // desc: duplicate last value on stack as pointer; 1.3.5.3
 //-----------------------------------------------------------------------------
-struct Chuck_Instr_Reg_Dup_Last_As_Pointer : public Chuck_Instr_Unary_Op
+struct Chuck_Instr_Reg_Transmute_Value_To_Pointer : public Chuck_Instr_Unary_Op
 {
 public:
-    Chuck_Instr_Reg_Dup_Last_As_Pointer( t_CKUINT sizeInWords )
-    { this->set( sizeInWords ); }
+    Chuck_Instr_Reg_Transmute_Value_To_Pointer( t_CKUINT sizeInBytes )
+    { this->set( sizeInBytes ); }
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
 };
 
@@ -2943,13 +2945,33 @@ public:
 
 
 //-----------------------------------------------------------------------------
-// name: struct Chuck_Instr_Instantiate_Object
-// desc: instantiate object - leaves reference value on operand stack
+// name: struct Chuck_Instr_Instantiate_Object_Start
+// desc: instantiate object (starting step); leaves reference value on operand stack
 //-----------------------------------------------------------------------------
-struct Chuck_Instr_Instantiate_Object : public Chuck_Instr
+struct Chuck_Instr_Instantiate_Object_Start : public Chuck_Instr
 {
 public:
-    Chuck_Instr_Instantiate_Object( Chuck_Type * t )
+    Chuck_Instr_Instantiate_Object_Start( Chuck_Type * t )
+    { this->type = t; }
+
+    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+    virtual const char * params() const;
+
+public:
+    Chuck_Type * type;
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_Instr_Instantiate_Object_Complete | 1.5.4.3 (ge) added
+// desc: instantiate object (completing step); leaves reference value on operand stack
+//-----------------------------------------------------------------------------
+struct Chuck_Instr_Instantiate_Object_Complete : public Chuck_Instr
+{
+public:
+    Chuck_Instr_Instantiate_Object_Complete( Chuck_Type * t )
     { this->type = t; }
 
     virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
@@ -3330,8 +3352,10 @@ struct Chuck_Instr_Func_Call_Member : public Chuck_Instr_Unary_Op
 {
 public:
     Chuck_Instr_Func_Call_Member( t_CKUINT ret_size, Chuck_Func * func_ref,
-                                  ck_Func_Call_Arg_Convention arg_convention = CK_FUNC_CALL_THIS_IN_BACK )
-    { this->set( ret_size ); m_func_ref = func_ref; m_arg_convention = arg_convention; }
+                                  ck_Func_Call_Arg_Convention arg_convention = CK_FUNC_CALL_THIS_IN_BACK,
+                                  t_CKBOOL special_primitive_cleanup_this = FALSE )
+    { this->set( ret_size ); m_func_ref = func_ref; m_arg_convention = arg_convention;
+      m_special_primitive_cleanup_this = special_primitive_cleanup_this; }
 
 public:
     // for carrying out instruction
@@ -3340,11 +3364,14 @@ public:
     virtual const char * params() const;
 
 public:
-    // 1.5.0.0 (ge) | added for arg list cleanup
+    // 1.5.0.0 (ge) added for arg list cleanup
     Chuck_Func * m_func_ref;
     // when applicable, this flag indicates whether this/type is at the
     // beginning or at the end of the argument block on the reg stack
     ck_Func_Call_Arg_Convention m_arg_convention;
+    // 1.5.4.2 (ge) added only for special primitives that have "member" functions (vec2/3/4)
+    // #special-primitive-member-func-from-literal
+    t_CKBOOL m_special_primitive_cleanup_this;
 };
 
 
@@ -4391,16 +4418,17 @@ protected:
 
 //-----------------------------------------------------------------------------
 // name: struct Chuck_Instr_Op_string
-// desc: ...
+// desc: // desc: various string ops
+//       (no longer used; string ops now handled more properly by op overloads)
 //-----------------------------------------------------------------------------
-struct Chuck_Instr_Op_string : public Chuck_Instr_Unary_Op
-{
-public:
-    Chuck_Instr_Op_string( t_CKUINT v ) { this->set( v ); }
-
-public:
-    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
-};
+//struct Chuck_Instr_Op_string : public Chuck_Instr_Unary_Op
+//{
+//public:
+//    Chuck_Instr_Op_string( t_CKUINT v ) { this->set( v ); }
+//
+//public:
+//    virtual void execute( Chuck_VM * vm, Chuck_VM_Shred * shred );
+//};
 
 
 

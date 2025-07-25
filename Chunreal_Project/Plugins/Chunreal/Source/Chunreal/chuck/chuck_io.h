@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -607,7 +608,19 @@ CK_DLL_MFUN( HidOut_num );
 CK_DLL_MFUN( HidOut_name );
 CK_DLL_MFUN( HidOut_printerr );
 CK_DLL_MFUN( HidOut_send );
-#endif // __DISABLE_HID__
+
+CK_DLL_CTOR( MouseCursor_ctor );
+CK_DLL_DTOR( MouseCursor_dtor );
+CK_DLL_SFUN( MouseCursor_scaled );
+CK_DLL_SFUN( MouseCursor_abs );
+CK_DLL_SFUN( MouseCursor_abs_x );
+CK_DLL_SFUN( MouseCursor_abs_y );
+
+CK_DLL_CTOR( Mousor_ctor );
+CK_DLL_DTOR( Mousor_dtor );
+
+#endif // __DISABLE_HID__1
+
 
 
 

@@ -131,7 +131,7 @@ int yywrap( void )
 // new line
 void a_newline()
 {
-    EM_newline( yylloc.last_column );
+    EM_newline( yylloc.last_column, yylloc.last_line );
 }
 
 // manually advance
@@ -198,6 +198,12 @@ long htol( c_str str )
     }
 
     return n;
+}
+
+// for debugging (string literals, especially multi-line strings)
+void testLineNumPrint()
+{
+    fprintf( stderr, "TEST: %ld %i\n", EM_lineNum, yylloc.last_line );
 }
 
 
@@ -373,6 +379,8 @@ global                  { adjust(); return GLOBAL; }
 "@operator"             { adjust(); return AT_OP; }
 "@construct"            { adjust(); return AT_CTOR; }
 "@destruct"             { adjust(); return AT_DTOR; }
+"@import"               { adjust(); return AT_IMPORT; }
+"@doc"                  { adjust(); return AT_DOC; }
 "->"                    { adjust(); return ARROW_RIGHT; }
 "<-"                    { adjust(); return ARROW_LEFT; }
 "-->"                   { adjust(); return GRUCK_RIGHT; }

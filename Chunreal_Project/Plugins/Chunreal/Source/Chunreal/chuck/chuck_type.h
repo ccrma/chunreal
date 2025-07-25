@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -38,7 +39,6 @@
 #include "chuck_oo.h"
 #include "chuck_dl.h"
 #include "chuck_errmsg.h"
-
 
 
 //-----------------------------------------------------------------------------
@@ -75,11 +75,17 @@ typedef enum { te_globalTypeNone,
 
 //-----------------------------------------------------------------------------
 // name: enum te_HowMuch
-// desc: how much to scan/type check
+// desc: how much to scan/type-check/emit
 //-----------------------------------------------------------------------------
 typedef enum {
-    te_do_all = 0, te_do_classes_only, te_do_no_classes
+    te_do_all = 0,
+    te_do_import_only, // attend only to things to be imported | 1.5.4.0 (ge)
+    te_skip_import, // do everything except things to be imported | 1.5.4.0 (ge)
 } te_HowMuch;
+
+// function to if a function matches a particular criteria
+t_CKBOOL howMuch_criteria_match( te_HowMuch criteria, a_Func_Def func_def );
+t_CKBOOL howMuch_criteria_match( te_HowMuch criteria, a_Class_Def class_def );
 
 
 
@@ -169,11 +175,15 @@ public:
     // -1 base, 0 current, 1 climb
     T lookup( S_Symbol xid, t_CKINT climb = 1 )
     {
-        Chuck_VM_Object * val = NULL; assert( scope.size() != 0 );
+        Chuck_VM_Object * val = NULL;
+        assert( scope.size() != 0 );
 
         if( climb == 0 )
         {
-            val = (*scope.back())[xid];
+            // find key
+            std::map<S_Symbol, Chuck_VM_Object *> * b = scope.back();
+            std::map<S_Symbol, Chuck_VM_Object *>::iterator it = b->find(xid);
+            val = it != b->end() ? it->second : NULL;
             // look in commit buffer if the back is the front
             if( !val && scope.back() == scope.front()
                 && (commit_map.find(xid) != commit_map.end()) )
@@ -183,7 +193,10 @@ public:
         {
             for( t_CKUINT i = scope.size(); i > 0; i-- )
             {
-                val = (*scope[i - 1])[xid];
+                // find key
+                std::map<S_Symbol, Chuck_VM_Object *> * b = scope[i-1];
+                std::map<S_Symbol, Chuck_VM_Object *>::iterator it = b->find(xid);
+                val = it != b->end() ? it->second : NULL;
                 if( val ) break;
             }
 
@@ -193,7 +206,10 @@ public:
         }
         else
         {
-            val = (*scope.front())[xid];
+            // look front
+            std::map<S_Symbol, Chuck_VM_Object *> * b = scope.front();
+            std::map<S_Symbol, Chuck_VM_Object *>::iterator it = b->find(xid);
+            val = it != b->end() ? it->second : NULL;
             // look in commit buffer
             if( !val && (commit_map.find(xid) != commit_map.end()) )
                 val = commit_map[xid];
@@ -210,23 +226,23 @@ public:
     }
 
     // get list of top level
-    void get_toplevel( std::vector<Chuck_VM_Object *> & out, t_CKBOOL includeMangled = TRUE )
+    void get_toplevel( std::vector<Chuck_VM_Object *> & out, t_CKBOOL includeMangled = TRUE ) const
     {
         // pass on
         get_level( 0, out, includeMangled );
     }
 
     // get list of top level
-    void get_level( int level, std::vector<Chuck_VM_Object *> & out, t_CKBOOL includeMangled = TRUE )
+    void get_level( int level, std::vector<Chuck_VM_Object *> & out, t_CKBOOL includeMangled = TRUE ) const
     {
         assert( scope.size() > level );
         // clear the out
         out.clear();
 
         // our iterator
-        std::map<S_Symbol, Chuck_VM_Object *>::iterator iter;
+        std::map<S_Symbol, Chuck_VM_Object *>::const_iterator iter;
         // get func map
-        std::map<S_Symbol, Chuck_VM_Object *> * m = NULL;
+        std::map<S_Symbol, Chuck_VM_Object *> const * m = NULL;
 
         // 1.5.0.5 (ge) modified: actually use level
         m = scope[level];
@@ -271,10 +287,12 @@ struct Chuck_Type;
 struct Chuck_Value;
 struct Chuck_Func;
 struct Chuck_Multi;
+struct Chuck_Code; // 1.5.4.3
 struct Chuck_VM;
 struct Chuck_VM_Code;
 struct Chuck_VM_MFunInvoker;
 struct Chuck_VM_DtorInvoker;
+struct Chuck_VM_SInitInvoker;
 struct Chuck_DLL;
 // operator loading structs | 1.5.1.5
 struct Chuck_Op_Registry;
@@ -298,9 +316,13 @@ struct Chuck_Namespace : public Chuck_VM_Object
     // virtual table
     Chuck_VTable obj_v_table;
     // static data segment
-    t_CKBYTE * class_data;
+    t_CKBYTE * static_data;
     // static data segment size
-    t_CKUINT class_data_size;
+    t_CKUINT static_data_size;
+    // has static init been run?
+    t_CKBOOL static_is_init;
+    // static initializer (to be run once per class)
+    Chuck_VM_SInitInvoker * static_invoker;
 
     // name
     std::string name;
@@ -318,6 +340,11 @@ struct Chuck_Namespace : public Chuck_VM_Object
     // destructor
     virtual ~Chuck_Namespace();
 
+    // add type to name space
+    void add_type( const std::string & xid, Chuck_Type * target );
+    void add_value( const std::string & xid, Chuck_Value * target );
+    void add_func( const std::string & xid, Chuck_Func * target );
+
     // look up value
     Chuck_Value * lookup_value( const std::string & name, t_CKINT climb = 1, t_CKBOOL stayWithinClassDef = FALSE );
     Chuck_Value * lookup_value( S_Symbol name, t_CKINT climb = 1, t_CKBOOL stayWithinClassDef = FALSE );
@@ -330,13 +357,13 @@ struct Chuck_Namespace : public Chuck_VM_Object
 
     // commit the maps
     void commit() {
-        EM_log( CK_LOG_FINER, "committing namespace: '%s'...", name.c_str() );
+        EM_log( CK_LOG_DEBUG, "namespace: '%s' committing...", name.c_str() );
         type.commit(); value.commit(); func.commit();
     }
 
     // rollback the maps
     void rollback() {
-        EM_log( CK_LOG_FINER, "rolling back namespace: '%s'...", name.c_str() );
+        EM_log( CK_LOG_DEBUG, "namespace: '%s' rolling back...", name.c_str() );
         type.rollback(); value.rollback(); func.rollback();
     }
 
@@ -346,6 +373,13 @@ struct Chuck_Namespace : public Chuck_VM_Object
     void get_values( std::vector<Chuck_Value *> & out );
     // get top level functions
     void get_funcs( std::vector<Chuck_Func *> & out, t_CKBOOL includeManged = TRUE );
+
+    // check if this namespace contains a particular type at top scope level | 1.5.4.4 (ge) added
+    t_CKBOOL contains( Chuck_Type * target ) const;
+    // check if this namespace contains a particular value at top scope level | 1.5.4.4 (ge) added
+    t_CKBOOL contains( Chuck_Value * target ) const;
+    // check if this namespace contains a particular function at top scope level | 1.5.4.4 (ge) added
+    t_CKBOOL contains( Chuck_Func * target ) const;
 };
 
 
@@ -366,15 +400,15 @@ struct Chuck_Context : public Chuck_VM_Object
     // error - means to free nspc too
     t_CKBOOL has_error;
 
-    // AST parse tree (does not persist past context unloading)
+    // AST (does not persist past context unloading)
     a_Program parse_tree;
-    // AST public class def if any (does not persist past context unloading)
-    a_Class_Def public_class_def;
+    // ckdoc pending @doc statement for this context | 1.5.4.5 (ge) added
+    a_Stmt_Doc stmt_doc;
 
     // progress
-    enum { P_NONE = 0, P_CLASSES_ONLY, P_ALL_DONE };
+    enum ContextProgress { P_NONE = 0, P_IMPORTING, P_IMPORTED, P_ALL_DONE };
     // progress in scan / type check / emit
-    t_CKUINT progress;
+    ContextProgress progress;
 
     // things to release with the context
     std::vector<Chuck_VM_Object *> new_types;
@@ -389,9 +423,9 @@ public:
 
 public:
     // constructor
-    Chuck_Context() { parse_tree = NULL; nspc = new Chuck_Namespace;
-                      public_class_def = NULL; has_error = FALSE;
-                      progress = P_NONE; }
+    Chuck_Context () {
+        parse_tree = NULL; stmt_doc = NULL;  nspc = new Chuck_Namespace;
+                      has_error = FALSE; progress = P_NONE; }
     // destructor
     virtual ~Chuck_Context();
 
@@ -647,6 +681,65 @@ public:
 
 
 //-----------------------------------------------------------------------------
+// name: struct Chuck_ArrayTypeKey
+// desc: a 4-tuple key | 1.5.4.0 (ge & nick) added
+//-----------------------------------------------------------------------------
+struct Chuck_ArrayTypeKey
+{
+    Chuck_Type * array_parent;
+    t_CKUINT depth;
+    Chuck_Type * base_type;
+
+    // constructor
+    Chuck_ArrayTypeKey( Chuck_Type * p, t_CKUINT d, Chuck_Type * t )
+    : array_parent(p), depth(d), base_type(t) { }
+
+    // comparator
+    bool operator<( const Chuck_ArrayTypeKey & rhs ) const;
+};
+struct Chuck_ArrayTypeKeyCmp
+{
+    // operator overload (for map)
+    bool operator()( const Chuck_ArrayTypeKey & a, const Chuck_ArrayTypeKey & b ) const;
+};
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: struct Chuck_ArrayTypeCache
+// desc: cache for array types | 1.5.4.0 (ge & nick & andrew) added
+//-----------------------------------------------------------------------------
+struct Chuck_ArrayTypeCache
+{
+public:
+    // constructor
+    Chuck_ArrayTypeCache() : m_enabled(FALSE) { }
+    // destructor
+    virtual ~Chuck_ArrayTypeCache() { clear(); }
+    // clear it
+    void clear();
+    // enable or disable
+    void enable( t_CKBOOL yesOrNo ) { m_enabled = yesOrNo; }
+    // get whether enabled
+    t_CKBOOL isEnabled() const { return m_enabled; }
+    // lookup an array type; if not already cached, create and insert
+    Chuck_Type * getOrCreate( Chuck_Env * env,
+                              Chuck_Type * array_parent,
+                              t_CKUINT depth,
+                              Chuck_Type * base_type );
+
+protected:
+    // the cache
+    std::map<Chuck_ArrayTypeKey, Chuck_Type *, Chuck_ArrayTypeKeyCmp> cache;
+    // is the cache currently enabled?
+    t_CKBOOL m_enabled;
+};
+
+
+
+
+//-----------------------------------------------------------------------------
 // name: struct Chuck_Env
 // desc: chuck type environment; one per VM instance
 //-----------------------------------------------------------------------------
@@ -674,12 +767,16 @@ public:
     t_CKBOOL is_global();
     // global namespace
     Chuck_Namespace * global();
-    // user namespace, if there is one (if not, return global)
+    // user namespace
     Chuck_Namespace * user();
     // get namespace at top of stack
     Chuck_Namespace * nspc_top();
     // get type at top of type stack
     Chuck_Type * class_top();
+    // commit namespaces
+    void commit_namespaces();
+    // rollback namespace
+    void rollback_namespaces();
 
 public:
     // REFACTOR-2017: carrier and accessors
@@ -688,16 +785,32 @@ public:
     Chuck_VM * vm() const { return m_carrier ? m_carrier->vm : NULL; }
     Chuck_Compiler * compiler() const { return m_carrier ? m_carrier->compiler : NULL; }
 
+public:
+    // array type cache
+    Chuck_ArrayTypeCache * arrayTypeCache() { return &array_types; }
+    // retrieve array type based on parameters | 1.5.4.0 (ge, nick, andrew) added
+    Chuck_Type * get_array_type( t_CKUINT depth, Chuck_Type * base_type );
+    Chuck_Type * get_array_type( Chuck_Type * array_parent,
+                                 t_CKUINT depth, Chuck_Type * base_type /*,
+                                 Chuck_Namespace * owner_nspc */ );
+public:
+    // helper: are we currently in a stmt that has been marked for static init?
+    // 1.5.4.4 (ge) added #2024-static-init
+    t_CKBOOL in_static_stmt() { return stmt_stack.size() && stmt_stack.back()->hasStaticDecl; }
+
 protected:
     Chuck_Carrier * m_carrier;
 
 protected:
-    // global namespace
-    Chuck_Namespace * global_nspc;
     // global context
     Chuck_Context global_context;
+    // global namespace
+    Chuck_Namespace * global_nspc;
     // user-global namespace
     Chuck_Namespace * user_nspc;
+    // cache of various array types, which are created as needed by the type system
+    // e.g., int[] or float[][] or UGen[]; this cache reuses
+    Chuck_ArrayTypeCache array_types;
 
 public:
     // namespace stack
@@ -867,7 +980,8 @@ public:
     void clear();
     // look for a dependency that occurs AFTER a particular code position
     // this function crawls the graph, taking care in the event of cycles
-    const Chuck_Value_Dependency * locate( t_CKUINT pos, Chuck_Type * fromClassDef = NULL );
+    const Chuck_Value_Dependency * locate( t_CKUINT pos,
+                                           Chuck_Type * fromClassDef = NULL );
 
 public:
     // constructor
@@ -906,11 +1020,11 @@ struct Chuck_Type : public Chuck_Object
     // type name (FYI use this->str() for full name including []s for array)
     std::string base_name;
     // type parent (could be NULL)
-    Chuck_Type * parent;
+    Chuck_Type * parent_type;
     // size (in bytes)
     t_CKUINT size;
     // owner of the type
-    Chuck_Namespace * owner;
+    // Chuck_Namespace * owner;
     // array type
     union { Chuck_Type * array_type; Chuck_Type * actual_type; };
     // array size (equals 0 means not array, else dimension of array)
@@ -918,11 +1032,13 @@ struct Chuck_Type : public Chuck_Object
     // object size (size in memory)
     t_CKUINT obj_size;
     // type info
-    Chuck_Namespace * info;
+    Chuck_Namespace * nspc;
     // func info
-    Chuck_Func * func;
+    Chuck_Func * func_bridge;
     // ugen
     Chuck_UGen_Info * ugen_info;
+    // is public class | 1.5.4.0 (ge) added
+    t_CKBOOL is_public;
     // copy
     t_CKBOOL is_copy;
     // defined
@@ -947,9 +1063,15 @@ struct Chuck_Type : public Chuck_Object
     // offsets of mvars that are Objects
     std::vector<t_CKUINT> obj_mvars_offsets;
 
+public:
+    // current static init code for emitter | 1.5.4.3 (ge) added #2024-static-init
+    Chuck_Code * static_code_emit;
+
+public:
     // (within-context, e.g., a ck file) dependency tracking | 1.5.0.8
     Chuck_Value_Dependency_Graph depends;
 
+public:
     // documentation
     std::string doc;
     // example files
@@ -1057,8 +1179,8 @@ struct Chuck_Value : public Chuck_VM_Object
     void * addr;
     // const?
     t_CKBOOL is_const;
-    // member?
-    t_CKBOOL is_member;
+    // instanced (non-static) member?
+    t_CKBOOL is_instance_member;
     // static?
     t_CKBOOL is_static; // do something
     // is context-global?
@@ -1102,7 +1224,10 @@ public:
 // name: struct Chuck_Func
 // desc: function definition
 //-----------------------------------------------------------------------------
-struct Chuck_Func : public Chuck_VM_Object
+// 1.5.4.3 (ge) Chuck_VM_Object => Chuck_Object
+// since functions are emitted as values #2024-func-call-update
+//-----------------------------------------------------------------------------
+struct Chuck_Func : public Chuck_Object
 {
     // name (actual in VM name, e.g., "dump@0@Object")
     std::string name;
@@ -1316,10 +1441,13 @@ t_CKBOOL type_engine_check_primitive( Chuck_Env * env, Chuck_Type * type );
 t_CKBOOL type_engine_check_const( Chuck_Env * env, a_Exp e, int pos ); // TODO
 t_CKBOOL type_engine_compat_func( a_Func_Def lhs, a_Func_Def rhs, int pos, std::string & err, t_CKBOOL print = TRUE );
 t_CKBOOL type_engine_get_deprecate( Chuck_Env * env, const std::string & from, std::string & to );
-t_CKBOOL type_engine_is_base_static( Chuck_Env * env, Chuck_Type * baseType ); // 1.5.0.0 (ge) added
+t_CKBOOL type_engine_is_base_type_static( Chuck_Env * env, Chuck_Type * baseType ); // 1.5.0.0 (ge) added
+t_CKBOOL type_engine_is_base_exp_static( Chuck_Env * env, a_Exp_Dot_Member exp ); // 1.5.4.3 (ge) added #2024-static-init
+t_CKBOOL type_engine_binary_is_func_call( Chuck_Env * env, ae_Operator op, a_Exp lhs, a_Exp rhs ); // 1.5.4.3 (ge) added
 Chuck_Type  * type_engine_find_common_anc( Chuck_Type * lhs, Chuck_Type * rhs );
 Chuck_Type  * type_engine_find_type( Chuck_Env * env, a_Id_List path );
-Chuck_Type  * type_engine_find_type( Chuck_Env * env, const std::string & name ); // 1.5.0.0 (ge) added
+// 1.5.0.0 (ge) added | 1.5.4.5 (ge & alex) added expandToUser=TRUE optional argument
+Chuck_Type  * type_engine_find_type( Chuck_Env * env, const std::string & name, t_CKBOOL expandToUser = TRUE );
 Chuck_Value * type_engine_find_value( Chuck_Type * type, const std::string & xid );
 Chuck_Value * type_engine_find_value( Chuck_Type * type, S_Symbol xid );
 Chuck_Value * type_engine_find_value( Chuck_Env * env, const std::string & xid, t_CKBOOL climb, t_CKBOOL stayWithClassDef = FALSE, int linepos = 0 );
@@ -1327,7 +1455,7 @@ Chuck_Namespace * type_engine_find_nspc( Chuck_Env * env, a_Id_List path );
 // convert a vector of type names to a vector of Types | 1.5.0.0 (ge) added
 void type_engine_names2types( Chuck_Env * env, const std::vector<std::string> & typeNames, std::vector<Chuck_Type *> & types );
 // check and process auto types | 1.5.0.8 (ge) added
-t_CKBOOL type_engine_infer_auto( Chuck_Env * env, a_Exp_Decl decl, Chuck_Type * type );
+t_CKBOOL type_engine_infer_auto( Chuck_Env * env, a_Exp_Decl decl, Chuck_Type * base_type, t_CKUINT array_depth );
 // initialize operator overload subsystem | 1.5.1.5 (ge) added
 t_CKBOOL type_engine_init_op_overload( Chuck_Env * env );
 // verify an operator overload | 1.5.1.5 (ge) added
@@ -1346,13 +1474,6 @@ t_CKBOOL type_engine_has_implicit_def_ctor( Chuck_Type * type );
 t_CKUINT type_engine_next_offset( t_CKUINT current_offset, Chuck_Type * type );
 // array verify
 t_CKBOOL verify_array( a_Array_Sub array );
-// make array type
-Chuck_Type * new_array_type( Chuck_Env * env, Chuck_Type * array_parent,
-                             t_CKUINT depth, Chuck_Type * base_type,
-                             Chuck_Namespace * owner_nspc );
-// make type | 1.4.1.1 (nshaheed) added
-Chuck_Type * new_array_element_type( Chuck_Env * env, Chuck_Type * base_type,
-                                     t_CKUINT depth, Chuck_Namespace * owner_nspc);
 
 
 //-----------------------------------------------------------------------------

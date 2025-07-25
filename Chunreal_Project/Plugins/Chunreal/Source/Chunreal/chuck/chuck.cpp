@@ -1,26 +1,27 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
- -----------------------------------------------------------------------------*/
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
+-----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
 // file: chuck.cpp
@@ -87,23 +88,17 @@
 #define CHUCK_PARAM_AUTO_DEPEND_DEFAULT            "0"
 #define CHUCK_PARAM_DEPRECATE_LEVEL_DEFAULT        "1"
 #define CHUCK_PARAM_WORKING_DIRECTORY_DEFAULT      ""
-#define CHUCK_PARAM_CHUGIN_ENABLE_DEFAULT          "1"
 #define CHUCK_PARAM_IS_REALTIME_AUDIO_HINT_DEFAULT "0"
-#ifndef __PLATFORM_WINDOWS__
-// 1.4.1.0 (ge) changed to ""; was "/usr/local/lib/chuck"
-// redundant with g_default_chugin_path, which already contains
-#define CHUCK_PARAM_CHUGIN_DIRECTORY_DEFAULT       ""
-#else // __PLATFORM_WINDOWS__
-// 1.4.1.0 (ge) changed to ""; "C:\\Program Files\\ChucK\\chugins"
-// redundant with g_default_chugin_path, which already contains
-#define CHUCK_PARAM_CHUGIN_DIRECTORY_DEFAULT       ""
-#endif // __PLATFORM_WINDOWS__
-#define CHUCK_PARAM_USER_CHUGINS_DEFAULT        std::list<std::string>()
-#define CHUCK_PARAM_USER_CHUGIN_DIRECTORIES_DEFAULT std::list<std::string>()
 #define CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR_DEFAULT "1"
 #define CHUCK_PARAM_TTY_COLOR_DEFAULT              "0"
 #define CHUCK_PARAM_TTY_WIDTH_HINT_DEFAULT         "80"
-
+// chugin-relate param defaults
+#define CHUCK_PARAM_CHUGIN_ENABLE_DEFAULT          "1"
+#define CHUCK_PARAM_USER_CHUGINS_DEFAULT           std::list<std::string>()
+// import search paths defaults
+#define CHUCK_PARAM_IMPORT_PATH_SYSTEM_DEFAULT     std::list<std::string>()
+#define CHUCK_PARAM_IMPORT_PATH_PACKAGES_DEFAULT   std::list<std::string>()
+#define CHUCK_PARAM_IMPORT_PATH_USER_DEFAULT       std::list<std::string>()
 
 
 
@@ -204,7 +199,6 @@ void ChucK::initDefaultParams()
     initParam( CHUCK_PARAM_AUTO_DEPEND, CHUCK_PARAM_AUTO_DEPEND_DEFAULT, ck_param_int );
     initParam( CHUCK_PARAM_DEPRECATE_LEVEL, CHUCK_PARAM_DEPRECATE_LEVEL_DEFAULT, ck_param_int );
     initParam( CHUCK_PARAM_WORKING_DIRECTORY, CHUCK_PARAM_WORKING_DIRECTORY_DEFAULT, ck_param_string );
-    initParam( CHUCK_PARAM_CHUGIN_DIRECTORY, CHUCK_PARAM_CHUGIN_DIRECTORY_DEFAULT, ck_param_string );
     initParam( CHUCK_PARAM_CHUGIN_ENABLE, CHUCK_PARAM_CHUGIN_ENABLE_DEFAULT, ck_param_int );
     initParam( CHUCK_PARAM_IS_REALTIME_AUDIO_HINT, CHUCK_PARAM_IS_REALTIME_AUDIO_HINT_DEFAULT, ck_param_int );
     initParam( CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR, CHUCK_PARAM_COMPILER_HIGHLIGHT_ON_ERROR_DEFAULT, ck_param_int );
@@ -212,10 +206,15 @@ void ChucK::initDefaultParams()
     initParam( CHUCK_PARAM_TTY_WIDTH_HINT, CHUCK_PARAM_TTY_WIDTH_HINT_DEFAULT, ck_param_int );
 
     // initialize list params manually (take care to use tolower())
-    m_listParams[tolower(CHUCK_PARAM_USER_CHUGINS)]             = CHUCK_PARAM_USER_CHUGINS_DEFAULT;
-    m_param_types[tolower(CHUCK_PARAM_USER_CHUGINS)]            = ck_param_string_list;
-    m_listParams[tolower(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES)]  = CHUCK_PARAM_USER_CHUGIN_DIRECTORIES_DEFAULT;
-    m_param_types[tolower(CHUCK_PARAM_USER_CHUGIN_DIRECTORIES)] = ck_param_string_list;
+    m_listParams[tolower(CHUCK_PARAM_USER_CHUGINS)]      = CHUCK_PARAM_USER_CHUGINS_DEFAULT;
+    m_param_types[tolower(CHUCK_PARAM_USER_CHUGINS)]     = ck_param_string_list;
+    // import search paths
+    m_listParams[tolower(CHUCK_PARAM_IMPORT_PATH_SYSTEM)]    = CHUCK_PARAM_IMPORT_PATH_SYSTEM_DEFAULT;
+    m_param_types[tolower(CHUCK_PARAM_IMPORT_PATH_SYSTEM)]     = ck_param_string_list;
+    m_listParams[tolower(CHUCK_PARAM_IMPORT_PATH_PACKAGES)]    = CHUCK_PARAM_IMPORT_PATH_PACKAGES_DEFAULT;
+    m_param_types[tolower(CHUCK_PARAM_IMPORT_PATH_PACKAGES)]     = ck_param_string_list;
+    m_listParams[tolower(CHUCK_PARAM_IMPORT_PATH_USER)]    = CHUCK_PARAM_IMPORT_PATH_USER_DEFAULT;
+    m_param_types[tolower(CHUCK_PARAM_IMPORT_PATH_USER)]     = ck_param_string_list;
 }
 
 
@@ -274,6 +273,18 @@ t_CKBOOL ChucK::matchParam( const std::string & lhs, const std::string & rhs )
 void ChucK::enactParam( const std::string & name, t_CKINT value )
 {
     // check and set
+    if( matchParam(name,CHUCK_PARAM_SAMPLE_RATE) )
+    {
+        // check
+        if( value <= 0 )
+        {
+            EM_error2( 0, "(warning) attempt to set CHUCK_PARAM_SAMPLE_RATE to invalid value '%d'; sample rate unchanged...", value );
+            return;
+        }
+        // update VM to new sample rate
+        // (NOTE: this could be pre-initialization, so need to check VM pointer)
+        if( vm() ) vm()->update_srate( value );
+    }
     if( matchParam(name,CHUCK_PARAM_TTY_COLOR) )
     {
         // set the global override switch
@@ -327,12 +338,18 @@ t_CKBOOL ChucK::setParamFloat( const std::string & name, t_CKFLOAT value )
     std::string key = tolower(name);
     // check read-only
     if( readOnlyParam(key) ) return FALSE;
-    // check
+    // check param type
     if( m_params.count( key ) > 0 && m_param_types[key] == ck_param_float )
     {
         // insert into map
         m_params[key] = ck_ftoa( value, 32 );
         return TRUE;
+    }
+    // if param is an int, e.g., sample rate | 1.5.4.2 (ge)
+    else if( m_params.count( key ) > 0 && m_param_types[key] == ck_param_int )
+    {
+        // round and redirect to setParam() as int
+        return setParam( name, (t_CKINT)(value+.05) );
     }
     else
     {
@@ -429,6 +446,11 @@ t_CKFLOAT ChucK::getParamFloat( const std::string & name )
     {
         std::istringstream s( m_params[key] );
         s >> result;
+    }
+    else if( m_params.count( key ) > 0 && m_param_types[key] == ck_param_int )
+    {
+        // get int and return as float | 1.5.4.2 (ge)
+        return (t_CKFLOAT)getParamInt(name);
     }
     return result;
 }
@@ -584,7 +606,7 @@ t_CKBOOL ChucK::initCompiler()
     // set dump flag
     m_carrier->compiler->emitter->dump = dump;
     // set auto depend flag (for type checker) | currently must be FALSE
-    m_carrier->compiler->set_auto_depend( auto_depend );
+    m_carrier->compiler->setAutoDepend( auto_depend );
     // set deprecation level
     m_carrier->env->deprecate_level = deprecate;
 
@@ -688,12 +710,12 @@ t_CKBOOL ChucK::initCompiler()
 
 //-----------------------------------------------------------------------------
 // name: initChugin()
-// desc: initialize chugin system
+// desc: initialize chugin system (auto-load system chugins)
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::initChugins()
 {
-    Chuck_VM_Code * code = NULL;
-    Chuck_VM_Shred * shred = NULL;
+    // Chuck_VM_Code * code = NULL;
+    // Chuck_VM_Shred * shred = NULL;
 
     // print whether chugins enabled
     EM_log( CK_LOG_SYSTEM, "chugin system: %s", getParamInt( CHUCK_PARAM_CHUGIN_ENABLE ) ? "ON" : "OFF" );
@@ -701,14 +723,8 @@ t_CKBOOL ChucK::initChugins()
     // whether or not chug should be enabled (added 1.3.0.0)
     if( getParamInt( CHUCK_PARAM_CHUGIN_ENABLE ) != 0 )
     {
-        // chugin dur
-        std::string chuginDir = getParamString( CHUCK_PARAM_CHUGIN_DIRECTORY );
         // list of search pathes (added 1.3.0.0)
-        std::list<std::string> dl_search_path = getParamStringList( CHUCK_PARAM_USER_CHUGIN_DIRECTORIES );
-        if( chuginDir != std::string("") )
-        {
-            dl_search_path.push_back( chuginDir );
-        }
+        std::list<std::string> dl_search_path = getParamStringList( CHUCK_PARAM_IMPORT_PATH_SYSTEM );
         // list of individually named chug-ins (added 1.3.0.0)
         std::list<std::string> named_dls = getParamStringList( CHUCK_PARAM_USER_CHUGINS );
 
@@ -723,8 +739,6 @@ t_CKBOOL ChucK::initChugins()
         //---------------------------------------------------------------------
         // log
         EM_log( CK_LOG_SYSTEM, "loading chugins..." );
-        // push indent level
-        // EM_pushlog();
 
         // chugin extension
         std::string extension = ".chug";
@@ -739,9 +753,9 @@ t_CKBOOL ChucK::initChugins()
             goto error;
         }
 
-        // pop log
-        // EM_poplog();
-
+        //---------------------------------------------------------------------
+        // 1.5.4.0 | .ck files are no longer auto compiled; need to be @import
+        /*---------------------------------------------------------------------
         //---------------------------------------------------------------------
         // set origin hint | 1.5.0.0 (ge) added
         m_carrier->compiler->m_originHint = ckte_origin_IMPORT;
@@ -763,11 +777,9 @@ t_CKBOOL ChucK::initChugins()
             // push indent
             EM_pushlog();
 
-            // SPENCERTODO: what to do for full path
-            std::string full_path = filename;
-
             // parse, type-check, and emit
-            if( compiler()->go( filename, full_path ) )
+            // NOTE: filename here should already be a fullpath
+            if( compiler()->compileFile( filename ) )
             {
                 // preserve op overloads | 1.5.1.5
                 compiler()->env()->op_registry.preserve();
@@ -794,17 +806,13 @@ t_CKBOOL ChucK::initChugins()
 
         // pop log
         EM_poplog();
-
-        return true;
+        ---------------------------------------------------------------------*/
     }
     else
     {
         // log | 1.4.1.0 (ge) commented out; printing earlier
         EM_log( CK_LOG_SYSTEM, "chugin system: OFF" );
     }
-
-    // load user namespace
-    m_carrier->env->load_user_namespace();
 
     // unset origin hint | 1.5.0.0 (ge) added
     m_carrier->compiler->m_originHint = ckte_origin_UNKNOWN;
@@ -832,6 +840,12 @@ void ChucK::probeChugins()
     std::list<std::string> ck_libs_to_preload;
     // host verison
     std::ostringstream ostr; ostr << CK_DLL_VERSION_MAJOR << "." << CK_DLL_VERSION_MINOR;
+    // chugin extension
+    std::string extension = ".chug";
+#ifdef __EMSCRIPTEN__
+    // webchugins have extension ".chug.wasm" | 1.5.2.0 (terryzfeng) added
+    extension = "chug.wasm";
+#endif
 
     // print whether chugins enabled
     EM_log( CK_LOG_SYSTEM, "chugin system: %s", getParamInt( CHUCK_PARAM_CHUGIN_ENABLE ) ? "ON" : "OFF" );
@@ -847,15 +861,22 @@ void ChucK::probeChugins()
     // pop
     EM_poplog();
 
-    // chugin dur
-    std::string chuginDir = getParamString( CHUCK_PARAM_CHUGIN_DIRECTORY );
-    // list of search pathes (added 1.3.0.0)
-    std::list<std::string> dl_search_path = getParamStringList( CHUCK_PARAM_USER_CHUGIN_DIRECTORIES );
-    if( chuginDir != "" )
+    // list of search pathes (added 1.3.0.0; revisited 1.5.4.0)
+    // start with system paths (auto-load chugins; .ck files must be @imported)
+    std::list<std::string> dl_search_path = getParamStringList( CHUCK_PARAM_IMPORT_PATH_SYSTEM );
+    // next, process packages paths (e.g., as managed by ChuMP; no auto-load; all must be @imported)
+    std::list<std::string> packages_paths = getParamStringList( CHUCK_PARAM_IMPORT_PATH_PACKAGES);
+    // append packages paths to search paths
+    append_path_list( dl_search_path, packages_paths );
+    // iterate over packages paths | 1.5.4.1 (ge & nshaheed) added
+    for( std::list<std::string>::iterator it = packages_paths.begin(); it != packages_paths.end(); it++ )
     {
-        // add to search path
-        dl_search_path.push_back( chuginDir );
+        // scan for subdirs, but only one-level in each packages path
+        scan_for_dirs_in_directory( *it, extension, FALSE, dl_search_path );
     }
+    // finally, add user-managed search paths (no auto-load; all must be @imported)
+    append_path_list( dl_search_path, getParamStringList( CHUCK_PARAM_IMPORT_PATH_USER) );
+
     // list of individually named chug-ins (added 1.3.0.0)
     std::list<std::string> named_dls = getParamStringList( CHUCK_PARAM_USER_CHUGINS );
 
@@ -864,15 +885,8 @@ void ChucK::probeChugins()
     // push indent level
     // EM_pushlog();
 
-    // chugin extension
-    std::string extension = ".chug";
-#ifdef __EMSCRIPTEN__
-    // webchugins have extension ".chug.wasm" | 1.5.2.0 (terryzfeng) added
-    extension = "chug.wasm";
-#endif
-
-    // load external libs
-    if( !Chuck_Compiler::probe_external_modules( extension.c_str(), dl_search_path, named_dls, TRUE, ck_libs_to_preload ) )
+    // load external libs; recurse changed to FALSE in 1.5.4.0 (ge)
+    if( !Chuck_Compiler::probe_external_modules( extension.c_str(), dl_search_path, named_dls, FALSE, ck_libs_to_preload ) )
     {
         // warning
         EM_log( CK_LOG_SYSTEM, "error probing chugins..." );
@@ -880,8 +894,11 @@ void ChucK::probeChugins()
     // pop log
     // EM_poplog();
 
+    //-------------------------------------------------------------------------
+    // 1.5.4.0 | .ck files are no longer auto compiled; need to be @import
+    //-------------------------------------------------------------------------
     // log
-    EM_log( CK_LOG_SYSTEM, "probing auto-load chuck files (.ck)..." );
+    EM_log( CK_LOG_SYSTEM, "probing chuck files (.ck)..." );
     EM_pushlog();
 
     // iterate over list of ck files that the compiler found
@@ -891,12 +908,13 @@ void ChucK::probeChugins()
         // the filename
         std::string filename = *j;
         // log
-        EM_log( CK_LOG_SYSTEM, "[%s] '%s'...", TC::green("FOUND",true).c_str(), filename.c_str() );
+        logCKFileFound( filename, CK_LOG_SYSTEM );
+        // EM_log( CK_LOG_SYSTEM, "[%s] '%s'...", TC::green("FOUND",true).c_str(), filename.c_str() );
     }
 
     // check
     if( ck_libs_to_preload.size() == 0 )
-        EM_log( CK_LOG_INFO, "(no auto-load chuck files found)" );
+        EM_log( CK_LOG_INFO, "(no chuck files found)" );
 
     // pop log
     EM_poplog();
@@ -1127,7 +1145,7 @@ t_CKBOOL ChucK::compileFile( const std::string & path,
     //-------------------------------------------------------------------------
 
     // log
-    EM_log( CK_LOG_INFO, "compiling '%s'...", path.c_str() );
+    EM_log( CK_LOG_HERALD, "compiling '%s'...", path.c_str() );
     // push indent
     EM_pushlog();
 
@@ -1166,12 +1184,8 @@ t_CKBOOL ChucK::compileFile( const std::string & path,
         goto error;
     }
 
-    // construct full path to be associated with the file so me.sourceDir() works
-    // (added 1.3.0.0)
-    full_path = get_full_path(filename);
-
     // parse, type-check, and emit (full_path added 1.3.0.0)
-    if( !m_carrier->compiler->go( filename, full_path ) )
+    if( !m_carrier->compiler->compileFile( filename ) )
         goto error;
 
     // get the code
@@ -1230,11 +1244,14 @@ error: // 1.5.0.0 (ge) added
 //           the next time step (on the VM compute/audio thread)
 //       returns TRUE if compilation successful (even if count == 0)
 //       returns FALSE if compilation unsuccessful
+//       'optFilepath' optionally specifies a file (name, or path ending in '/')
+//           as basis for path-related operations, e.g., @import
 //-----------------------------------------------------------------------------
 t_CKBOOL ChucK::compileCode( const std::string & code,
                              const std::string & argsTogether,
                              t_CKUINT count, t_CKBOOL immediate,
-                             std::vector<t_CKUINT> * shredIDs )
+                             std::vector<t_CKUINT> * shredIDs,
+                             const std::string & optFilepath )
 {
     // clear | 1.5.0.8
     if( shredIDs ) shredIDs->clear();
@@ -1264,7 +1281,7 @@ t_CKBOOL ChucK::compileCode( const std::string & code,
     EM_pushlog();
 
     // falsify filename / path for various logs
-    std::string theThing = "compiled.code:" + argsTogether;
+    std::string theThing = std::string(CHUCK_CODE_LITERAL_SIGNIFIER) + ":" + argsTogether;
     std::string fakefakeFilename = "<result file name goes here>";
 
     // parse out command line arguments
@@ -1276,22 +1293,14 @@ t_CKBOOL ChucK::compileCode( const std::string & code,
         goto error;
     }
 
-    // working directory
-    workingDir = getParamString( CHUCK_PARAM_WORKING_DIRECTORY );
-
-    // construct full path to be associated with the file so me.sourceDir() works
-    full_path = workingDir + "/compiled.code";
-    // log
-    EM_log( CK_LOG_FINE, "full path: %s...", full_path.c_str() );
-
-    // parse, type-check, and emit (full_path added 1.3.0.0)
-    if( !m_carrier->compiler->go( "<compiled.code>", full_path, code ) )
+    // parse, type-check, and emit
+    if( !m_carrier->compiler->compileCode( code, optFilepath ) )
        goto error;
 
     // get the code
     vm_code = m_carrier->compiler->output();
     // (re) name it (no path to append) | 1.5.0.5 (ge) update from '+=' to '='
-    vm_code->name = "compiled.code";
+    vm_code->name = CHUCK_CODE_LITERAL_SIGNIFIER;
 
     // log
     EM_log( CK_LOG_FINE, "sporking %d %s...", count,
@@ -1375,11 +1384,29 @@ t_CKBOOL ChucK::start()
 //-----------------------------------------------------------------------------
 void ChucK::run( const SAMPLE * input, SAMPLE * output, t_CKINT numFrames )
 {
-    // make sure we started...
-    if( !m_started ) this->start();
+    // make sure we started
+    if( !m_started && !this->start() ) return;
 
     // call the callback
     m_carrier->vm->run( numFrames, input, output );
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: removeAllShreds() | 1.5.4.4 (ge) added
+// desc: remove all shreds currently in the VM
+//   |- (NOTE: not synchronous or truly immediate but is thread-safe;
+//   |-  this will happen at the top of the next VM compute() call)
+//-----------------------------------------------------------------------------
+void ChucK::removeAllShreds()
+{
+    // check
+    if( !m_carrier->vm ) return;
+
+    // request VM to remove all shreds asap (thread-safe)
+    m_carrier->vm->remove_all_shreds();
 }
 
 
@@ -1555,6 +1582,28 @@ void ChucK::poop()
     #ifndef __DISABLE_OTF_SERVER__
     ::uh();
     #endif
+}
+
+
+
+
+//-----------------------------------------------------------------------------
+// name: bind()
+// desc: additional native chuck bindings/types (use with extra caution)
+//-----------------------------------------------------------------------------
+t_CKBOOL ChucK::bind( f_ck_query queryFunc, const std::string & name )
+{
+    // check if we have initialized a compiler
+    if( !compiler() )
+    {
+        // error message
+        EM_error2( 0, "cannot bind() -- ChucK/compiler is not initialized..." );
+        // done
+        return FALSE;
+    }
+
+    // perform the bind
+    return compiler()->bind( queryFunc, name );
 }
 
 

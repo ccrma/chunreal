@@ -1,25 +1,26 @@
 /*----------------------------------------------------------------------------
   ChucK Strongly-timed Audio Programming Language
-    Compiler and Virtual Machine
+    Compiler, Virtual Machine, and Synthesis Engine
 
   Copyright (c) 2003 Ge Wang and Perry R. Cook. All rights reserved.
     http://chuck.stanford.edu/
     http://chuck.cs.princeton.edu/
 
   This program is free software; you can redistribute it and/or modify
-  it under the terms of the GNU General Public License as published by
-  the Free Software Foundation; either version 2 of the License, or
-  (at your option) any later version.
+  it under the dual-license terms of EITHER the MIT License OR the GNU
+  General Public License (the latter as published by the Free Software
+  Foundation; either version 2 of the License or, at your option, any
+  later version).
 
-  This program is distributed in the hope that it will be useful,
-  but WITHOUT ANY WARRANTY; without even the implied warranty of
-  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-  GNU General Public License for more details.
+  This program is distributed in the hope that it will be useful and/or
+  interesting, but WITHOUT ANY WARRANTY; without even the implied warranty
+  of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+  MIT Licence and/or the GNU General Public License for details.
 
-  You should have received a copy of the GNU General Public License
-  along with this program; if not, write to the Free Software
-  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307
-  U.S.A.
+  You should have received a copy of the MIT License and the GNU General
+  Public License (GPL) along with this program; a copy of the GPL can also
+  be obtained by writing to the Free Software Foundation, Inc., 59 Temple
+  Place, Suite 330, Boston, MA 02111-1307 U.S.A.
 -----------------------------------------------------------------------------*/
 
 //-----------------------------------------------------------------------------
@@ -1400,6 +1401,14 @@ public:
         // init
         t_CKINT x_dim = x_.size();
         t_CKINT y_dim = y_.size();
+
+        // check
+        if( x_dim != w->xDim() - 1 || y_dim != w->yDim() )
+        {
+            EM_error3( "SVM predict: input dimension mismatch: %d vs %d", x_dim, w->xDim() - 1 );
+            return FALSE;
+        }
+
         // compute
         for( int i = 0; i < y_dim; i++ )
         {
@@ -1747,6 +1756,13 @@ public:
     // predict
     t_CKBOOL predict( const vector<t_CKFLOAT> & query, t_CKINT k, Chuck_ArrayFloat & prob_ )
     {
+        // check k
+        if( k <= 0 )
+        {
+            EM_error3( "KNN: invalid 'k' value provided: %d", k );
+            return FALSE;
+        }
+
         // TODO: check if model initialized
         // init
         ChaiVectorFast<t_CKINT> indices( k );
@@ -3184,10 +3200,18 @@ public:
     static void transform( Chuck_ArrayInt & input_, t_CKINT npc, Chuck_ArrayInt & output_ )
     {
         ChaiMatrixFast<t_CKFLOAT> * input = chuck2chai( input_ );
+        ChaiMatrixFast<t_CKFLOAT> * output = chuck2chai( output_ );
 
         t_CKINT t, o;
         t_CKINT o1, o2;
-        t_CKINT n = input->xDim(), d = input->yDim();
+        t_CKINT n = input->xDim(), d = input->yDim(), dd = output->yDim();
+
+        // Check output dimension
+        if( npc > dd )
+        {
+            EM_error3( "PCA: number of principal components %d exceeds output dimension %d", npc, dd );
+            return;
+        }
 
         ChaiMatrixFast<t_CKFLOAT> temp_matrix( d, n );
         for( t = 0; t < n; t++ )
