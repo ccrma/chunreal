@@ -5947,12 +5947,12 @@ Chuck_Namespace::~Chuck_Namespace()
 // name: add_type()
 // desc: add type to name space
 //-----------------------------------------------------------------------------
-void Chuck_Namespace::add_type( const std::string & xid, Chuck_Type * type_arg )
+void Chuck_Namespace::add_type( const std::string & xid, Chuck_Type * theType )
 {
     // log it
-    EM_log( CK_LOG_DEBUG, "namespace '%s' adding type '%s'->'%s'", this->name.c_str(), xid.c_str(), type_arg->name().c_str() );
+    EM_log( CK_LOG_DEBUG, "namespace '%s' adding type '%s'->'%s'", this->name.c_str(), xid.c_str(), theType->name().c_str() );
     // add it
-    this->type.add( xid, type_arg );
+    this->type.add( xid, theType );
 }
 
 
@@ -5962,12 +5962,12 @@ void Chuck_Namespace::add_type( const std::string & xid, Chuck_Type * type_arg )
 // name: add_value()
 // desc: add value to name space
 //-----------------------------------------------------------------------------
-void Chuck_Namespace::add_value( const std::string & xid, Chuck_Value * value_arg )
+void Chuck_Namespace::add_value( const std::string & xid, Chuck_Value * theValue )
 {
     // log it
-    EM_log( CK_LOG_DEBUG, "namespace '%s' adding value '%s'->'%s'", this->name.c_str(), xid.c_str(), value_arg->name.c_str() );
+    EM_log( CK_LOG_DEBUG, "namespace '%s' adding value '%s'->'%s'", this->name.c_str(), xid.c_str(), theValue->name.c_str() );
     // add it
-    this->value.add( xid, value_arg );
+    this->value.add( xid, theValue );
 }
 
 
@@ -5977,12 +5977,12 @@ void Chuck_Namespace::add_value( const std::string & xid, Chuck_Value * value_ar
 // name: add_func()
 // desc: add type to name space
 //-----------------------------------------------------------------------------
-void Chuck_Namespace::add_func( const std::string & xid, Chuck_Func * func_arg )
+void Chuck_Namespace::add_func( const std::string & xid, Chuck_Func * theFunc )
 {
     // log it
-    EM_log( CK_LOG_DEBUG, "namespace '%s' adding func '%s'->'%s'", this->name.c_str(), xid.c_str(), func_arg->base_name.c_str() );
+    EM_log( CK_LOG_DEBUG, "namespace '%s' adding func '%s'->'%s'", this->name.c_str(), xid.c_str(), theFunc->base_name.c_str() );
     // add it
-    this->func.add( xid, func_arg );
+    this->func.add( xid, theFunc );
 }
 
 
